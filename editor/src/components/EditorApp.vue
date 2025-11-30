@@ -3,9 +3,11 @@ import _ from "lodash";
 import { ref } from 'vue';
 import {
   DataModel, type MappingTuple, type MappingType, EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION, MIDI_NRPN_SOURCE_TYPE_KEY, CALC_SOURCE_TYPE_KEY, SKIP_SOURCE_TYPE_KEY,
-  EXTERNAL_SOURCE_TYPE_KEY, keyboardSourceExtras, segaGamepadSourceExtras, globalButtonsDestinationExtras, globalModesDestinationExtras, globalScreensDestinationExtras,
-  KEYBOARD_EXTERNAL_SOURCE_FUNCTION_KEY, SEGA_GAMEPAD_EXTERNAL_SOURCE_FUNCTION_KEY, VAR_SOURCE_TYPE_KEY, GLOBAL_DESTINATION_TYPE_KEY, GLOBAL_BUTTONS_DESTINATION_FUNCTION_KEY,
-  GLOBAL_SCREENS_DESTINATION_FUNCTION_KEY, GLOBAL_MODES_DESTINATION_FUNCTION_KEY, MIDI_CC_DESTINATION_TYPE_KEY
+  EXTERNAL_SOURCE_TYPE_KEY, keyboardSourceExtras, segaGamepadSourceExtras, nerdseqButtonsSourceExtras, globalButtonsDestinationExtras, globalModesDestinationExtras, globalScreensDestinationExtras,
+  KEYBOARD_EXTERNAL_SOURCE_FUNCTION_KEY, SEGA_GAMEPAD_EXTERNAL_SOURCE_FUNCTION_KEY, NERDSEQ_BUTTONS_EXTERNAL_SOURCE_FUNCTION_KEY, VAR_SOURCE_TYPE_KEY, GLOBAL_DESTINATION_TYPE_KEY, GLOBAL_BUTTONS_DESTINATION_FUNCTION_KEY,
+  GLOBAL_SCREENS_DESTINATION_FUNCTION_KEY, GLOBAL_MODES_DESTINATION_FUNCTION_KEY, MIDI_CC_DESTINATION_TYPE_KEY, DUAL_DESTINATION_TYPE_KEY, SKIP_DESTINATION_TYPE_KEY, VISU_DESTINATION_TYPE_KEY, SETVAR_DESTINATION_TYPE_KEY,
+  VISU_SHADER_SELECT_FUNCTION_KEY, VISU_SHADER_FUNCTIONS_FUNCTION_KEY, VISU_MODULATORS_FUNCTION_KEY, VISU_ENVELOPES_FUNCTION_KEY, VISU_LFOS_FUNCTION_KEY,
+  visuShaderSelectExtras, visuShaderFunctionsExtras, visuModulatorsExtras, visuEnvelopesExtras, visuLfosExtras
 } from '../modules/dataModel';
 import { MappingDocument, Row as MappingRow, Source, SourceType, SourceFunction, SourceExtra, DestinationType, DestinationFunction, DestinationExtra, Destination, Header } from '../modules/documentModel';
 import { MappingDocumentParser } from '../modules/parsers';
@@ -18,6 +20,10 @@ import CalcSkipSourceExtra from './CalcSkipSourceExtra.vue';
 import NprnSourceExtra from './NprnSourceExtra.vue';
 import VariableSourceExtra from './VariableSourceExtra.vue';
 import MidiCcDestinationExtra from './MidiCcDestinationExtra.vue';
+import SkipDestinationExtra from './SkipDestinationExtra.vue';
+import DualDestinationExtra from './DualDestinationExtra.vue';
+import VisuDestinationExtra from './VisuDestinationExtra.vue';
+import VariableDestinationExtra from './VariableDestinationExtra.vue';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -34,47 +40,160 @@ function readFile() {
   }
 
   const reader = new FileReader();
-  const fileExtension = file.name.split('.').pop();
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
   switch (fileExtension) {
 
     case 'map':
       reader.readAsArrayBuffer(file);
       reader.onload = async function (e: any) {
-        const fileData = new Uint8Array(e.target.result);
-        mappingDocument.value = MappingDocumentParser.parse(fileData);
-        init();
+        try {
+          const fileData = new Uint8Array(e.target.result);
+          console.log(`Loading .map file: ${file.name}, size: ${fileData.length} bytes`);
+          mappingDocument.value = MappingDocumentParser.parse(fileData);
+          init();
+          console.log('.map file loaded successfully');
+        } catch (error) {
+          console.error('Error parsing .map file:', error);
+          alert(`Error loading .map file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes\n\nCheck console for details.`);
+        }
       };
       break;
 
     case 'json':
       reader.readAsText(file);
       reader.onload = function (e: any) {
-        const fileData = e.target.result;
-        const jsonData = JSON.parse(fileData);
+        try {
+          const fileData = e.target.result;
+          console.log(`Loading .json file: ${file.name}, size: ${fileData.length} chars`);
+          const jsonData = JSON.parse(fileData);
 
-        // Validate the JSON file against the schema
-        const ajv = () => new Ajv({ allErrors: true });
-        const validate = ajv().compile(schema);
-        const isValid = validate(jsonData);
-        if (!isValid) {
-          alert('Invalid JSON file! ');
-          console.error(validate.errors);
-          return;
+          // Validate the JSON file against the schema
+          const ajv = () => new Ajv({ allErrors: true });
+          const validate = ajv().compile(schema);
+          const isValid = validate(jsonData);
+          if (!isValid) {
+            console.error('JSON Schema validation failed:', validate.errors);
+            alert(`Invalid JSON file structure!\n\nValidation errors:\n${validate.errors?.map(err => `• ${err.instancePath || 'root'}: ${err.message}`).join('\n')}\n\nCheck console for full details.`);
+            return;
+          }
+
+          // Reconstruct the MappingDocument with proper class instances
+          const mappingDoc = new MappingDocument();
+          const jsonObj = jsonData as any; // Cast to any to access properties
+          
+          // Handle both old and new JSON formats
+          if (jsonObj.header) {
+            // Old format
+            mappingDoc.header.headerText = jsonObj.header.headerText || mappingDoc.header.headerText;
+            mappingDoc.header.majorVersion = jsonObj.header.majorVersion || mappingDoc.header.majorVersion;
+            mappingDoc.header.minorVersion = jsonObj.header.minorVersion || mappingDoc.header.minorVersion;
+            mappingDoc.header.fileName = jsonObj.header.fileName || mappingDoc.header.fileName;
+          } else if (jsonObj.mappings) {
+            // New format
+            mappingDoc.header.headerText = jsonObj.header || mappingDoc.header.headerText;
+            mappingDoc.header.majorVersion = jsonObj.versionMajor || mappingDoc.header.majorVersion;
+            mappingDoc.header.minorVersion = jsonObj.versionMinor || mappingDoc.header.minorVersion;
+            mappingDoc.header.fileName = jsonObj.filename || mappingDoc.header.fileName;
+            
+            // Handle placeholder bytes
+            if (jsonObj.placeholderBytes && Array.isArray(jsonObj.placeholderBytes)) {
+              mappingDoc.header.reserved = new Uint8Array(jsonObj.placeholderBytes);
+            }
+          }
+
+          // Convert rows - handle both old and new formats
+          const rowsData = jsonObj.rows || jsonObj.mappings;
+          if (rowsData && Array.isArray(rowsData)) {
+            for (let i = 0; i < mappingDoc.rows.length; i++) {
+              const rowData = rowsData[i];
+              const row = mappingDoc.rows[i]; // Use the pre-initialized row
+              
+              if (rowData) {
+                // Handle both old format (rowData.source.type) and new format (rowData.sourceType)
+                const sourceTypeKey = rowData.source?.type ?? rowData.sourceType;
+                const sourceFunctionKey = rowData.source?.function ?? rowData.sourceFunction;  
+                const sourceExtraKey = rowData.source?.extra ?? rowData.sourceFunctionExtra;
+                const destinationTypeKey = rowData.destination?.type ?? rowData.destinationType;
+                const destinationFunctionKey = rowData.destination?.function ?? rowData.destinationFunction;
+                const destinationExtraKey = rowData.destination?.extra ?? rowData.destinationFunctionExtra;
+                
+                // Source - lookup from DataModel using numeric keys
+                const sourceTypeData = DataModel.sourceTypes.find(st => st.key === sourceTypeKey) as MappingType | undefined;
+                const sourceType = sourceTypeData ? new SourceType(sourceTypeData.key, sourceTypeData.abbr, sourceTypeData.description) 
+                                                  : new SourceType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                const sourceFunctionData = sourceTypeData?.functions.find((sf: MappingTuple) => sf.key === sourceFunctionKey);
+                const sourceFunction = sourceFunctionData ? new SourceFunction(sourceFunctionData.key, sourceFunctionData.abbr, sourceFunctionData.description)
+                                                          : new SourceFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                const sourceExtraData = sourceTypeData?.extras?.find((se: MappingTuple) => se.key === sourceExtraKey);
+                const sourceExtra = sourceExtraData ? new SourceExtra(sourceExtraData.key, sourceExtraData.abbr, sourceExtraData.description)
+                                                    : new SourceExtra(sourceExtraKey, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                row.source = new Source(sourceType, sourceFunction, sourceExtra);
+                
+                // Destination - lookup from DataModel using numeric keys  
+                const destinationTypeData = DataModel.destinationTypes.find(dt => dt.key === destinationTypeKey) as MappingType | undefined;
+                const destinationType = destinationTypeData ? new DestinationType(destinationTypeData.key, destinationTypeData.abbr, destinationTypeData.description)
+                                                            : new DestinationType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                const destinationFunctionData = destinationTypeData?.functions.find((df: MappingTuple) => df.key === destinationFunctionKey);
+                const destinationFunction = destinationFunctionData ? new DestinationFunction(destinationFunctionData.key, destinationFunctionData.abbr, destinationFunctionData.description)
+                                                                    : new DestinationFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                const destinationExtraData = destinationTypeData?.extras?.find((de: MappingTuple) => de.key === destinationExtraKey);
+                const destinationExtra = destinationExtraData ? new DestinationExtra(destinationExtraData.key, destinationExtraData.abbr, destinationExtraData.description)
+                                                              : new DestinationExtra(destinationExtraKey, EMPTY_ABBR, EMPTY_DESCRIPTION);
+                
+                row.destination = new Destination(destinationType, destinationFunction, destinationExtra);
+                
+                // Handle unused fields for new format
+                if (typeof rowData.unused1 === 'number') row.unused1 = rowData.unused1;
+                if (typeof rowData.unused2 === 'number') row.unused2 = rowData.unused2;
+                if (typeof rowData.unused3 === 'number') row.unused3 = rowData.unused3;
+                if (typeof rowData.unused4 === 'number') row.unused4 = rowData.unused4;
+              }
+              // If no rowData for this index, the row keeps its default empty values
+            }
+          }
+
+          // Update variables from JSON
+          const variablesData = jsonObj.variables;
+          if (variablesData && Array.isArray(variablesData)) {
+            for (let i = 0; i < mappingDoc.variables.length && i < variablesData.length; i++) {
+              const varData = variablesData[i];
+              if (typeof varData === 'number') {
+                // New format: direct values
+                mappingDoc.variables[i].value = varData;
+              } else if (varData && typeof varData.value === 'number') {
+                // Old format: objects with value property
+                mappingDoc.variables[i].value = varData.value;
+              }
+            }
+          }
+          
+          mappingDocument.value = mappingDoc;
+          init();
+          console.log('.json file loaded successfully');
+        } catch (error) {
+          console.error('Error parsing .json file:', error);
+          if (error instanceof SyntaxError) {
+            alert(`JSON Parse Error: ${error.message}\n\nFile: ${file.name}\n\nThe file may be corrupted or not valid JSON.`);
+          } else {
+            alert(`Error loading .json file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\n\nCheck console for details.`);
+          }
         }
-
-        const mappingDoc = _.merge(new MappingDocument(), jsonData); 
-
-        mappingDocument.value = mappingDoc;;
-        init();
       };
       break;
 
     default:
-      alert('Invalid file type!');
-      reader.onerror = function (e: any) {
-        alert('Error : ' + e.target.error.name);
-      }
+      alert(`Invalid file type: "${fileExtension}"\n\nSupported formats: .map (binary) or .json (text)`);
+  }
+
+  reader.onerror = function (e: any) {
+    console.error('FileReader error:', e);
+    alert(`File reading error: ${e.target.error.name}\n\nFile: ${file.name}`);
   }
 }
 
@@ -90,8 +209,16 @@ function reset() {
 function init() {
   for (let i = 0; i < mappingDocument.value.rows.length; i++) {
     const row = mappingDocument.value.rows[i];
-    currentlySelectedSourceTypes.value[i] = DataModel.sourceTypes.find(x => x.key === row.source.type.key) as MappingType;
-    currentlySelectedDestinationTypes.value[i] = DataModel.destinationTypes.find(x => x.key === row.destination.type.key) as MappingType;
+    // Use row.index instead of i to match template lookup
+    const rowIndex = row.index;
+    
+    // Only find and set types if they're not empty
+    if (row.source.type.key !== EMPTY_KEY) {
+      currentlySelectedSourceTypes.value[rowIndex] = DataModel.sourceTypes.find(x => x.key === row.source.type.key) as MappingType;
+    }
+    if (row.destination.type.key !== EMPTY_KEY) {
+      currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes.find(x => x.key === row.destination.type.key) as MappingType;
+    }
   }
 }
 
@@ -120,6 +247,7 @@ enum SourceExtraVariant {
   DEFAULT,
   EXTERNAL_KEYBOARD,
   EXTERNAL_SEGA_GAMEPAD,
+  EXTERNAL_NERDSEQ_BUTTONS,
 }
 
 function sourceExtraSelectionChanged(event: Event, rowIndex: number, extraVariant: SourceExtraVariant = SourceExtraVariant.DEFAULT) {
@@ -133,6 +261,9 @@ function sourceExtraSelectionChanged(event: Event, rowIndex: number, extraVarian
       break;
     case SourceExtraVariant.EXTERNAL_SEGA_GAMEPAD:
       selectedSourceExtra = segaGamepadSourceExtras.find(x => x.key === selectedSourceExtraKey) as MappingTuple;
+      break;
+    case SourceExtraVariant.EXTERNAL_NERDSEQ_BUTTONS:
+      selectedSourceExtra = nerdseqButtonsSourceExtras.find(x => x.key === selectedSourceExtraKey) as MappingTuple;
       break;
     default:
       selectedSourceExtra = currentlySelectedSourceTypes.value[rowIndex].extras.find(x => x.key === selectedSourceExtraKey) as MappingTuple;
@@ -169,7 +300,15 @@ enum DestinationExtraVariant {
   GLOBAL_BUTTONS,
   GLOBAL_SCREENS,
   GLOBAL_MODES,
-  MIDI_CC
+  GLOBAL_OTHER,
+  MIDI_CC,
+  SKIP_CALC,
+  DUAL_CHORD,
+  VISU_SHADER_SELECT,
+  VISU_SHADER_FUNCTIONS,
+  VISU_MODULATORS,
+  VISU_ENVELOPES,
+  VISU_LFOS,
 }
 
 function destinationExtraSelectionChanged(event: Event, rowIndex: number, isInit: boolean = false, extraVariant: DestinationExtraVariant = DestinationExtraVariant.DEFAULT) {
@@ -185,6 +324,21 @@ function destinationExtraSelectionChanged(event: Event, rowIndex: number, isInit
       break;
     case DestinationExtraVariant.GLOBAL_MODES:
       selectedDestinationExtra = globalModesDestinationExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
+      break;
+    case DestinationExtraVariant.VISU_SHADER_SELECT:
+      selectedDestinationExtra = visuShaderSelectExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
+      break;
+    case DestinationExtraVariant.VISU_SHADER_FUNCTIONS:
+      selectedDestinationExtra = visuShaderFunctionsExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
+      break;
+    case DestinationExtraVariant.VISU_MODULATORS:
+      selectedDestinationExtra = visuModulatorsExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
+      break;
+    case DestinationExtraVariant.VISU_ENVELOPES:
+      selectedDestinationExtra = visuEnvelopesExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
+      break;
+    case DestinationExtraVariant.VISU_LFOS:
+      selectedDestinationExtra = visuLfosExtras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
       break;
     default:
       selectedDestinationExtra = currentlySelectedDestinationTypes.value[rowIndex].extras.find(x => x.key === selectedDestinationExtraKey) as MappingTuple;
@@ -238,7 +392,8 @@ function downloadMap() {
   </header>
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
-      <label id="fileInputLabel" for="fileInput" class="btn btn-info border-dark" title="Open a .MAP or .JSON file.">Open
+      <label id="fileInputLabel" for="fileInput" class="btn btn-info border-dark"
+        title="Open a .MAP or .JSON file.">Open
         Mapping File</label>
       <input id="fileInput" class="d-none" type="file" accept=".map, .json" ref="fileInput" @change="readFile" />
       <button id="buttonReset" type="button" class="btn btn-info border-dark" @click="reset">Reset</button>
@@ -357,6 +512,18 @@ function downloadMap() {
               {{ extra.description }}</option>
           </select>
 
+          <!-- External Source Type, NerdSEQ Buttons Function  -->
+          <select
+            v-else-if="row.source.type.key == EXTERNAL_SOURCE_TYPE_KEY && row.source.function.key == NERDSEQ_BUTTONS_EXTERNAL_SOURCE_FUNCTION_KEY"
+            :value="row.source.extra.keyOrValue"
+            @change="sourceExtraSelectionChanged($event, row.index, SourceExtraVariant.EXTERNAL_NERDSEQ_BUTTONS)"
+            :title="row.source.extra.abbr" class="form-select border-dark pt-1"
+            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY }">
+
+            <option v-for="extra in nerdseqButtonsSourceExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
+              {{ extra.description }}</option>
+          </select>
+
           <!-- Else show a select with all the extras for this source type -->
           <select v-else :value="row.source.extra.keyOrValue" @change="sourceExtraSelectionChanged($event, row.index)"
             :title="row.source.extra.abbr" class="form-select border-dark pt-1"
@@ -387,7 +554,8 @@ function downloadMap() {
 
           <select v-else :value="row.destination.function.key"
             @change="destinationFunctionSelectionChanged($event, row.index)" :title="row.destination.function.abbr"
-            class="form-select border-dark pt-1" :class="{ 'select-empty': row.destination.function.key === EMPTY_KEY }">
+            class="form-select border-dark pt-1"
+            :class="{ 'select-empty': row.destination.function.key === EMPTY_KEY }">
             <option v-for="func in currentlySelectedDestinationTypes[row.index]?.functions" :key="func.key"
               :value="func.key" :title="func.abbr">
               {{ func.description }}</option>
@@ -406,6 +574,44 @@ function downloadMap() {
           <MidiCcDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY"
             :midi-cc-extras="currentlySelectedDestinationTypes[row.index]?.extras" />
+
+          <!-- Skip Destination Type -->
+          <SkipDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY" />
+
+          <!-- Variable Destination Type -->
+          <VariableDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY" />
+
+          <!-- DUAL Destination Type -->
+          <DualDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === DUAL_DESTINATION_TYPE_KEY"
+            :dual-extras="currentlySelectedDestinationTypes[row.index]?.extras" />
+
+          <!-- VISU Destination Type - Shader Select -->
+          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_SELECT_FUNCTION_KEY"
+            :visu-extras="visuShaderSelectExtras" />
+
+          <!-- VISU Destination Type - Shader Functions -->
+          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_FUNCTIONS_FUNCTION_KEY"
+            :visu-extras="visuShaderFunctionsExtras" />
+
+          <!-- VISU Destination Type - Modulators -->
+          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_MODULATORS_FUNCTION_KEY"
+            :visu-extras="visuModulatorsExtras" />
+
+          <!-- VISU Destination Type - Envelopes -->
+          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_ENVELOPES_FUNCTION_KEY"
+            :visu-extras="visuEnvelopesExtras" />
+
+          <!-- VISU Destination Type - LFOs -->
+          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+            v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_LFOS_FUNCTION_KEY"
+            :visu-extras="visuLfosExtras" />
 
           <!-- Global Buttons Destination Type -->
           <select
@@ -438,7 +644,8 @@ function downloadMap() {
             @change="destinationExtraSelectionChanged($event, row.index, false, DestinationExtraVariant.GLOBAL_MODES)"
             :title="row.destination.extra.abbr" class="form-select border-dark pt-1"
             :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY }">
-            <option v-for="extra in globalModesDestinationExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
+            <option v-for="extra in globalModesDestinationExtras" :key="extra.key" :value="extra.key"
+              :title="extra.abbr">
               {{ extra.description }}</option>
           </select>
 
@@ -558,7 +765,7 @@ label {
 }
 
 .label-empty {
-  display:flex;
+  display: flex;
   align-items: center;
   background-color: grey !important;
   width: 100%;
