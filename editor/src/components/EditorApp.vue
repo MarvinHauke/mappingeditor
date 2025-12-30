@@ -105,6 +105,10 @@ function clearRow(rowIndex: number): void {
   currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes[0] as MappingType;
 }
 
+function rowHasContent(row: MappingRow): boolean {
+  return row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY;
+}
+
 function handleRowIndexMouseEnter(rowIndex: number): void {
   hoveredRowIndex.value = rowIndex;
 }
@@ -518,6 +522,9 @@ function downloadMap() {
       </div>
       <div id="rowsGridContainerHeader" class="pt-3">
         <div>Row</div>
+        <div></div>
+        <div></div>
+        <div></div>
         <div>Source Type</div>
         <div>Source Function</div>
         <div>Source Extra(s)</div>
@@ -537,7 +544,7 @@ function downloadMap() {
 
         <div 
           class="gridItem action-column copy-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
           @mouseenter="handleRowIndexMouseEnter(row.index)"
           @mouseleave="handleRowIndexMouseLeave"
         >
@@ -552,7 +559,7 @@ function downloadMap() {
 
         <div 
           class="gridItem action-column paste-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
           @mouseenter="handleRowIndexMouseEnter(row.index)"
           @mouseleave="handleRowIndexMouseLeave"
         >
@@ -568,7 +575,7 @@ function downloadMap() {
 
         <div 
           class="gridItem action-column clear-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
           @mouseenter="handleRowIndexMouseEnter(row.index)"
           @mouseleave="handleRowIndexMouseLeave"
         >
