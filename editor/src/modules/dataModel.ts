@@ -1,4 +1,3 @@
-
 export type MappingType = {
   key: number;
   abbr: string;
@@ -60,7 +59,11 @@ export const VISU_LFOS_FUNCTION_KEY = 4;
 
 function genMidiDeviceChannelSourceFunctions() {
   const sourceFunctions = [];
-  sourceFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  sourceFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const count = key + 1;
     sourceFunctions.push({
@@ -89,7 +92,20 @@ function genMidiDeviceChannelSourceFunctions() {
   return sourceFunctions;
 }
 
-const noteAbbrs = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+const noteAbbrs = [
+  "C-",
+  "C#",
+  "D-",
+  "D#",
+  "E-",
+  "F-",
+  "F#",
+  "G-",
+  "G#",
+  "A-",
+  "A#",
+  "B-",
+];
 
 function countToNoteAbbr(count: number, suffix: string): string {
   const note = count % 12;
@@ -100,7 +116,11 @@ function countToNoteAbbr(count: number, suffix: string): string {
 
 function genMidiNoteExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   extras.push({ key: 0, abbr: `NOTE`, description: "Note" });
   extras.push({ key: 1, abbr: `GATE`, description: "Gate" });
   extras.push({ key: 2, abbr: `VELO`, description: "Velocity" });
@@ -109,51 +129,91 @@ function genMidiNoteExtras() {
   extras.push({ key: 5, abbr: `PGMC`, description: "Program Change" });
   for (let key = 6; key <= 125; key++) {
     const count = key - 6;
-    extras.push({ key: key, abbr: countToNoteAbbr(count, "N"), description: `Selected Midi Note ${count} On/Off` });
+    extras.push({
+      key: key,
+      abbr: countToNoteAbbr(count, "N"),
+      description: `Selected Midi Note ${count} On/Off`,
+    });
   }
   for (let key = 126; key <= 245; key++) {
     const count = key - 126;
-    extras.push({ key: key, abbr: countToNoteAbbr(count, "V"), description: `Selected Midi Note ${count} Velocity` });
+    extras.push({
+      key: key,
+      abbr: countToNoteAbbr(count, "V"),
+      description: `Selected Midi Note ${count} Velocity`,
+    });
   }
   for (let key = 246; key <= 365; key++) {
     const count = key - 246;
-    extras.push({ key: key, abbr: countToNoteAbbr(count, "A"), description: `Selected Midi Note ${count} Aftertouch` });
+    extras.push({
+      key: key,
+      abbr: countToNoteAbbr(count, "A"),
+      description: `Selected Midi Note ${count} Aftertouch`,
+    });
   }
   return extras;
 }
 
 function genVariableSourceFunctions() {
   const sourceFunctions = [];
-  sourceFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  sourceFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const varName = String.fromCharCode(65 + key);
-    sourceFunctions.push({ key: key, abbr: `V  ${varName}`, description: `Variable ${varName}` });
+    sourceFunctions.push({
+      key: key,
+      abbr: `V  ${varName}`,
+      description: `Variable ${varName}`,
+    });
   }
   for (let key = 16; key <= 85; key++) {
     const count = key - 16;
-    const countHex = count.toString(16).toUpperCase().padStart(2, "0");;
-    sourceFunctions.push({ key: key, abbr: `RW${countHex}`, description: `Mapping Row ${countHex} (${count})` });
+    const countHex = count.toString(16).toUpperCase().padStart(2, "0");
+    sourceFunctions.push({
+      key: key,
+      abbr: `RW${countHex}`,
+      description: `Mapping Row ${countHex} (${count})`,
+    });
   }
   return sourceFunctions;
 }
 
 export function genCalcSkipSourceByteExtras() {
   const calcSkipSourceExtras = [];
-  calcSkipSourceExtras.push({ key: EMPTY_KEY_SHORT, abbr: EMPTY_ABBR_SHORT, description: EMPTY_DESCRIPTION });
+  calcSkipSourceExtras.push({
+    key: EMPTY_KEY_SHORT,
+    abbr: EMPTY_ABBR_SHORT,
+    description: EMPTY_DESCRIPTION,
+  });
 
   for (let key = 0; key <= 9; key++) {
-    calcSkipSourceExtras.push({ key: key, abbr: `=${key}`, description: `Constant ${key}` });
+    calcSkipSourceExtras.push({
+      key: key,
+      abbr: `=${key}`,
+      description: `Constant ${key}`,
+    });
   }
 
   for (let key = 10; key <= 25; key++) {
     const count = key - 10;
     const char = String.fromCharCode(65 + count);
-    calcSkipSourceExtras.push({ key: key, abbr: `V  ${char}`, description: `Variable ${char}` });
+    calcSkipSourceExtras.push({
+      key: key,
+      abbr: `V  ${char}`,
+      description: `Variable ${char}`,
+    });
   }
 
   for (let key = 26; key <= 95; key++) {
     const count = key - 26;
-    calcSkipSourceExtras.push({ key: key, abbr: `${count}`, description: `Row ${count}` });
+    calcSkipSourceExtras.push({
+      key: key,
+      abbr: `${count}`,
+      description: `Row ${count}`,
+    });
   }
 
   return calcSkipSourceExtras;
@@ -161,118 +221,206 @@ export function genCalcSkipSourceByteExtras() {
 
 function genSkipSourceFunctions() {
   const sourceFunctions = [];
-  sourceFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
-  
+  sourceFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
+
   // SKIP function encoding: skip_count (1-16) * 6 + condition (0-5)
   // This generates functions 0-95 (16 skip counts * 6 conditions)
-  const conditions = ['<', '<=', '>', '>=', '=', '<>'];
-  const conditionDescs = ['<', '<=', '>', '>=', '=', '<>'];
-  
+  const conditions = ["<", "<=", ">", ">=", "=", "<>"];
+  const conditionDescs = ["<", "<=", ">", ">=", "=", "<>"];
+
   for (let skipCount = 1; skipCount <= 16; skipCount++) {
     for (let condition = 0; condition < 6; condition++) {
       const functionKey = (skipCount - 1) * 6 + condition;
-      const skipStr = skipCount.toString().padStart(2, '0');
+      const skipStr = skipCount.toString().padStart(2, "0");
       sourceFunctions.push({
         key: functionKey,
         abbr: `${skipStr}${conditions[condition]}`,
-        description: `Skip ${skipCount} Rows If Param1 ${conditionDescs[condition]} Param2`
+        description: `Skip ${skipCount} Rows If Param1 ${conditionDescs[condition]} Param2`,
       });
     }
   }
-  
+
   return sourceFunctions;
 }
 
 function genControlSourceExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 31; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `${count}${count > 9 ? "" : " "}RW`, description: `Execute ${count} Mapping Rows` });
+    extras.push({
+      key: key,
+      abbr: `${count}${count > 9 ? "" : " "}RW`,
+      description: `Execute ${count} Mapping Rows`,
+    });
   }
   return extras;
 }
 
 function genCVDestinationExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 5; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `CV ${count}`, description: `Local CV ${count}` });
+    extras.push({
+      key: key,
+      abbr: `CV ${count}`,
+      description: `Local CV ${count}`,
+    });
   }
   for (let key = 6; key <= 11; key++) {
     const count = key - 5;
-    extras.push({ key: key, abbr: `MOD${count}`, description: `Local MOD ${count}` });
+    extras.push({
+      key: key,
+      abbr: `MOD${count}`,
+      description: `Local MOD ${count}`,
+    });
   }
   for (let key = 12; key <= 27; key++) {
     const count = key - 11;
-    extras.push({ key: key, abbr: `1-${count > 9 ? "" : " "}${count}`, description: `CV16 NSA1 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `1-${count > 9 ? "" : " "}${count}`,
+      description: `CV16 NSA1 ${count}`,
+    });
   }
   for (let key = 28; key <= 43; key++) {
     const count = key - 27;
-    extras.push({ key: key, abbr: `2-${count > 9 ? "" : " "}${count}`, description: `CV16 NSA2 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `2-${count > 9 ? "" : " "}${count}`,
+      description: `CV16 NSA2 ${count}`,
+    });
   }
   for (let key = 44; key <= 59; key++) {
     const count = key - 43;
-    extras.push({ key: key, abbr: `3-${count > 9 ? "" : " "}${count}`, description: `CV16 NSA3 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `3-${count > 9 ? "" : " "}${count}`,
+      description: `CV16 NSA3 ${count}`,
+    });
   }
   for (let key = 60; key <= 75; key++) {
     const count = key - 59;
-    extras.push({ key: key, abbr: `4-${count > 9 ? "" : " "}${count}`, description: `CV16 NSA4 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `4-${count > 9 ? "" : " "}${count}`,
+      description: `CV16 NSA4 ${count}`,
+    });
   }
   return extras;
 }
 
 function genTriggerDestinationExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 5; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `TR ${count}`, description: `Local Trigger ${count}` });
+    extras.push({
+      key: key,
+      abbr: `TR ${count}`,
+      description: `Local Trigger ${count}`,
+    });
   }
   for (let key = 6; key <= 21; key++) {
     const count = key - 5;
-    extras.push({ key: key, abbr: `1-${count > 9 ? "" : " "}${count}`, description: `Trigger16 NSA1 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `1-${count > 9 ? "" : " "}${count}`,
+      description: `Trigger16 NSA1 ${count}`,
+    });
   }
   for (let key = 22; key <= 37; key++) {
     const count = key - 21;
-    extras.push({ key: key, abbr: `2-${count > 9 ? "" : " "}${count}`, description: `Trigger16 NSA2 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `2-${count > 9 ? "" : " "}${count}`,
+      description: `Trigger16 NSA2 ${count}`,
+    });
   }
   for (let key = 38; key <= 53; key++) {
     const count = key - 37;
-    extras.push({ key: key, abbr: `3-${count > 9 ? "" : " "}${count}`, description: `Trigger16 NSA3 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `3-${count > 9 ? "" : " "}${count}`,
+      description: `Trigger16 NSA3 ${count}`,
+    });
   }
   for (let key = 54; key <= 69; key++) {
     const count = key - 53;
-    extras.push({ key: key, abbr: `4-${count > 9 ? "" : " "}${count}`, description: `Trigger16 NSA4 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `4-${count > 9 ? "" : " "}${count}`,
+      description: `Trigger16 NSA4 ${count}`,
+    });
   }
   return extras;
 }
 
 function genTrackDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 7; key++) {
     const count = key + 1;
-    destinationFunctions.push({ key: key, abbr: `TRK${count}`, description: `Track ${count}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `TRK${count}`,
+      description: `Track ${count}`,
+    });
   }
-  destinationFunctions.push({ key: 8, abbr: `SLCT`, description: "Track Select (cursor location)" });
+  destinationFunctions.push({
+    key: 8,
+    abbr: `SLCT`,
+    description: "Track Select (cursor location)",
+  });
   for (let key = 9; key <= 24; key++) {
     const varIdx = key - 9;
     const varName = String.fromCharCode(65 + varIdx);
-    destinationFunctions.push({ key: key, abbr: `V${varName} `, description: `Track selected by Variable ${varName}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `V${varName} `,
+      description: `Track selected by Variable ${varName}`,
+    });
   }
   for (let key = 25; key <= 94; key++) {
     const rowIdx = key - 25;
     const rowHex = rowIdx.toString(16).toUpperCase().padStart(2, "0");
-    destinationFunctions.push({ key: key, abbr: `RW${rowHex}`, description: `Track selected by row result ${rowIdx} (${rowHex}h)` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `RW${rowHex}`,
+      description: `Track selected by row result ${rowIdx} (${rowHex}h)`,
+    });
   }
   return destinationFunctions;
 }
 
 function genTrackDestinationExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   extras.push({ key: 0, abbr: `MUTE`, description: "Mute" });
   extras.push({ key: 1, abbr: `SOLO`, description: "Solo" });
   extras.push({ key: 2, abbr: `PORD`, description: "Pattern Order" });
@@ -292,9 +440,17 @@ function genTrackDestinationExtras() {
   extras.push({ key: 16, abbr: `GL M`, description: "Glide MOD" });
   extras.push({ key: 17, abbr: `GLMR`, description: "Glide MOD Resolution" });
   extras.push({ key: 18, abbr: `TCLK`, description: "Track Clock" });
-  extras.push({ key: 19, abbr: `PSTA`, description: "Set Pattern Start Position(not used yet)" });
+  extras.push({
+    key: 19,
+    abbr: `PSTA`,
+    description: "Set Pattern Start Position(not used yet)",
+  });
   extras.push({ key: 20, abbr: `LGTH`, description: "Pattern Length" });
-  extras.push({ key: 21, abbr: `PROW`, description: "Set current Pattern Row" });
+  extras.push({
+    key: 21,
+    abbr: `PROW`,
+    description: "Set current Pattern Row",
+  });
   extras.push({ key: 22, abbr: `TICK`, description: "Generate Tick" });
   extras.push({ key: 23, abbr: `SHUP`, description: "Pattern Shift Up" });
   extras.push({ key: 24, abbr: `SHDN`, description: "Pattern Shift Down" });
@@ -304,51 +460,102 @@ function genTrackDestinationExtras() {
   extras.push({ key: 28, abbr: `FX 2`, description: "FX2 Overrule" });
   extras.push({ key: 29, abbr: `FX 3`, description: "FX3 Overrule" });
   extras.push({ key: 30, abbr: `FX 4`, description: "FX4 Overrule" });
-  extras.push({ key: 31, abbr: `STRT`, description: "Start/Cue Sequencer Row of Track" });
-  extras.push({ key: 32, abbr: `STRW`, description: "Start/Cue Sequencer Row" });
-  extras.push({ key: 33, abbr: `JMPT`, description: "Jump Sequencer Row of Track" });
+  extras.push({
+    key: 31,
+    abbr: `STRT`,
+    description: "Start/Cue Sequencer Row of Track",
+  });
+  extras.push({
+    key: 32,
+    abbr: `STRW`,
+    description: "Start/Cue Sequencer Row",
+  });
+  extras.push({
+    key: 33,
+    abbr: `JMPT`,
+    description: "Jump Sequencer Row of Track",
+  });
   extras.push({ key: 34, abbr: `JMPR`, description: "Jump Sequencer Row" });
-  extras.push({ key: 35, abbr: `STOP`, description: "Stop / Cue Stop Sequencer Track" });
-  extras.push({ key: 36, abbr: `ECLP`, description: "Euclidean position for the next Euclidean functions" });
+  extras.push({
+    key: 35,
+    abbr: `STOP`,
+    description: "Stop / Cue Stop Sequencer Track",
+  });
+  extras.push({
+    key: 36,
+    abbr: `ECLP`,
+    description: "Euclidean position for the next Euclidean functions",
+  });
   extras.push({ key: 37, abbr: `ECLD`, description: "Euclidean" });
   for (let key = 38; key <= 53; key++) {
     const count = key - 37;
-    extras.push({ key: key, abbr: `EC${count > 9 ? "" : " "}${count}`, description: `Drum Matrix Euclidean ${count}` });
+    extras.push({
+      key: key,
+      abbr: `EC${count > 9 ? "" : " "}${count}`,
+      description: `Drum Matrix Euclidean ${count}`,
+    });
   }
-  extras.push({ key: 54, abbr: `CRSR`, description: "Pattern Cursor Position" });
+  extras.push({
+    key: 54,
+    abbr: `CRSR`,
+    description: "Pattern Cursor Position",
+  });
   extras.push({ key: 55, abbr: `CRNT`, description: "Pattern Note at Cursor" });
   for (let key = 56; key <= 119; key++) {
     const count = key - 56;
     const countHex = count.toString(16).toUpperCase().padStart(2, "0");
-    extras.push({ key: key, abbr: `NT${countHex}`, description: `Note at Pattern Step ${count}` });
+    extras.push({
+      key: key,
+      abbr: `NT${countHex}`,
+      description: `Note at Pattern Step ${count}`,
+    });
   }
   for (let key = 120; key <= 183; key++) {
     const count = key - 120;
     const countHex = count.toString(16).toUpperCase().padStart(2, "0");
-    extras.push({ key: key, abbr: `CU${countHex}`, description: `Value at Cursor Column Step ${count}` });
+    extras.push({
+      key: key,
+      abbr: `CU${countHex}`,
+      description: `Value at Cursor Column Step ${count}`,
+    });
   }
   return extras;
 }
 
-
 function genVariableDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const varName = String.fromCharCode(65 + key);
-    destinationFunctions.push({ key: key, abbr: `V  ${varName}`, description: `Variable ${varName}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `V  ${varName}`,
+      description: `Variable ${varName}`,
+    });
   }
   for (let key = 16; key <= 85; key++) {
     const count = key - 16;
     const countHex = count.toString(16).toUpperCase().padStart(2, "0");
-    destinationFunctions.push({ key: key, abbr: `RW${countHex}`, description: `Mapping Row ${countHex}h (${count})` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `RW${countHex}`,
+      description: `Mapping Row ${countHex}h (${count})`,
+    });
   }
   return destinationFunctions;
 }
 
 function genMidiDeviceChannelDestinationFunctions(addLearn = true) {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const count = key + 1;
     destinationFunctions.push({
@@ -374,238 +581,558 @@ function genMidiDeviceChannelDestinationFunctions(addLearn = true) {
     });
   }
   if (addLearn) {
-    destinationFunctions.push({ key: 48, abbr: `LRN `, description: "MIDI Learn" });
+    destinationFunctions.push({
+      key: 48,
+      abbr: `LRN `,
+      description: "MIDI Learn",
+    });
   }
   return destinationFunctions;
 }
 
 function genRandomRangeDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
-    destinationFunctions.push({ key: key, abbr: `RG${key > 9 ? "" : " "}${key}`, description: `Range ${key}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `RG${key > 9 ? "" : " "}${key}`,
+      description: `Range ${key}`,
+    });
   }
   return destinationFunctions;
 }
 
 function genTableDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 31; key++) {
     const count = key + 1;
     const countHex = count.toString(16).toUpperCase().padStart(2, "0");
-    destinationFunctions.push({ key: key, abbr: `TB${countHex}`, description: `Selected Table ${count}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `TB${countHex}`,
+      description: `Selected Table ${count}`,
+    });
   }
   for (let key = 32; key <= 39; key++) {
     const count = key - 31;
-    destinationFunctions.push({ key: key, abbr: `TRK${count}`, description: `Running Table on Track ${count}` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `TRK${count}`,
+      description: `Running Table on Track ${count}`,
+    });
   }
-  destinationFunctions.push({ key: 40, abbr: `TSEL`, description: "Running table at selected cursor column" });
+  destinationFunctions.push({
+    key: 40,
+    abbr: `TSEL`,
+    description: "Running table at selected cursor column",
+  });
   return destinationFunctions;
 }
 
 function genCV16DestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
-  destinationFunctions.push({ key: 0, abbr: `GLCV`, description: "Glide Speed" });
-  destinationFunctions.push({ key: 1, abbr: `GLCR`, description: "Glide Resolution" });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
+  destinationFunctions.push({
+    key: 0,
+    abbr: `GLCV`,
+    description: "Glide Speed",
+  });
+  destinationFunctions.push({
+    key: 1,
+    abbr: `GLCR`,
+    description: "Glide Resolution",
+  });
   let key = 2;
   for (let envCount = 1; envCount <= 8; envCount++) {
-    destinationFunctions.push({ key: key++, abbr: `EV${envCount}A`, description: `Envelope ${envCount} Attack` });
-    destinationFunctions.push({ key: key++, abbr: `EV${envCount}S`, description: `Envelope ${envCount} Amplitude` });
-    destinationFunctions.push({ key: key++, abbr: `EV${envCount}R`, description: `Envelope ${envCount} Release` });
-    destinationFunctions.push({ key: key++, abbr: `EV${envCount}O`, description: `Envelope ${envCount} Fire Oneshot` });
-    destinationFunctions.push({ key: key++, abbr: `EV${envCount}X`, description: `Envelope ${envCount} Fire A/R` });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `EV${envCount}A`,
+      description: `Envelope ${envCount} Attack`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `EV${envCount}S`,
+      description: `Envelope ${envCount} Amplitude`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `EV${envCount}R`,
+      description: `Envelope ${envCount} Release`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `EV${envCount}O`,
+      description: `Envelope ${envCount} Fire Oneshot`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `EV${envCount}X`,
+      description: `Envelope ${envCount} Fire A/R`,
+    });
   }
   for (let lfoCount = 1; lfoCount <= 8; lfoCount++) {
-    destinationFunctions.push({ key: key++, abbr: `FL${lfoCount}T`, description: `LFO ${lfoCount} Type` });
-    destinationFunctions.push({ key: key++, abbr: `FL${lfoCount}S`, description: `LFO ${lfoCount} Speed` });
-    destinationFunctions.push({ key: key++, abbr: `FL${lfoCount}A`, description: `LFO ${lfoCount} Amplitude` });
-    destinationFunctions.push({ key: key++, abbr: `FL${lfoCount}X`, description: `LFO ${lfoCount} Start` });
-    destinationFunctions.push({ key: key++, abbr: `FL${lfoCount}R`, description: `LFO ${lfoCount} Reset` });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `FL${lfoCount}T`,
+      description: `LFO ${lfoCount} Type`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `FL${lfoCount}S`,
+      description: `LFO ${lfoCount} Speed`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `FL${lfoCount}A`,
+      description: `LFO ${lfoCount} Amplitude`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `FL${lfoCount}X`,
+      description: `LFO ${lfoCount} Start`,
+    });
+    destinationFunctions.push({
+      key: key++,
+      abbr: `FL${lfoCount}R`,
+      description: `LFO ${lfoCount} Reset`,
+    });
   }
-  destinationFunctions.push({ key: 82, abbr: `STOP`, description: "Stop Modulator Function" });
+  destinationFunctions.push({
+    key: 82,
+    abbr: `STOP`,
+    description: "Stop Modulator Function",
+  });
   return destinationFunctions;
 }
 
 function genCV16DestinationExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `1-${count > 9 ? "" : " "}${count}`, description: `NSA1 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `1-${count > 9 ? "" : " "}${count}`,
+      description: `NSA1 ${count}`,
+    });
   }
   for (let key = 16; key <= 31; key++) {
     const count = key - 15;
-    extras.push({ key: key, abbr: `2-${count > 9 ? "" : " "}${count}`, description: `NSA2 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `2-${count > 9 ? "" : " "}${count}`,
+      description: `NSA2 ${count}`,
+    });
   }
   for (let key = 32; key <= 47; key++) {
     const count = key - 31;
-    extras.push({ key: key, abbr: `3-${count > 9 ? "" : " "}${count}`, description: `NSA3 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `3-${count > 9 ? "" : " "}${count}`,
+      description: `NSA3 ${count}`,
+    });
   }
   for (let key = 48; key <= 63; key++) {
     const count = key - 47;
-    extras.push({ key: key, abbr: `4-${count > 9 ? "" : " "}${count}`, description: `NSA4 ${count}` });
+    extras.push({
+      key: key,
+      abbr: `4-${count > 9 ? "" : " "}${count}`,
+      description: `NSA4 ${count}`,
+    });
   }
   return extras;
 }
 
 function genDualDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 3; key++) {
     const count = key + 1;
-    destinationFunctions.push({ key: key, abbr: `NSA${count}`, description: `Select NSA${count} of the dualchord` });
+    destinationFunctions.push({
+      key: key,
+      abbr: `NSA${count}`,
+      description: `Select NSA${count} of the dualchord`,
+    });
   }
   return destinationFunctions;
 }
 
 function genDualDestinationExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 7; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `NOT${count}`, description: `Note for column/wave ${count}` });
+    extras.push({
+      key: key,
+      abbr: `NOT${count}`,
+      description: `Note for column/wave ${count}`,
+    });
   }
   for (let key = 8; key <= 15; key++) {
     const count = key - 7;
-    extras.push({ key: key, abbr: `PTC${count}`, description: `Pitch for column/wave ${count}` });
+    extras.push({
+      key: key,
+      abbr: `PTC${count}`,
+      description: `Pitch for column/wave ${count}`,
+    });
   }
   for (let key = 16; key <= 23; key++) {
     const count = key - 15;
-    extras.push({ key: key, abbr: `OOF${count}`, description: `Waveform OnOff for column/wave ${count}` });
+    extras.push({
+      key: key,
+      abbr: `OOF${count}`,
+      description: `Waveform OnOff for column/wave ${count}`,
+    });
   }
   for (let key = 24; key <= 31; key++) {
     const count = key - 23;
-    extras.push({ key: key, abbr: `L${count}SP`, description: `LFO ${count} Speed` });
+    extras.push({
+      key: key,
+      abbr: `L${count}SP`,
+      description: `LFO ${count} Speed`,
+    });
   }
   for (let key = 32; key <= 39; key++) {
     const count = key - 31;
-    extras.push({ key: key, abbr: `L${count}AM`, description: `LFO ${count} Amplitude` });
+    extras.push({
+      key: key,
+      abbr: `L${count}AM`,
+      description: `LFO ${count} Amplitude`,
+    });
   }
   for (let key = 40; key <= 47; key++) {
     const count = key - 39;
-    extras.push({ key: key, abbr: `L${count}OF`, description: `LFO ${count} Offset` });
+    extras.push({
+      key: key,
+      abbr: `L${count}OF`,
+      description: `LFO ${count} Offset`,
+    });
   }
   for (let key = 48; key <= 55; key++) {
     const count = key - 47;
-    extras.push({ key: key, abbr: `L${count}PH`, description: `LFO ${count} Phase` });
+    extras.push({
+      key: key,
+      abbr: `L${count}PH`,
+      description: `LFO ${count} Phase`,
+    });
   }
   extras.push({ key: 56, abbr: `STEO`, description: "Stereo Deepness" });
-  
+
   // Waveform PWM controls (57-64)
   for (let key = 57; key <= 64; key++) {
     const count = key - 56;
-    extras.push({ key: key, abbr: `W${count}PW`, description: `Waveform ${count} Pulse Width Modulation` });
+    extras.push({
+      key: key,
+      abbr: `W${count}PW`,
+      description: `Waveform ${count} Pulse Width Modulation`,
+    });
   }
-  extras.push({ key: 65, abbr: `WAPW`, description: "Waveform 1,2,3,4 Pulse Width Modulation" });
-  extras.push({ key: 66, abbr: `WBPW`, description: "Waveform 5,6,7,8 Pulse Width Modulation" });
-  
-  // Waveform detune controls (68-75)  
+  extras.push({
+    key: 65,
+    abbr: `WAPW`,
+    description: "Waveform 1,2,3,4 Pulse Width Modulation",
+  });
+  extras.push({
+    key: 66,
+    abbr: `WBPW`,
+    description: "Waveform 5,6,7,8 Pulse Width Modulation",
+  });
+
+  // Waveform detune controls (68-75)
   for (let key = 68; key <= 75; key++) {
     const count = key - 67;
-    extras.push({ key: key, abbr: `W${count}DT`, description: `Waveform ${count} Detune` });
+    extras.push({
+      key: key,
+      abbr: `W${count}DT`,
+      description: `Waveform ${count} Detune`,
+    });
   }
-  extras.push({ key: 76, abbr: `WADT`, description: "Waveform 1,2,3,4 Detune" });
-  extras.push({ key: 77, abbr: `WBDT`, description: "Waveform 5,6,7,8 Detune" });
-  
+  extras.push({
+    key: 76,
+    abbr: `WADT`,
+    description: "Waveform 1,2,3,4 Detune",
+  });
+  extras.push({
+    key: 77,
+    abbr: `WBDT`,
+    description: "Waveform 5,6,7,8 Detune",
+  });
+
   // Output spread controls (78-79)
   extras.push({ key: 78, abbr: `ASPR`, description: "Output 1 Spread" });
   extras.push({ key: 79, abbr: `BSPR`, description: "Output 2 Spread" });
-  
+
   // Individual waveform type controls (80-111)
   for (let waveNum = 1; waveNum <= 8; waveNum++) {
-    const baseKey = 76 + (waveNum * 4);
-    extras.push({ key: baseKey, abbr: `W${waveNum}TR`, description: `Waveform ${waveNum} Triangle` });
-    extras.push({ key: baseKey + 1, abbr: `W${waveNum}SI`, description: `Waveform ${waveNum} Sine` });
-    extras.push({ key: baseKey + 2, abbr: `W${waveNum}SA`, description: `Waveform ${waveNum} Sawtooth` });
-    extras.push({ key: baseKey + 3, abbr: `W${waveNum}PU`, description: `Waveform ${waveNum} Pulse` });
+    const baseKey = 76 + waveNum * 4;
+    extras.push({
+      key: baseKey,
+      abbr: `W${waveNum}TR`,
+      description: `Waveform ${waveNum} Triangle`,
+    });
+    extras.push({
+      key: baseKey + 1,
+      abbr: `W${waveNum}SI`,
+      description: `Waveform ${waveNum} Sine`,
+    });
+    extras.push({
+      key: baseKey + 2,
+      abbr: `W${waveNum}SA`,
+      description: `Waveform ${waveNum} Sawtooth`,
+    });
+    extras.push({
+      key: baseKey + 3,
+      abbr: `W${waveNum}PU`,
+      description: `Waveform ${waveNum} Pulse`,
+    });
   }
-  
+
   // Group waveform type controls (112-119)
-  extras.push({ key: 112, abbr: `WATR`, description: "Waveform 1,2,3,4 Triangle" });
+  extras.push({
+    key: 112,
+    abbr: `WATR`,
+    description: "Waveform 1,2,3,4 Triangle",
+  });
   extras.push({ key: 113, abbr: `WASI`, description: "Waveform 1,2,3,4 Sine" });
-  extras.push({ key: 114, abbr: `WASA`, description: "Waveform 1,2,3,4 Sawtooth" });
-  extras.push({ key: 115, abbr: `WAPU`, description: "Waveform 1,2,3,4 Pulse" });
-  extras.push({ key: 116, abbr: `WBTR`, description: "Waveform 5,6,7,8 Triangle" });
+  extras.push({
+    key: 114,
+    abbr: `WASA`,
+    description: "Waveform 1,2,3,4 Sawtooth",
+  });
+  extras.push({
+    key: 115,
+    abbr: `WAPU`,
+    description: "Waveform 1,2,3,4 Pulse",
+  });
+  extras.push({
+    key: 116,
+    abbr: `WBTR`,
+    description: "Waveform 5,6,7,8 Triangle",
+  });
   extras.push({ key: 117, abbr: `WBSI`, description: "Waveform 5,6,7,8 Sine" });
-  extras.push({ key: 118, abbr: `WBSA`, description: "Waveform 5,6,7,8 Sawtooth" });
-  extras.push({ key: 119, abbr: `WBPU`, description: "Waveform 5,6,7,8 Pulse" });
-  
+  extras.push({
+    key: 118,
+    abbr: `WBSA`,
+    description: "Waveform 5,6,7,8 Sawtooth",
+  });
+  extras.push({
+    key: 119,
+    abbr: `WBPU`,
+    description: "Waveform 5,6,7,8 Pulse",
+  });
+
   // Waveform morph controls (120-129)
   for (let key = 120; key <= 127; key++) {
     const count = key - 119;
-    extras.push({ key: key, abbr: `W${count}MO`, description: `Waveform ${count} Morph` });
+    extras.push({
+      key: key,
+      abbr: `W${count}MO`,
+      description: `Waveform ${count} Morph`,
+    });
   }
-  extras.push({ key: 128, abbr: `WAMO`, description: "Waveform 1,2,3,4 Morph" });
-  extras.push({ key: 129, abbr: `WBMO`, description: "Waveform 5,6,7,8 Morph" });
-  
+  extras.push({
+    key: 128,
+    abbr: `WAMO`,
+    description: "Waveform 1,2,3,4 Morph",
+  });
+  extras.push({
+    key: 129,
+    abbr: `WBMO`,
+    description: "Waveform 5,6,7,8 Morph",
+  });
+
   // Waveform glide controls (130-139)
   for (let key = 130; key <= 137; key++) {
     const count = key - 129;
-    extras.push({ key: key, abbr: `W${count}GL`, description: `Waveform ${count} Glide` });
+    extras.push({
+      key: key,
+      abbr: `W${count}GL`,
+      description: `Waveform ${count} Glide`,
+    });
   }
-  extras.push({ key: 138, abbr: `WAGL`, description: "Waveform 1,2,3,4 Glide" });
-  extras.push({ key: 139, abbr: `WBGL`, description: "Waveform 5,6,7,8 Glide" });
-  
+  extras.push({
+    key: 138,
+    abbr: `WAGL`,
+    description: "Waveform 1,2,3,4 Glide",
+  });
+  extras.push({
+    key: 139,
+    abbr: `WBGL`,
+    description: "Waveform 5,6,7,8 Glide",
+  });
+
   // Waveform velocity controls (140-149)
   for (let key = 140; key <= 147; key++) {
     const count = key - 139;
-    extras.push({ key: key, abbr: `W${count}VL`, description: `Waveform ${count} Velocity` });
+    extras.push({
+      key: key,
+      abbr: `W${count}VL`,
+      description: `Waveform ${count} Velocity`,
+    });
   }
-  extras.push({ key: 148, abbr: `WAVL`, description: "Waveform 1,2,3,4 Velocity" });
-  extras.push({ key: 149, abbr: `WBVL`, description: "Waveform 5,6,7,8 Velocity" });
-  
+  extras.push({
+    key: 148,
+    abbr: `WAVL`,
+    description: "Waveform 1,2,3,4 Velocity",
+  });
+  extras.push({
+    key: 149,
+    abbr: `WBVL`,
+    description: "Waveform 5,6,7,8 Velocity",
+  });
+
   // Preset control (150)
   extras.push({ key: 150, abbr: `PSET`, description: "Set Preset" });
-  
+
   return extras;
 }
 
 function genSkipDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
-  destinationFunctions.push({ key: 0, abbr: `01-16<`, description: "Skip 01-16 Rows If Param1 < Param2" });
-  destinationFunctions.push({ key: 1, abbr: `01-16<=`, description: "Skip 01-16 Rows If Param1 <= Param2" });
-  destinationFunctions.push({ key: 2, abbr: `01-16>`, description: "Skip 01-16 Rows If Param1 > Param2" });
-  destinationFunctions.push({ key: 3, abbr: `01-16>=`, description: "Skip 01-16 Rows If Param1 >= Param2" });
-  destinationFunctions.push({ key: 4, abbr: `01-16=`, description: "Skip 01-16 Rows If Param1 = Param2" });
-  destinationFunctions.push({ key: 5, abbr: `01-16<>`, description: "Skip 01-16 Rows If Param1 <> Param2" });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
+  destinationFunctions.push({
+    key: 0,
+    abbr: `01-16<`,
+    description: "Skip 01-16 Rows If Param1 < Param2",
+  });
+  destinationFunctions.push({
+    key: 1,
+    abbr: `01-16<=`,
+    description: "Skip 01-16 Rows If Param1 <= Param2",
+  });
+  destinationFunctions.push({
+    key: 2,
+    abbr: `01-16>`,
+    description: "Skip 01-16 Rows If Param1 > Param2",
+  });
+  destinationFunctions.push({
+    key: 3,
+    abbr: `01-16>=`,
+    description: "Skip 01-16 Rows If Param1 >= Param2",
+  });
+  destinationFunctions.push({
+    key: 4,
+    abbr: `01-16=`,
+    description: "Skip 01-16 Rows If Param1 = Param2",
+  });
+  destinationFunctions.push({
+    key: 5,
+    abbr: `01-16<>`,
+    description: "Skip 01-16 Rows If Param1 <> Param2",
+  });
   return destinationFunctions;
 }
 
 function genVisualsDestinationFunctions() {
   const destinationFunctions = [];
-  destinationFunctions.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
-  destinationFunctions.push({ key: 0, abbr: `SHSL`, description: "Shader Select" });
-  destinationFunctions.push({ key: 1, abbr: `SHAD`, description: "Shader Functions" });
-  destinationFunctions.push({ key: 2, abbr: `MODS`, description: "Shader Modulators" });
-  destinationFunctions.push({ key: 3, abbr: `SENV`, description: "Shader Envelope Settings" });
-  destinationFunctions.push({ key: 4, abbr: `SLFO`, description: "Shader LFO Settings" });
+  destinationFunctions.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
+  destinationFunctions.push({
+    key: 0,
+    abbr: `SHSL`,
+    description: "Shader Select",
+  });
+  destinationFunctions.push({
+    key: 1,
+    abbr: `SHAD`,
+    description: "Shader Functions",
+  });
+  destinationFunctions.push({
+    key: 2,
+    abbr: `MODS`,
+    description: "Shader Modulators",
+  });
+  destinationFunctions.push({
+    key: 3,
+    abbr: `SENV`,
+    description: "Shader Envelope Settings",
+  });
+  destinationFunctions.push({
+    key: 4,
+    abbr: `SLFO`,
+    description: "Shader LFO Settings",
+  });
   return destinationFunctions;
 }
 
 // Generate different extra sets based on VISU function selection
 function genVisualsShaderSelectExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   extras.push({ key: 0, abbr: `NOSH`, description: "Stop shader now" });
   for (let key = 1; key <= 8; key++) {
-    extras.push({ key: key, abbr: `SH ${key}`, description: `Start shader ${key} now` });
+    extras.push({
+      key: key,
+      abbr: `SH ${key}`,
+      description: `Start shader ${key} now`,
+    });
   }
-  extras.push({ key: 9, abbr: `SHSL`, description: "Start shader (shader selection by value) now" });
+  extras.push({
+    key: 9,
+    abbr: `SHSL`,
+    description: "Start shader (shader selection by value) now",
+  });
   extras.push({ key: 10, abbr: `CNOS`, description: "Cue stop shader" });
   for (let key = 11; key <= 18; key++) {
     const count = key - 10;
-    extras.push({ key: key, abbr: `CSH${count}`, description: `Cue shader ${count}` });
+    extras.push({
+      key: key,
+      abbr: `CSH${count}`,
+      description: `Cue shader ${count}`,
+    });
   }
-  extras.push({ key: 19, abbr: `SHCU`, description: "Cue shader (shader selection by value)" });
+  extras.push({
+    key: 19,
+    abbr: `SHCU`,
+    description: "Cue shader (shader selection by value)",
+  });
   return extras;
 }
 
 function genVisualsShaderFunctionsExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   extras.push({ key: 0, abbr: `POSX`, description: "Shader position X" });
   extras.push({ key: 1, abbr: `POSY`, description: "Shader position Y" });
   extras.push({ key: 2, abbr: `TAMP`, description: "Shader time amplify" });
@@ -615,40 +1142,104 @@ function genVisualsShaderFunctionsExtras() {
 
 function genVisualsModulatorsExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 15; key++) {
     const count = key + 1;
-    extras.push({ key: key, abbr: `MD${count > 9 ? "" : " "}${count}`, description: `Modulator ${count}` });
+    extras.push({
+      key: key,
+      abbr: `MD${count > 9 ? "" : " "}${count}`,
+      description: `Modulator ${count}`,
+    });
   }
   return extras;
 }
 
 function genVisualsEnvelopesExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let envNum = 1; envNum <= 8; envNum++) {
     const baseKey = (envNum - 1) * 6;
-    extras.push({ key: baseKey, abbr: `E${envNum}GT`, description: `Shader Envelope ${envNum} Gate` });
-    extras.push({ key: baseKey + 1, abbr: `E${envNum}FI`, description: `Shader Envelope ${envNum} Fire` });
-    extras.push({ key: baseKey + 2, abbr: `E${envNum}AT`, description: `Shader Envelope ${envNum} Attack` });
-    extras.push({ key: baseKey + 3, abbr: `E${envNum}SU`, description: `Shader Envelope ${envNum} Sustain` });
-    extras.push({ key: baseKey + 4, abbr: `E${envNum}RE`, description: `Shader Envelope ${envNum} Release` });
-    extras.push({ key: baseKey + 5, abbr: `E${envNum}OF`, description: `Shader Envelope ${envNum} Offset` });
+    extras.push({
+      key: baseKey,
+      abbr: `E${envNum}GT`,
+      description: `Shader Envelope ${envNum} Gate`,
+    });
+    extras.push({
+      key: baseKey + 1,
+      abbr: `E${envNum}FI`,
+      description: `Shader Envelope ${envNum} Fire`,
+    });
+    extras.push({
+      key: baseKey + 2,
+      abbr: `E${envNum}AT`,
+      description: `Shader Envelope ${envNum} Attack`,
+    });
+    extras.push({
+      key: baseKey + 3,
+      abbr: `E${envNum}SU`,
+      description: `Shader Envelope ${envNum} Sustain`,
+    });
+    extras.push({
+      key: baseKey + 4,
+      abbr: `E${envNum}RE`,
+      description: `Shader Envelope ${envNum} Release`,
+    });
+    extras.push({
+      key: baseKey + 5,
+      abbr: `E${envNum}OF`,
+      description: `Shader Envelope ${envNum} Offset`,
+    });
   }
   return extras;
 }
 
 function genVisualsLfosExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let lfoNum = 1; lfoNum <= 8; lfoNum++) {
     const baseKey = (lfoNum - 1) * 6;
-    extras.push({ key: baseKey, abbr: `L${lfoNum}ST`, description: `Shader LFO ${lfoNum} Start` });
-    extras.push({ key: baseKey + 1, abbr: `L${lfoNum}WV`, description: `Shader LFO ${lfoNum} Waveform` });
-    extras.push({ key: baseKey + 2, abbr: `L${lfoNum}SP`, description: `Shader LFO ${lfoNum} Speed` });
-    extras.push({ key: baseKey + 3, abbr: `L${lfoNum}AM`, description: `Shader LFO ${lfoNum} Amplitude` });
-    extras.push({ key: baseKey + 4, abbr: `L${lfoNum}OF`, description: `Shader LFO ${lfoNum} Offset` });
-    extras.push({ key: baseKey + 5, abbr: `L${lfoNum}PH`, description: `Shader LFO ${lfoNum} Phase` });
+    extras.push({
+      key: baseKey,
+      abbr: `L${lfoNum}ST`,
+      description: `Shader LFO ${lfoNum} Start`,
+    });
+    extras.push({
+      key: baseKey + 1,
+      abbr: `L${lfoNum}WV`,
+      description: `Shader LFO ${lfoNum} Waveform`,
+    });
+    extras.push({
+      key: baseKey + 2,
+      abbr: `L${lfoNum}SP`,
+      description: `Shader LFO ${lfoNum} Speed`,
+    });
+    extras.push({
+      key: baseKey + 3,
+      abbr: `L${lfoNum}AM`,
+      description: `Shader LFO ${lfoNum} Amplitude`,
+    });
+    extras.push({
+      key: baseKey + 4,
+      abbr: `L${lfoNum}OF`,
+      description: `Shader LFO ${lfoNum} Offset`,
+    });
+    extras.push({
+      key: baseKey + 5,
+      abbr: `L${lfoNum}PH`,
+      description: `Shader LFO ${lfoNum} Phase`,
+    });
   }
   return extras;
 }
@@ -660,20 +1251,36 @@ function genVisualsDestinationExtras() {
 
 function genMidiControllerExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 127; key++) {
     const countStr = key.toString().padStart(3, " ");
-    extras.push({ key: key, abbr: `#${countStr}`, description: `MIDI Controller #${key}` });
+    extras.push({
+      key: key,
+      abbr: `#${countStr}`,
+      description: `MIDI Controller #${key}`,
+    });
   }
   return extras;
 }
 
 function genI2cPortExtras() {
   const extras = [];
-  extras.push({ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION });
+  extras.push({
+    key: EMPTY_KEY,
+    abbr: EMPTY_ABBR,
+    description: EMPTY_DESCRIPTION,
+  });
   for (let key = 0; key <= 127; key++) {
     const countStr = key.toString().padStart(3, " ");
-    extras.push({ key: key, abbr: `#${countStr}`, description: `Port Number ${key}` });
+    extras.push({
+      key: key,
+      abbr: `#${countStr}`,
+      description: `Port Number ${key}`,
+    });
   }
   return extras;
 }
@@ -684,7 +1291,10 @@ function genI2cPortExtras() {
 
 const MAX_NPRN_VALUE = 9999;
 
-export function genNrpnSourceExtraDnA(keyOrValue: number): { abbr: string; description: string } {
+export function genNrpnSourceExtraDnA(keyOrValue: number): {
+  abbr: string;
+  description: string;
+} {
   if (keyOrValue === EMPTY_KEY) {
     return { abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION };
   }
@@ -700,7 +1310,10 @@ export function genNrpnSourceExtraDnA(keyOrValue: number): { abbr: string; descr
   return { abbr: _abbr, description: _description };
 }
 
-export function genVarSourceExtraDnA(keyOrValue: number): { abbr: string; description: string } {
+export function genVarSourceExtraDnA(keyOrValue: number): {
+  abbr: string;
+  description: string;
+} {
   if (keyOrValue === EMPTY_KEY) {
     return { abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION };
   }
@@ -720,7 +1333,10 @@ export function genVarSourceExtraDnA(keyOrValue: number): { abbr: string; descri
   return { abbr, description };
 }
 
-export function decodeByteExtra(byteVal: number): { abbr: string; description: string } {
+export function decodeByteExtra(byteVal: number): {
+  abbr: string;
+  description: string;
+} {
   if (byteVal === 255) {
     return { abbr: EMPTY_ABBR_SHORT, description: EMPTY_DESCRIPTION };
   }
@@ -734,14 +1350,17 @@ export function decodeByteExtra(byteVal: number): { abbr: string; description: s
   }
   if (byteVal >= 26 && byteVal <= 95) {
     const index = byteVal - 26;
-    const indexHex = index.toString(16).toUpperCase().padStart(2, '0');
+    const indexHex = index.toString(16).toUpperCase().padStart(2, "0");
     return { abbr: `${indexHex}`, description: `Row ${index}` };
   }
 
   throw new Error(`Unexpected byte value ${byteVal}`);
 }
 
-export function genCalcSkipSourceExtraDnA(keyOrValue: number): { abbr: string; description: string } {
+export function genCalcSkipSourceExtraDnA(keyOrValue: number): {
+  abbr: string;
+  description: string;
+} {
   if (keyOrValue === EMPTY_KEY) {
     return { abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION };
   }
@@ -754,12 +1373,12 @@ export function genCalcSkipSourceExtraDnA(keyOrValue: number): { abbr: string; d
 
   // To be consistent with the NS whenever a byte is set, but the other not, the second byte shows as '=0' but is still stored internally as 255
   let abbr = `${abbr1}${abbr2}`;
-  
+
   if (byteVal1 !== 255 && byteVal2 === 255) {
     abbr = `${abbr1}=0`;
   }
 
-  if(byteVal1 === 255 && byteVal2 !== 255) {
+  if (byteVal1 === 255 && byteVal2 !== 255) {
     abbr = `=0${abbr2}`;
   }
 
@@ -768,7 +1387,10 @@ export function genCalcSkipSourceExtraDnA(keyOrValue: number): { abbr: string; d
   return { abbr, description };
 }
 
-export function genMidiCcDestinationDnA(keyOrValue: number): { abbr: string; description: string } {
+export function genMidiCcDestinationDnA(keyOrValue: number): {
+  abbr: string;
+  description: string;
+} {
   if (keyOrValue === EMPTY_KEY) {
     return { abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION };
   }
@@ -801,8 +1423,12 @@ export const DataModel = {
       key: EMPTY_KEY,
       abbr: EMPTY_ABBR,
       description: EMPTY_DESCRIPTION,
-      functions: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      functions: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 0,
@@ -827,7 +1453,9 @@ export const DataModel = {
         { key: 14, abbr: `MOD5`, description: "MOD Out 5" },
         { key: 15, abbr: `MOD6`, description: "MOD Out 6" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 1,
@@ -842,7 +1470,9 @@ export const DataModel = {
         { key: 4, abbr: `TR 5`, description: "Trigger 5" },
         { key: 5, abbr: `TR 6`, description: "Trigger 6" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 2,
@@ -898,7 +1528,9 @@ export const DataModel = {
         { key: 6, abbr: `SLT6`, description: "Slot 6" },
         { key: 7, abbr: `SLT7`, description: "Slot 7" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 4,
@@ -915,7 +1547,9 @@ export const DataModel = {
         { key: 6, abbr: `#  7`, description: "Envelope 7" },
         { key: 7, abbr: `#  8`, description: "Envelope 8" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 5,
@@ -936,7 +1570,9 @@ export const DataModel = {
       abbr: "NPRN",
       description: "MIDI NRPN",
       functions: genMidiDeviceChannelSourceFunctions(),
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code.
       // 0..9999 "Midi NRPN Controller #"
     },
@@ -956,7 +1592,9 @@ export const DataModel = {
       abbr: "VAR ",
       description: "Variable",
       functions: genVariableSourceFunctions(),
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code.
       // 0 Pass Value from Variable/Row
       // 1..4096 Set Variable/ Row to 0 - 4095 / 0 - FFF
@@ -1012,12 +1650,22 @@ export const DataModel = {
         { key: 42, abbr: `P2NT`, description: "Pitch To Note" },
         { key: 43, abbr: `NT2P`, description: "Note To Pitch" },
         { key: 44, abbr: `RNDM`, description: "Generate Random Value" },
-        { key: 45, abbr: `RNGE`, description: "Range former row between A and B" },
+        {
+          key: 45,
+          abbr: `RNGE`,
+          description: "Range former row between A and B",
+        },
         { key: 46, abbr: `FORC`, description: "Force Value to Destination" },
-        { key: 47, abbr: `PULS`, description: "Generate Onetime Pulse if A is getting bigger than B" },
+        {
+          key: 47,
+          abbr: `PULS`,
+          description: "Generate Onetime Pulse if A is getting bigger than B",
+        },
         { key: 48, abbr: `MODS`, description: "Signed Modulo" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code.
       // 16 bit word is split in 2 bytes where the MSB is the first operand and the LSB is the 2nd operand
       // Value definition of a operand:
@@ -1030,7 +1678,9 @@ export const DataModel = {
       abbr: "SKIP",
       description: "Skip",
       functions: genSkipSourceFunctions(),
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code.
       // 16 bit word is split in 2 bytes where the MSB is the first operand and the LSB is the 2nd operand
       // Value definition of a operand:
@@ -1056,7 +1706,9 @@ export const DataModel = {
         { key: 9, abbr: `PULS`, description: "Create Pulse from Command" },
         { key: 10, abbr: `TICK`, description: "Current Mainclock Ticks" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 13,
@@ -1068,7 +1720,9 @@ export const DataModel = {
         { key: 1, abbr: `SEGA`, description: "Sega Gamepad" },
         { key: 2, abbr: `BUTN`, description: "NerdSEQ Buttons" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code. Different Extras for each of 0, 1
       // Use KeyboardSourceExtras and GamepadSourceExtras
     },
@@ -1088,8 +1742,12 @@ export const DataModel = {
       key: EMPTY_KEY,
       description: EMPTY_DESCRIPTION,
       abbr: EMPTY_ABBR,
-      functions: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      functions: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
     },
     {
       key: 0,
@@ -1139,22 +1797,86 @@ export const DataModel = {
         { key: 5, abbr: `SLT5`, description: "Selected Automator Slot 5" },
         { key: 6, abbr: `SLT6`, description: "Selected Automator Slot 6" },
         { key: 7, abbr: `SLT7`, description: "Selected Automator Slot 7" },
-        { key: 8, abbr: `VA  `, description: "Automator slot selected by Variable A" },
-        { key: 9, abbr: `VB  `, description: "Automator slot selected by Variable B" },
-        { key: 10, abbr: `VC  `, description: "Automator slot selected by Variable C" },
-        { key: 11, abbr: `VD  `, description: "Automator slot selected by Variable D" },
-        { key: 12, abbr: `VE  `, description: "Automator slot selected by Variable E" },
-        { key: 13, abbr: `VF  `, description: "Automator slot selected by Variable F" },
-        { key: 14, abbr: `VG  `, description: "Automator slot selected by Variable G" },
-        { key: 15, abbr: `VH  `, description: "Automator slot selected by Variable H" },
-        { key: 16, abbr: `VI  `, description: "Automator slot selected by Variable I" },
-        { key: 17, abbr: `VJ  `, description: "Automator slot selected by Variable J" },
-        { key: 18, abbr: `VK  `, description: "Automator slot selected by Variable K" },
-        { key: 19, abbr: `VL  `, description: "Automator slot selected by Variable L" },
-        { key: 20, abbr: `VM  `, description: "Automator slot selected by Variable M" },
-        { key: 21, abbr: `VN  `, description: "Automator slot selected by Variable N" },
-        { key: 22, abbr: `VO  `, description: "Automator slot selected by Variable O" },
-        { key: 23, abbr: `VP  `, description: "Automator slot selected by Variable P" },
+        {
+          key: 8,
+          abbr: `VA  `,
+          description: "Automator slot selected by Variable A",
+        },
+        {
+          key: 9,
+          abbr: `VB  `,
+          description: "Automator slot selected by Variable B",
+        },
+        {
+          key: 10,
+          abbr: `VC  `,
+          description: "Automator slot selected by Variable C",
+        },
+        {
+          key: 11,
+          abbr: `VD  `,
+          description: "Automator slot selected by Variable D",
+        },
+        {
+          key: 12,
+          abbr: `VE  `,
+          description: "Automator slot selected by Variable E",
+        },
+        {
+          key: 13,
+          abbr: `VF  `,
+          description: "Automator slot selected by Variable F",
+        },
+        {
+          key: 14,
+          abbr: `VG  `,
+          description: "Automator slot selected by Variable G",
+        },
+        {
+          key: 15,
+          abbr: `VH  `,
+          description: "Automator slot selected by Variable H",
+        },
+        {
+          key: 16,
+          abbr: `VI  `,
+          description: "Automator slot selected by Variable I",
+        },
+        {
+          key: 17,
+          abbr: `VJ  `,
+          description: "Automator slot selected by Variable J",
+        },
+        {
+          key: 18,
+          abbr: `VK  `,
+          description: "Automator slot selected by Variable K",
+        },
+        {
+          key: 19,
+          abbr: `VL  `,
+          description: "Automator slot selected by Variable L",
+        },
+        {
+          key: 20,
+          abbr: `VM  `,
+          description: "Automator slot selected by Variable M",
+        },
+        {
+          key: 21,
+          abbr: `VN  `,
+          description: "Automator slot selected by Variable N",
+        },
+        {
+          key: 22,
+          abbr: `VO  `,
+          description: "Automator slot selected by Variable O",
+        },
+        {
+          key: 23,
+          abbr: `VP  `,
+          description: "Automator slot selected by Variable P",
+        },
       ],
       extras: [
         { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
@@ -1270,7 +1992,11 @@ export const DataModel = {
       extras: [
         { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
         { key: 0, abbr: `SRC `, description: "Set Variable/Row" },
-        { key: 1, abbr: `RST `, description: "Reset Variable/Row if Source == true" },
+        {
+          key: 1,
+          abbr: `RST `,
+          description: "Reset Variable/Row if Source == true",
+        },
       ],
     },
     {
@@ -1302,10 +2028,16 @@ export const DataModel = {
         { key: 9, abbr: `BUTN`, description: "Buttons" },
         { key: 10, abbr: `SCRN`, description: "Screens" },
         { key: 11, abbr: `MODE`, description: "Modes" },
-        { key: 12, abbr: `SROW`, description: "Set current cursor in sequencer row" },
+        {
+          key: 12,
+          abbr: `SROW`,
+          description: "Set current cursor in sequencer row",
+        },
         { key: 13, abbr: `SDIR`, description: "Set current scale direction" },
       ],
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code. Different Extras for each of 9, 10, 11
       // Use GlobalButtonsDestinationExtras, GlobalScreensDestinationExtras, and GlobalModesDestinationExtras
     },
@@ -1345,8 +2077,18 @@ export const DataModel = {
         { key: 2, abbr: `NOTE`, description: "Note OnOff" },
         { key: 3, abbr: `PBND`, description: "Pitch Bend" },
         { key: 4, abbr: `PGMC`, description: "Program Change" },
-        { key: 5, abbr: `NTGT`, description: "Note On/Off by gate from source and note # by the former row" },
-        { key: 6, abbr: `NTTR`, description: "Note OnOff by a trigger from source and note # by the former row" },
+        {
+          key: 5,
+          abbr: `NTGT`,
+          description:
+            "Note On/Off by gate from source and note # by the former row",
+        },
+        {
+          key: 6,
+          abbr: `NTTR`,
+          description:
+            "Note OnOff by a trigger from source and note # by the former row",
+        },
       ],
     },
     {
@@ -1361,7 +2103,9 @@ export const DataModel = {
       abbr: "SKIP",
       description: "Skip",
       functions: genSkipDestinationFunctions(),
-      extras: [{ key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION }],
+      extras: [
+        { key: EMPTY_KEY, abbr: EMPTY_ABBR, description: EMPTY_DESCRIPTION },
+      ],
       // Handle Extras in code - same as CALC/SKIP source
     },
     {

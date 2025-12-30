@@ -24,12 +24,19 @@ import SkipDestinationExtra from './SkipDestinationExtra.vue';
 import DualDestinationExtra from './DualDestinationExtra.vue';
 import VisuDestinationExtra from './VisuDestinationExtra.vue';
 import VariableDestinationExtra from './VariableDestinationExtra.vue';
+import MidiMonitor from './MidiMonitor.vue';
+import MidiLearnSourceExtra from './MidiLearnSourceExtra.vue';
+import MidiLearnDestinationExtra from './MidiLearnDestinationExtra.vue';
+import { useMidi } from '../composables/useMidi';
+import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const currentlySelectedSourceTypes = ref(new Array<MappingType>());
 const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
+
+const { isSupported: midiSupported } = useMidi();
 
 function readFile() {
   const file = fileInput.value?.files?.[0];
@@ -390,6 +397,10 @@ function downloadMap() {
       <h2 class="pt-3">Mapping File Editor</h2>
     </div>
   </header>
+
+  <!-- MIDI Monitor -->
+  <MidiMonitor v-if="midiSupported" />
+
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
       <label id="fileInputLabel" for="fileInput" class="btn btn-info border-dark"
@@ -475,6 +486,19 @@ function downloadMap() {
           }}</label>
 
           <!-- Else handel all the edge cases -->
+
+          <!-- MIDI Learn for MIDI source types when LRN function selected -->
+          <MidiLearnSourceExtra
+            v-else-if="[5, 6, 7].includes(row.source.type.key) && row.source.function.key === 48"
+            v-model="row.source.extra as SourceExtra"
+            :source-type="row.source.type.key"
+            @function-update="(functionKey: number) => {
+              const sourceFunc = currentlySelectedSourceTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
+              if (sourceFunc) {
+                row.source.function = new SourceFunction(functionKey, sourceFunc.abbr, sourceFunc.description)
+              }
+            }"
+          />
 
           <!-- Calc or Skip Source Type -->
           <CalcSkipSourceExtra v-model="row.source.extra as SourceExtra"
@@ -570,9 +594,21 @@ function downloadMap() {
 
           <!-- Else handel all the edge cases -->
 
+          <!-- MIDI Learn for MIDI CC destination when LRN function selected -->
+          <MidiLearnDestinationExtra
+            v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key === MIDI_LEARN_FUNCTION_KEY"
+            v-model="row.destination.extra as DestinationExtra"
+            @function-update="(functionKey: number) => {
+              const destFunc = currentlySelectedDestinationTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
+              if (destFunc) {
+                row.destination.function = new DestinationFunction(functionKey, destFunc.abbr, destFunc.description)
+              }
+            }"
+          />
+
           <!-- Midi CC Destination Type -->
           <MidiCcDestinationExtra v-model="row.destination.extra as DestinationExtra"
-            v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY"
+            v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key !== MIDI_LEARN_FUNCTION_KEY"
             :midi-cc-extras="currentlySelectedDestinationTypes[row.index]?.extras" />
 
           <!-- Skip Destination Type -->
