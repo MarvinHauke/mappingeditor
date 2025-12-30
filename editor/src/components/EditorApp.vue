@@ -36,7 +36,63 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const currentlySelectedSourceTypes = ref(new Array<MappingType>());
 const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
 
+// Copy/paste functionality state
+const copiedRowData = ref<MappingRow | null>(null);
+const hoveredRowIndex = ref<number | null>(null);
+
 const { isSupported: midiSupported } = useMidi();
+
+// Deep clone helper function for row data
+function deepCloneRow(row: MappingRow): MappingRow {
+  const cloned = _.cloneDeep(row);
+  return new MappingRow(
+    cloned.index,
+    new Source(
+      new SourceType(cloned.source.type.key, cloned.source.type.abbr, cloned.source.type.description),
+      new SourceFunction(cloned.source.function.key, cloned.source.function.abbr, cloned.source.function.description),
+      new SourceExtra(cloned.source.extra.keyOrValue, cloned.source.extra.abbr, cloned.source.extra.description)
+    ),
+    new Destination(
+      new DestinationType(cloned.destination.type.key, cloned.destination.type.abbr, cloned.destination.type.description),
+      new DestinationFunction(cloned.destination.function.key, cloned.destination.function.abbr, cloned.destination.function.description),
+      new DestinationExtra(cloned.destination.extra.keyOrValue, cloned.destination.extra.abbr, cloned.destination.extra.description)
+    )
+  );
+}
+
+// Copy/paste methods
+function copyRow(rowIndex: number): void {
+  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  if (!row) return;
+
+  copiedRowData.value = deepCloneRow(row);
+}
+
+function pasteRow(rowIndex: number): void {
+  if (!copiedRowData.value) return;
+
+  const targetRow = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  if (!targetRow) return;
+
+  const clonedData = deepCloneRow(copiedRowData.value);
+  clonedData.index = rowIndex;
+
+  targetRow.source = clonedData.source;
+  targetRow.destination = clonedData.destination;
+
+  currentlySelectedSourceTypes.value[rowIndex] =
+    DataModel.sourceTypes.find(x => x.key === clonedData.source.type.key) as MappingType;
+  currentlySelectedDestinationTypes.value[rowIndex] =
+    DataModel.destinationTypes.find(x => x.key === clonedData.destination.type.key) as MappingType;
+}
+
+function handleRowIndexMouseEnter(rowIndex: number): void {
+  hoveredRowIndex.value = rowIndex;
+}
+
+function handleRowIndexMouseLeave(): void {
+  hoveredRowIndex.value = null;
+}
 
 function readFile() {
   const file = fileInput.value?.files?.[0];
@@ -452,7 +508,44 @@ function downloadMap() {
       </div>
       <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index">
 
-        <div class="gridItem rowIndex pt-1">{{ row.index }}</div>
+        <div 
+          class="gridItem rowIndex pt-1"
+          @mouseenter="handleRowIndexMouseEnter(row.index)"
+          @mouseleave="handleRowIndexMouseLeave"
+        >
+          {{ row.index }}
+        </div>
+
+        <div 
+          class="gridItem action-column copy-column"
+          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          @mouseenter="handleRowIndexMouseEnter(row.index)"
+          @mouseleave="handleRowIndexMouseLeave"
+        >
+          <button
+            class="btn btn-sm copy-btn"
+            @click="copyRow(row.index)"
+            title="Copy this row"
+          >
+            Copy
+          </button>
+        </div>
+
+        <div 
+          class="gridItem action-column paste-column"
+          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          @mouseenter="handleRowIndexMouseEnter(row.index)"
+          @mouseleave="handleRowIndexMouseLeave"
+        >
+          <button
+            class="btn btn-sm paste-btn"
+            @click="pasteRow(row.index)"
+            title="Paste copied row here"
+            :disabled="!copiedRowData"
+          >
+            Paste
+          </button>
+        </div>
 
         <div class="gridItem">
           <select :value="row.source.type.key" @change="sourceTypeSelectionChanged($event, row.index)"
@@ -743,7 +836,7 @@ label {
 #rowsGridContainer,
 #rowsGridContainerHeader {
   display: grid;
-  grid-template-columns: 2em 12em 20em 30em 12em 20em 30em 2em;
+  grid-template-columns: 2em auto auto 12em 20em 30em 12em 20em 30em 2em;
   gap: 2px;
 }
 
@@ -763,15 +856,71 @@ label {
 }
 
 .rowIndex {
-  width: 100%;
-  display: inline-block;
+  width: 2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background-color: #34cc99 !important;
   color: black;
   border-radius: 5px 0 0 5px;
   text-align: center;
   font-size: small;
   font-weight: bold;
-  padding-bottom: 3px;
+  padding: 3px 0;
+}
+
+.action-column {
+  width: 0;
+  overflow: hidden;
+  transition: width 0.4s ease-out;
+  padding: 0;
+}
+
+.action-column.action-visible {
+  width: 3.5em;
+}
+
+.action-column .copy-btn,
+.action-column .paste-btn {
+  font-size: 10px;
+  padding: 0 6px;
+  margin: 0;
+  white-space: nowrap;
+  background-color: #34cc99;
+  border: none;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease-out 0.1s;
+}
+
+.action-column.action-visible .copy-btn,
+.action-column.action-visible .paste-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover:not(:disabled),
+.paste-btn:hover:not(:disabled) {
+  background-color: #F1F700;
+  color: black;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+}
+
+.paste-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.action-column.action-visible .paste-btn:disabled {
+  opacity: 0.3;
+}
+
+.action-column.action-visible .paste-btn:disabled:hover {
+  box-shadow: none;
 }
 
 .gridItem {
