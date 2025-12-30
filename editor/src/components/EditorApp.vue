@@ -86,6 +86,25 @@ function pasteRow(rowIndex: number): void {
     DataModel.destinationTypes.find(x => x.key === clonedData.destination.type.key) as MappingType;
 }
 
+function clearRow(rowIndex: number): void {
+  const targetRow = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  if (!targetRow) return;
+
+  targetRow.source = new Source(
+    new SourceType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
+    new SourceFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
+    new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION)
+  );
+  targetRow.destination = new Destination(
+    new DestinationType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
+    new DestinationFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
+    new DestinationExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION)
+  );
+
+  currentlySelectedSourceTypes.value[rowIndex] = DataModel.sourceTypes[0] as MappingType;
+  currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes[0] as MappingType;
+}
+
 function handleRowIndexMouseEnter(rowIndex: number): void {
   hoveredRowIndex.value = rowIndex;
 }
@@ -547,6 +566,21 @@ function downloadMap() {
           </button>
         </div>
 
+        <div 
+          class="gridItem action-column clear-column"
+          :class="{ 'action-visible': hoveredRowIndex === row.index }"
+          @mouseenter="handleRowIndexMouseEnter(row.index)"
+          @mouseleave="handleRowIndexMouseLeave"
+        >
+          <button
+            class="btn btn-sm clear-btn"
+            @click="clearRow(row.index)"
+            title="Clear this row"
+          >
+            X
+          </button>
+        </div>
+
         <div class="gridItem">
           <select :value="row.source.type.key" @change="sourceTypeSelectionChanged($event, row.index)"
             :title="row.source.type.abbr" class="form-select pt-1"
@@ -836,7 +870,7 @@ label {
 #rowsGridContainer,
 #rowsGridContainerHeader {
   display: grid;
-  grid-template-columns: 2em auto auto 12em 20em 30em 12em 20em 30em 2em;
+  grid-template-columns: 2em auto auto auto 12em 20em 30em 12em 20em 30em 2em;
   gap: 2px;
 }
 
@@ -881,7 +915,8 @@ label {
 }
 
 .action-column .copy-btn,
-.action-column .paste-btn {
+.action-column .paste-btn,
+.action-column .clear-btn {
   font-size: 10px;
   padding: 0 6px;
   margin: 0;
@@ -899,12 +934,14 @@ label {
 }
 
 .action-column.action-visible .copy-btn,
-.action-column.action-visible .paste-btn {
+.action-column.action-visible .paste-btn,
+.action-column.action-visible .clear-btn {
   opacity: 1;
 }
 
 .copy-btn:hover:not(:disabled),
-.paste-btn:hover:not(:disabled) {
+.paste-btn:hover:not(:disabled),
+.clear-btn:hover:not(:disabled) {
   background-color: #F1F700;
   color: black;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
@@ -921,6 +958,11 @@ label {
 
 .action-column.action-visible .paste-btn:disabled:hover {
   box-shadow: none;
+}
+
+.clear-btn {
+  font-weight: bold;
+  font-size: 12px;
 }
 
 .gridItem {
