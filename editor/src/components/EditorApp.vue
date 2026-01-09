@@ -38,7 +38,6 @@ const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
 
 // Copy/paste functionality state
 const copiedRowData = ref<MappingRow | null>(null);
-const hoveredRowIndex = ref<number | null>(null);
 
 const { isSupported: midiSupported } = useMidi();
 
@@ -107,14 +106,6 @@ function clearRow(rowIndex: number): void {
 
 function rowHasContent(row: MappingRow): boolean {
   return row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY;
-}
-
-function handleRowIndexMouseEnter(rowIndex: number): void {
-  hoveredRowIndex.value = rowIndex;
-}
-
-function handleRowIndexMouseLeave(): void {
-  hoveredRowIndex.value = null;
 }
 
 function readFile() {
@@ -522,32 +513,23 @@ function downloadMap() {
       </div>
       <div id="rowsGridContainerHeader" class="pt-3">
         <div>Row</div>
-        <div></div>
-        <div></div>
-        <div></div>
+        <div>Copy</div>
+        <div>Paste</div>
         <div>Source Type</div>
         <div>Source Function</div>
         <div>Source Extra(s)</div>
         <div>Destination Type</div>
         <div>Destination Function</div>
         <div>Destination Extra</div>
+        <div>Clear</div>
       </div>
       <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index">
 
-        <div 
-          class="gridItem rowIndex pt-1"
-          @mouseenter="handleRowIndexMouseEnter(row.index)"
-          @mouseleave="handleRowIndexMouseLeave"
-        >
+        <div class="gridItem rowIndex pt-1">
           {{ row.index }}
         </div>
 
-        <div 
-          class="gridItem action-column copy-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
-          @mouseenter="handleRowIndexMouseEnter(row.index)"
-          @mouseleave="handleRowIndexMouseLeave"
-        >
+        <div class="gridItem copy-column">
           <button
             class="btn btn-sm copy-btn"
             @click="copyRow(row.index)"
@@ -557,12 +539,7 @@ function downloadMap() {
           </button>
         </div>
 
-        <div 
-          class="gridItem action-column paste-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
-          @mouseenter="handleRowIndexMouseEnter(row.index)"
-          @mouseleave="handleRowIndexMouseLeave"
-        >
+        <div class="gridItem paste-column">
           <button
             class="btn btn-sm paste-btn"
             @click="pasteRow(row.index)"
@@ -570,21 +547,6 @@ function downloadMap() {
             :disabled="!copiedRowData"
           >
             Paste
-          </button>
-        </div>
-
-        <div 
-          class="gridItem action-column clear-column"
-          :class="{ 'action-visible': hoveredRowIndex === row.index && (rowHasContent(row) || copiedRowData) }"
-          @mouseenter="handleRowIndexMouseEnter(row.index)"
-          @mouseleave="handleRowIndexMouseLeave"
-        >
-          <button
-            class="btn btn-sm clear-btn"
-            @click="clearRow(row.index)"
-            title="Clear this row"
-          >
-            X
           </button>
         </div>
 
@@ -830,7 +792,16 @@ function downloadMap() {
           </select>
         </div>
 
-        <div class="endCap"></div>
+        <div class="endCap">
+          <button
+            v-if="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
+            class="btn btn-sm clear-btn-fixed"
+            @click="clearRow(row.index)"
+            title="Clear this row"
+          >
+            X
+          </button>
+        </div>
       </div>
       <div id="variablesContainer" class="pt-3"></div>
     </div>
@@ -877,8 +848,9 @@ label {
 #rowsGridContainer,
 #rowsGridContainerHeader {
   display: grid;
-  grid-template-columns: 2em auto auto auto 12em 20em 30em 12em 20em 30em 2em;
+  grid-template-columns: 2.5em 3.5em 3.5em 1.3fr 2fr 2.5fr 1.3fr 2fr 2.5fr 3.5em;
   gap: 2px;
+  width: 100%;
 }
 
 #rowsGridContainer {
@@ -897,7 +869,6 @@ label {
 }
 
 .rowIndex {
-  width: 2em;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -910,20 +881,18 @@ label {
   padding: 3px 0;
 }
 
-.action-column {
-  width: 0;
-  overflow: hidden;
-  transition: width 0.4s ease-out;
-  padding: 0;
+/* Copy/Paste/Clear button columns */
+.copy-column,
+.paste-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #34cc99;
 }
 
-.action-column.action-visible {
-  width: 3.5em;
-}
-
-.action-column .copy-btn,
-.action-column .paste-btn,
-.action-column .clear-btn {
+.copy-btn,
+.paste-btn,
+.clear-btn-fixed {
   font-size: 10px;
   padding: 0 6px;
   margin: 0;
@@ -936,19 +905,11 @@ label {
   align-items: center;
   justify-content: center;
   border-radius: 0;
-  opacity: 0;
-  transition: opacity 0.3s ease-out 0.1s;
-}
-
-.action-column.action-visible .copy-btn,
-.action-column.action-visible .paste-btn,
-.action-column.action-visible .clear-btn {
-  opacity: 1;
 }
 
 .copy-btn:hover:not(:disabled),
 .paste-btn:hover:not(:disabled),
-.clear-btn:hover:not(:disabled) {
+.clear-btn-fixed:hover:not(:disabled) {
   background-color: #F1F700;
   color: black;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
@@ -957,19 +918,20 @@ label {
 .paste-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+  background-color: grey;
 }
 
-.action-column.action-visible .paste-btn:disabled {
-  opacity: 0.3;
-}
-
-.action-column.action-visible .paste-btn:disabled:hover {
+.paste-btn:disabled:hover {
   box-shadow: none;
+  background-color: grey !important;
 }
 
-.clear-btn {
+.clear-btn-fixed {
   font-weight: bold;
-  font-size: 12px;
+  font-size: 14px;
+  border-radius: 0 5px 5px 0;
+  padding: 0;
+  margin: 0;
 }
 
 .gridItem {
@@ -992,10 +954,11 @@ label {
 
 .endCap {
   width: 100%;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background-color: #34cc99 !important;
   border-radius: 0 5px 5px 0;
-  padding-bottom: 3px;
 }
 
 .label-empty {

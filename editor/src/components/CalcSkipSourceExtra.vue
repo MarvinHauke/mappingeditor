@@ -64,9 +64,10 @@ function updateModel() {
 <style scoped> .extras-container {
      display: flex;
      flex-direction: row;
-     justify-content: space-between;
+     justify-content: flex-start;
      align-items: center;
      width: 100%;
+     gap: 2px;
  }
 
  .select-empty {
@@ -74,16 +75,14 @@ function updateModel() {
  }
 
  .extra-select {
-     width: 15em;
+     width: calc(50% - 1px);
      background-color: #34cc99;
  }
 
  .es1 {
-     margin-right: 2px;
  }
 
  .es2 {
-     margin-left: 2px;
  }
 </style>
 

@@ -61,7 +61,7 @@ defineEmits(['update:modelValue']);
 .extras-container {
     display: flex;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: middle;
     height: 100%;
     width: 100%;
@@ -73,7 +73,7 @@ defineEmits(['update:modelValue']);
     justify-content: left;
     align-items: middle;
     height: 100%;
-    width: 10em;
+    width: 30%;
     background-color: #34cc99;
     padding-top: 0.5em;
 }
@@ -100,9 +100,8 @@ defineEmits(['update:modelValue']);
     justify-content: right;
     align-items: middle;
     height: 100%;
-    width: 30em;
+    width: 70%;
     background-color: #34cc99;
-    margin-left: 0.25em;
 }
 
 .second>input {
