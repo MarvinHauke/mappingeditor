@@ -27,6 +27,7 @@ import VariableDestinationExtra from './VariableDestinationExtra.vue';
 import MidiMonitor from './MidiMonitor.vue';
 import MidiLearnSourceExtra from './MidiLearnSourceExtra.vue';
 import MidiLearnDestinationExtra from './MidiLearnDestinationExtra.vue';
+import RowActionButtons from './RowActionButtons.vue';
 import { useMidi } from '../composables/useMidi';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 
@@ -529,26 +530,13 @@ function downloadMap() {
           {{ row.index }}
         </div>
 
-        <div class="gridItem copy-column">
-          <button
-            class="btn btn-sm copy-btn"
-            @click="copyRow(row.index)"
-            title="Copy this row"
-          >
-            Copy
-          </button>
-        </div>
-
-        <div class="gridItem paste-column">
-          <button
-            class="btn btn-sm paste-btn"
-            @click="pasteRow(row.index)"
-            title="Paste copied row here"
-            :disabled="!copiedRowData"
-          >
-            Paste
-          </button>
-        </div>
+        <RowActionButtons
+          :row-index="row.index"
+          :has-copied-data="!!copiedRowData"
+          :has-content="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
+          @copy="copyRow"
+          @paste="pasteRow"
+        />
 
         <div class="gridItem">
           <select :value="row.source.type.key" @change="sourceTypeSelectionChanged($event, row.index)"
@@ -792,6 +780,7 @@ function downloadMap() {
           </select>
         </div>
 
+        <!-- Clear button at grid position 10 -->
         <div class="endCap">
           <button
             v-if="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
@@ -881,59 +870,6 @@ label {
   padding: 3px 0;
 }
 
-/* Copy/Paste/Clear button columns */
-.copy-column,
-.paste-column {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #34cc99;
-}
-
-.copy-btn,
-.paste-btn,
-.clear-btn-fixed {
-  font-size: 10px;
-  padding: 0 6px;
-  margin: 0;
-  white-space: nowrap;
-  background-color: #34cc99;
-  border: none;
-  height: 100%;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0;
-}
-
-.copy-btn:hover:not(:disabled),
-.paste-btn:hover:not(:disabled),
-.clear-btn-fixed:hover:not(:disabled) {
-  background-color: #F1F700;
-  color: black;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
-}
-
-.paste-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-  background-color: grey;
-}
-
-.paste-btn:disabled:hover {
-  box-shadow: none;
-  background-color: grey !important;
-}
-
-.clear-btn-fixed {
-  font-weight: bold;
-  font-size: 14px;
-  border-radius: 0 5px 5px 0;
-  padding: 0;
-  margin: 0;
-}
-
 .gridItem {
   display: flex;
   align-items: center;
@@ -950,15 +886,6 @@ label {
 .select-empty {
   background-color: grey !important;
   color: black;
-}
-
-.endCap {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #34cc99 !important;
-  border-radius: 0 5px 5px 0;
 }
 
 .label-empty {
@@ -986,5 +913,34 @@ label {
 
 #buttonReset:hover {
   background-color: red !important;
+}
+
+/* Clear button and endCap container */
+.endCap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #34cc99;
+  border-radius: 0 5px 5px 0;
+}
+
+.clear-btn-fixed {
+  font-size: 10px;
+  padding: 0 6px;
+  margin: 0;
+  background-color: #34cc99;
+  border: none;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 5px 5px 0;
+}
+
+.clear-btn-fixed:hover {
+  background-color: #F1F700;
+  color: black;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
 }
 </style>
