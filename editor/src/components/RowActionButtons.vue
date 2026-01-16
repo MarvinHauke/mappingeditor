@@ -57,46 +57,47 @@ function handlePaste(): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #34cc99;
+  background-color: var(--color-primary);
 }
 
 /* Button styles */
 .copy-btn,
 .paste-btn {
-  font-size: 10px;
-  padding: 0 6px;
+  font-size: var(--button-font-size);
+  padding: var(--button-padding);
   margin: 0;
   white-space: nowrap;
-  background-color: #34cc99;
+  background-color: var(--color-primary);
   border: none;
   height: 100%;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
+  border-radius: var(--form-border-radius);
+  transition: background-color var(--transition-standard),
+              opacity var(--transition-standard);
 }
 
 /* Hover states */
 .copy-btn:hover:not(:disabled),
 .paste-btn:hover:not(:disabled) {
-  background-color: #F1F700;
-  color: black;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+  background-color: var(--color-hover);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-hover);
 }
 
 /* Disabled state for copy and paste buttons */
 .copy-btn:disabled,
 .paste-btn:disabled {
-  opacity: 0.3;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
-  background-color: grey;
+  background-color: var(--color-disabled);
 }
 
 .copy-btn:disabled:hover,
 .paste-btn:disabled:hover {
   box-shadow: none;
-  background-color: grey !important;
+  background-color: var(--color-disabled) !important;
 }
 </style>

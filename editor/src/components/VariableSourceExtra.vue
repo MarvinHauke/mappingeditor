@@ -62,67 +62,62 @@ defineEmits(['update:modelValue']);
             </div>
         </div>
         <div class="second" :class="{ 'input-disabled': disableNum }">
-            <input v-if="!disableNum" :disabled="disableNum" type="number" class="form-control" id="varInput" ref="varInput"
+            <input :disabled="disableNum" type="number" class="form-control" id="varInput" ref="varInput"
                 v-model="varValue" @change="numChanged" :max="MAX_VALUE" :min="0" :title="model.description" />
         </div>
     </div>
 </template>
 
 <style scoped>
-.extras-container {
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-start;
-    align-items: middle;
-    height: 100%;
-    width: 100%;
-}
+/* Note: Base .extras-container, .input-disabled are in global form-elements.css */
 
 .first {
     display: flex;
     flex-direction: row;
     justify-content: left;
-    align-items: middle;
+    align-items: center;
     height: 100%;
     width: 50%;
-    background-color: #34cc99;
-    padding-top: 0.5em;
+    background-color: var(--color-primary);
 }
 
 .first>div {
     display: flex;
-    width: 1.2em;
-    height: 1.2em;
-    padding-right: 1.5em;
-    padding-top: 0.25em;
+    width: var(--extras-checkbox-size);
+    height: var(--extras-checkbox-size);
+    padding-right: var(--extras-checkbox-padding-right);
 }
 
 .first>label {
-    padding-top: 0.25em;
-    padding-left: 1em;
+    padding-left: var(--extras-label-padding-left);
     height: 100%;
     width: 15em;
-    color: #000;
+    color: var(--color-text-primary);
 }
 
 .second {
     display: flex;
     flex-direction: row;
     justify-content: right;
-    align-items: middle;
+    align-items: center;
     height: 100%;
     width: 50%;
-    background-color: #34cc99;
+    background-color: var(--color-primary);
 }
 
 .second>input {
-    padding-top: 0.75em;
-    background-color: #34cc99;
+    background-color: var(--color-primary);
+    border: none;
+    height: 100%;
+    width: 100%;
+    padding: var(--form-padding-vertical) var(--form-padding-horizontal);
+    display: flex;
+    align-items: center;
 }
 
-.input-disabled {
-    background-color: grey !important;
+.second>input:disabled {
+    background-color: var(--color-disabled);
+    opacity: var(--opacity-full);
+    color: transparent;
 }
-
-/* TODO: create customer spinner style */
 </style>

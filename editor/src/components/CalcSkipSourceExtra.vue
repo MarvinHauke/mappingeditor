@@ -61,28 +61,16 @@ function updateModel() {
     </div>
 </template>
 
-<style scoped> .extras-container {
-     display: flex;
-     flex-direction: row;
-     justify-content: flex-start;
-     align-items: center;
-     width: 100%;
-     gap: 2px;
- }
+<style scoped>
+/* Note: .extras-container and .select-empty are in global form-elements.css */
 
- .select-empty {
-     background-color: grey !important;
- }
+.extras-container {
+  gap: var(--grid-gap);
+}
 
- .extra-select {
-     width: calc(50% - 1px);
-     background-color: #34cc99;
- }
-
- .es1 {
- }
-
- .es2 {
- }
+.extra-select {
+  width: calc(50% - 1px);
+  background-color: var(--color-primary);
+}
 </style>
 

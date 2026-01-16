@@ -526,7 +526,7 @@ function downloadMap() {
       </div>
       <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index">
 
-        <div class="gridItem rowIndex pt-1">
+        <div class="gridItem rowIndex pt-1" :class="{ 'row-empty': row.source.type.key === EMPTY_KEY }">
           {{ row.index }}
         </div>
 
@@ -799,22 +799,22 @@ function downloadMap() {
 
 <style scoped>
 h2 {
-  color: #F1F700;
+  color: var(--color-text-yellow);
 }
 
 button,
-label {
-  background-color: #34cc99 !important;
+label:not(.label-empty) {
+  background-color: var(--color-primary) !important;
 }
 
 #buttonDownloadHtml,
 #fileInputLabel {
-  border-radius: 5px 0 0 5px;
+  border-radius: var(--form-border-radius-left);
 }
 
 #buttonDownloadMap,
 #buttonReset {
-  border-radius: 0 5px 5px 0;
+  border-radius: var(--form-border-radius-right);
 }
 
 .header-label {
@@ -825,11 +825,11 @@ label {
 
 .header-val {
   display: inline-flex;
-  color: #F1F700 !important;
+  color: var(--color-text-yellow) !important;
 }
 
 .header-val input[type="text"] {
-  background-color: #34cc99;
+  background-color: var(--color-primary);
   border-radius: 5px !important;
   padding-left: 0.4em;
 }
@@ -838,7 +838,7 @@ label {
 #rowsGridContainerHeader {
   display: grid;
   grid-template-columns: 2.5em 3.5em 3.5em 1.3fr 2fr 2.5fr 1.3fr 2fr 2.5fr 3.5em;
-  gap: 2px;
+  gap: var(--grid-gap);
   width: 100%;
 }
 
@@ -853,17 +853,17 @@ label {
 }
 
 .btn:hover {
-  background-color: #F1F700 !important;
-  color: black;
+  background-color: var(--color-hover) !important;
+  color: var(--color-text-primary);
 }
 
 .rowIndex {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #34cc99 !important;
-  color: black;
-  border-radius: 5px 0 0 5px;
+  background-color: var(--color-primary) !important;
+  color: var(--color-text-primary);
+  border-radius: var(--form-border-radius-left);
   text-align: center;
   font-size: small;
   font-weight: bold;
@@ -877,28 +877,12 @@ label {
 }
 
 .gridItem>select {
-  background-color: #34cc99;
-  color: black;
+  background-color: var(--color-primary);
+  color: var(--color-text-primary);
   height: 100%;
-  /* padding-top: 0.7em !important; */
 }
 
-.select-empty {
-  background-color: grey !important;
-  color: black;
-}
-
-.label-empty {
-  display: flex;
-  align-items: center;
-  background-color: grey !important;
-  width: 100%;
-  height: 100%;
-  color: black !important;
-  padding-left: 1.5em;
-  padding-bottom: 0.25em;
-  display: inline-flex;
-}
+/* Note: .select-empty and .label-empty are now in global form-elements.css */
 
 .debugValue {
   color: red;
@@ -908,11 +892,11 @@ label {
 }
 
 #buttonReset {
-  background-color: #cc8534 !important;
+  background-color: var(--color-reset) !important;
 }
 
 #buttonReset:hover {
-  background-color: red !important;
+  background-color: var(--color-reset-hover) !important;
 }
 
 /* Clear button and endCap container */
@@ -920,27 +904,29 @@ label {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #34cc99;
-  border-radius: 0 5px 5px 0;
+  background-color: var(--color-primary);
+  border-radius: var(--form-border-radius-right);
 }
 
 .clear-btn-fixed {
-  font-size: 10px;
-  padding: 0 6px;
+  font-size: var(--button-font-size);
+  padding: var(--button-padding);
   margin: 0;
-  background-color: #34cc99;
+  background-color: var(--color-primary);
   border: none;
   height: 100%;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0 5px 5px 0;
+  border-radius: var(--form-border-radius-right);
+  transition: background-color var(--transition-standard),
+              box-shadow var(--transition-standard);
 }
 
 .clear-btn-fixed:hover {
-  background-color: #F1F700;
-  color: black;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
+  background-color: var(--color-hover);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-hover);
 }
 </style>

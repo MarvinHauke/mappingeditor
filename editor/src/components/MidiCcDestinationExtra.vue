@@ -58,70 +58,48 @@ defineEmits(['update:modelValue']);
 </template>
 
 <style scoped>
-.extras-container {
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-start;
-    align-items: middle;
-    height: 100%;
-    width: 100%;
-}
+/* Note: Base .extras-container, .input-disabled, .select-empty are in global form-elements.css */
 
 .first {
     display: flex;
     flex-direction: row;
     justify-content: left;
-    align-items: middle;
+    align-items: center;
     height: 100%;
     width: 30%;
-    background-color: #34cc99;
-    padding-top: 0.5em;
+    background-color: var(--color-primary);
 }
 
 .first>div {
     display: flex;
-    width: 1.2em;
-    height: 1.2em;
-    padding-right: 1.5em;
-    padding-top: 0.25em;
+    width: var(--extras-checkbox-size);
+    height: var(--extras-checkbox-size);
+    padding-right: var(--extras-checkbox-padding-right);
 }
 
 .first>label {
-    padding-top: 0.25em;
-    padding-left: 1em;
+    padding-left: var(--extras-label-padding-left);
     height: 100%;
     width: 6em;
-    color: #000;
+    color: var(--color-text-primary);
 }
 
 .second {
     display: flex;
     flex-direction: row;
     justify-content: right;
-    align-items: middle;
+    align-items: center;
     height: 100%;
     width: 70%;
-    background-color: #34cc99;
+    background-color: var(--color-primary);
 }
 
 .second>input {
-    padding-top: 0.75em;
-    background-color: #34cc99;
+    background-color: var(--color-primary);
 }
 
 .second>select {
-  background-color: #34cc99;
-  color: black;
-  padding-top: 0.7em !important;
+  background-color: var(--color-primary);
+  color: var(--color-text-primary);
 }
-
-.input-disabled {
-    background-color: grey !important;
-}
-
-.select-empty {
-  background-color: grey !important;
-  color: black;
-}
-/* TODO: create customer spinner style */
 </style>

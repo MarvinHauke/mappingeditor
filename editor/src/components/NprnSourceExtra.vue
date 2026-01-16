@@ -36,26 +36,30 @@ defineEmits(['update:modelValue']);
     display: flex;
     flex-direction: row;
     justify-content: flex-start;
-    align-items: top;
+    align-items: center;
     height: 100%;
     width: 100%;
 }
 
 .extras-container input {
-    padding-top: 1px;
+    padding: var(--form-padding-vertical) var(--form-padding-horizontal);
     height: 100%;
-    width: 50%;
-    background-color: #34cc99;
+    width: 80px;
+    background-color: var(--color-primary);
+    border: none;
+    color: var(--color-text-primary);
 }
 
 .extras-container label {
-    padding-top: 3px;
-    padding-left: 8px;
+    display: flex;
+    align-items: center;
+    padding-left: var(--extras-label-padding-left);
     height: 100%;
-    width: 50%;
-    color: black;
-    background-color: #34cc99;
+    flex: 1;
+    color: var(--color-text-primary);
+    background-color: var(--color-primary);
+    white-space: nowrap;
+    font-size: 12px;
+    margin: 0;
 }
-
-/* TODO: create customer spinner style */
 </style>
