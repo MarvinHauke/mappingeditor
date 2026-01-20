@@ -25,6 +25,7 @@ import DualDestinationExtra from './DualDestinationExtra.vue';
 import VisuDestinationExtra from './VisuDestinationExtra.vue';
 import VariableDestinationExtra from './VariableDestinationExtra.vue';
 import MidiMonitor from './MidiMonitor.vue';
+import VariableMonitor from './VariableMonitor.vue';
 import MidiLearnSourceExtra from './MidiLearnSourceExtra.vue';
 import MidiLearnDestinationExtra from './MidiLearnDestinationExtra.vue';
 import RowActionButtons from './RowActionButtons.vue';
@@ -39,6 +40,15 @@ const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
 
 // Copy/paste functionality state
 const copiedRowData = ref<MappingRow | null>(null);
+
+// Row selection state
+const selectedRowIndex = ref<number | null>(null);
+
+// Row comments storage (keyed by row index)
+const rowComments = ref<Record<number, string>>({});
+
+// MIDI Monitor expanded state (for Variable Monitor positioning)
+const midiMonitorExpanded = ref(false);
 
 const { isSupported: midiSupported } = useMidi();
 
@@ -107,6 +117,15 @@ function clearRow(rowIndex: number): void {
 
 function rowHasContent(row: MappingRow): boolean {
   return row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY;
+}
+
+// Row selection functions
+function toggleRowSelection(rowIndex: number): void {
+  selectedRowIndex.value = selectedRowIndex.value === rowIndex ? null : rowIndex;
+}
+
+function clearRowSelection(): void {
+  selectedRowIndex.value = null;
 }
 
 function readFile() {
@@ -281,15 +300,18 @@ function reset() {
   }
   mappingDocument.value = new MappingDocument();
   currentlySelectedSourceTypes.value = new Array<MappingType>();
-  currentlySelectedDestinationTypes.value = new Array<MappingType>();;
+  currentlySelectedDestinationTypes.value = new Array<MappingType>();
+  clearRowSelection();
+  rowComments.value = {};
 }
 
 function init() {
+  clearRowSelection();
   for (let i = 0; i < mappingDocument.value.rows.length; i++) {
     const row = mappingDocument.value.rows[i];
     // Use row.index instead of i to match template lookup
     const rowIndex = row.index;
-    
+
     // Only find and set types if they're not empty
     if (row.source.type.key !== EMPTY_KEY) {
       currentlySelectedSourceTypes.value[rowIndex] = DataModel.sourceTypes.find(x => x.key === row.source.type.key) as MappingType;
@@ -470,7 +492,10 @@ function downloadMap() {
   </header>
 
   <!-- MIDI Monitor -->
-  <MidiMonitor v-if="midiSupported" />
+  <MidiMonitor v-if="midiSupported" @expanded-change="midiMonitorExpanded = $event" />
+
+  <!-- Variable Monitor -->
+  <VariableMonitor :variables="mappingDocument.variables" :midi-monitor-expanded="midiMonitorExpanded" />
 
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
@@ -526,7 +551,14 @@ function downloadMap() {
       </div>
       <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index">
 
-        <div class="gridItem rowIndex pt-1" :class="{ 'row-empty': row.source.type.key === EMPTY_KEY }">
+        <div
+          class="gridItem rowIndex pt-1"
+          :class="{
+            'row-empty': row.source.type.key === EMPTY_KEY,
+            'row-selected': selectedRowIndex === row.index
+          }"
+          @click="toggleRowSelection(row.index)"
+        >
           {{ row.index }}
         </div>
 
@@ -791,6 +823,19 @@ function downloadMap() {
             X
           </button>
         </div>
+
+        <!-- Comment section (unfolds when row is selected) -->
+        <div v-if="selectedRowIndex === row.index" class="row-comment-section">
+          <div class="comment-header">
+            <span class="comment-label">Comment for Row {{ row.index }}:</span>
+          </div>
+          <textarea
+            v-model="rowComments[row.index]"
+            class="comment-textarea"
+            placeholder="Add a comment for this row..."
+            rows="2"
+          ></textarea>
+        </div>
       </div>
       <div id="variablesContainer" class="pt-3"></div>
     </div>
@@ -868,6 +913,13 @@ label:not(.label-empty) {
   font-size: small;
   font-weight: bold;
   padding: 3px 0;
+  cursor: pointer;
+}
+
+.rowIndex.row-selected {
+  background-color: #F1F700 !important;
+  color: #000;
+  box-shadow: 0 0 8px rgba(241, 247, 0, 0.5);
 }
 
 .gridItem {
@@ -928,5 +980,62 @@ label:not(.label-empty) {
   background-color: var(--color-hover);
   color: var(--color-text-primary);
   box-shadow: var(--shadow-hover);
+}
+
+/* Row comment section */
+.row-comment-section {
+  grid-column: 1 / -1;
+  background-color: rgba(241, 247, 0, 0.1);
+  border: 2px solid #F1F700;
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  animation: unfold 0.2s ease-out;
+}
+
+@keyframes unfold {
+  from {
+    opacity: 0;
+    max-height: 0;
+    padding: 0 8px;
+  }
+  to {
+    opacity: 1;
+    max-height: 100px;
+    padding: 8px;
+  }
+}
+
+.comment-header {
+  margin-bottom: 4px;
+}
+
+.comment-label {
+  font-weight: bold;
+  color: #F1F700;
+  font-size: 12px;
+}
+
+.comment-textarea {
+  width: 100%;
+  background-color: #1a1a1a;
+  border: 1px solid #F1F700;
+  border-radius: 4px;
+  color: #F1F700;
+  padding: 6px;
+  font-size: 12px;
+  resize: vertical;
+  min-height: 40px;
+}
+
+.comment-textarea:focus {
+  outline: none;
+  border-color: #34cc99;
+  box-shadow: 0 0 4px rgba(52, 204, 153, 0.5);
+}
+
+.comment-textarea::placeholder {
+  color: #666;
 }
 </style>

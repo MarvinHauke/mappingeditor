@@ -2,6 +2,10 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 
+const emit = defineEmits<{
+  expandedChange: [expanded: boolean]
+}>()
+
 const { isSupported, isEnabled, messageHistory, lastMessage, enableMidi, clearHistory: clearHistoryComposable } = useMidi()
 
 const isExpanded = ref(false)
@@ -10,7 +14,15 @@ const showActivity = ref(false)
 // Persist expanded state
 const STORAGE_KEY = 'midi-monitor-expanded'
 isExpanded.value = localStorage.getItem(STORAGE_KEY) === 'true'
-watch(isExpanded, (val) => localStorage.setItem(STORAGE_KEY, val.toString()))
+watch(isExpanded, (val) => {
+  localStorage.setItem(STORAGE_KEY, val.toString())
+  emit('expandedChange', val)
+})
+
+// Emit initial state on mount
+onMounted(() => {
+  emit('expandedChange', isExpanded.value)
+})
 
 // Activity indicator (blink on new message)
 watch(lastMessage, () => {
