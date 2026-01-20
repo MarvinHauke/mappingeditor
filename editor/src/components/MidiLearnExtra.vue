@@ -1,24 +1,33 @@
 <script setup lang="ts">
 import { defineModel, ref, computed, onUnmounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
-import { DestinationExtra, DestinationFunction } from '../modules/documentModel'
-import { EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION } from '../modules/dataModel'
+import { SourceExtra, DestinationExtra } from '../modules/documentModel'
+import { EMPTY_ABBR, EMPTY_DESCRIPTION } from '../modules/dataModel'
 import {
   MIDI_INTERFACES,
   LEARN_TIMEOUT_MS,
-  MIDI_CC_DESTINATION_TYPE_KEY,
   type MidiInterface
 } from '../constants/midi'
 
-const model = defineModel<DestinationExtra>({ required: true })
+// Props to distinguish between source and destination modes
+const props = defineProps<{
+  mode: 'source' | 'destination'
+  sourceType?: number // Required when mode='source': 5=MIDI, 6=MIDI CC, 7=MIDI NRPN
+}>()
+
+// Generic model that works with both SourceExtra and DestinationExtra
+const model = defineModel<SourceExtra | DestinationExtra>({ required: true })
 
 const emit = defineEmits(['update:modelValue', 'functionUpdate'])
 
-const { isLearning, startLearning, stopLearning } = useMidi()
+const { startLearning, stopLearning } = useMidi()
 
 // Interface selection (TRS, USB Host, USB Device)
 const selectedInterface = ref<MidiInterface>('trs')
 const interfaces = MIDI_INTERFACES
+
+// Local learning state (not shared with other instances)
+const isLocalLearning = ref<boolean>(false)
 
 // Learn state
 const learnedChannel = ref<number | null>(null)
@@ -36,10 +45,26 @@ const channelWithOffset = computed(() => {
 
 const hasLearnedValue = computed(() => learnedChannel.value !== null && learnedValue.value !== null)
 
+// Display label for the learned value type
+const valueTypeLabel = computed(() => {
+  if (props.mode === 'source') {
+    switch (props.sourceType) {
+      case 5: return 'Note'
+      case 6: return 'CC'
+      case 7: return 'NRPN'
+      default: return 'Value'
+    }
+  } else {
+    // Destination mode: determine by value range
+    return learnedValue.value !== null && learnedValue.value <= 127 ? 'CC' : 'NRPN'
+  }
+})
+
 // Start learning
 function handleStartLearning(): void {
   learnError.value = ''
   learningCountdown.value = LEARN_TIMEOUT_MS / 1000
+  isLocalLearning.value = true
 
   // Start countdown
   if (countdownInterval.value) clearInterval(countdownInterval.value)
@@ -58,6 +83,7 @@ function handleStartLearning(): void {
 
 // Stop learning
 function handleStopLearning(): void {
+  isLocalLearning.value = false
   if (countdownInterval.value) {
     clearInterval(countdownInterval.value)
     countdownInterval.value = null
@@ -69,14 +95,37 @@ function handleStopLearning(): void {
 function handleMidiMessage(msg: ParsedMidiMessage): void {
   learnedChannel.value = msg.channel
 
-  // Handle CC and NRPN messages
-  if (msg.type === 'cc' && msg.cc !== undefined) {
-    learnedValue.value = msg.cc
-    updateModel(msg.cc)
-  } else if (msg.type === 'nrpn' && msg.nrpn !== undefined) {
-    // NRPN handling for MIDI CC destination (0-10127 range)
-    learnedValue.value = msg.nrpn
-    updateModel(msg.nrpn)
+  if (props.mode === 'source') {
+    // Source mode: filter by sourceType
+    switch (props.sourceType) {
+      case 5: // MIDI (Note)
+        if (msg.type === 'note' && msg.note !== undefined) {
+          learnedValue.value = msg.note
+          updateModel(msg.note)
+        }
+        break
+      case 6: // MIDI CC
+        if (msg.type === 'cc' && msg.cc !== undefined) {
+          learnedValue.value = msg.cc
+          updateModel(msg.cc)
+        }
+        break
+      case 7: // MIDI NRPN
+        if (msg.type === 'nrpn' && msg.nrpn !== undefined) {
+          learnedValue.value = msg.nrpn
+          updateModel(msg.nrpn)
+        }
+        break
+    }
+  } else {
+    // Destination mode: handle CC and NRPN
+    if (msg.type === 'cc' && msg.cc !== undefined) {
+      learnedValue.value = msg.cc
+      updateModel(msg.cc)
+    } else if (msg.type === 'nrpn' && msg.nrpn !== undefined) {
+      learnedValue.value = msg.nrpn
+      updateModel(msg.nrpn)
+    }
   }
 }
 
@@ -84,22 +133,53 @@ function handleMidiMessage(msg: ParsedMidiMessage): void {
 function updateModel(value: number): void {
   const abbr = generateAbbr(value)
   const description = generateDescription(value)
-  model.value = new DestinationExtra(value, abbr, description)
+
+  if (props.mode === 'source') {
+    model.value = new SourceExtra(value, abbr, description)
+  } else {
+    model.value = new DestinationExtra(value, abbr, description)
+  }
 
   // Also emit function update with learned channel
   if (channelWithOffset.value !== null) {
-    const functionKey = channelWithOffset.value
-    emit('functionUpdate', functionKey)
+    emit('functionUpdate', channelWithOffset.value)
   }
 }
 
 function generateAbbr(value: number): string {
-  // CC: 0-127, NRPN: 0-10127
-  return value <= 127 ? `#${value.toString().padStart(3, ' ')}` : value.toString().padStart(5, ' ')
+  if (props.mode === 'source') {
+    switch (props.sourceType) {
+      case 5:
+        return `NOTE`
+      case 6:
+        return `#${value.toString().padStart(3, ' ')}`
+      case 7:
+        return value.toString().padStart(4, ' ')
+      default:
+        return EMPTY_ABBR
+    }
+  } else {
+    // Destination mode: CC (0-127) or NRPN (0-10127)
+    return value <= 127 ? `#${value.toString().padStart(3, ' ')}` : value.toString().padStart(5, ' ')
+  }
 }
 
 function generateDescription(value: number): string {
-  return value <= 127 ? `MIDI Controller #${value}` : `MIDI NRPN Controller #${value}`
+  if (props.mode === 'source') {
+    switch (props.sourceType) {
+      case 5:
+        return `MIDI Note`
+      case 6:
+        return `MIDI Controller #${value}`
+      case 7:
+        return `MIDI NRPN Controller #${value}`
+      default:
+        return EMPTY_DESCRIPTION
+    }
+  } else {
+    // Destination mode
+    return value <= 127 ? `MIDI Controller #${value}` : `MIDI NRPN Controller #${value}`
+  }
 }
 
 // Cleanup on unmount
@@ -107,7 +187,7 @@ onUnmounted(() => {
   if (countdownInterval.value) {
     clearInterval(countdownInterval.value)
   }
-  if (isLearning.value) {
+  if (isLocalLearning.value) {
     stopLearning()
   }
 })
@@ -128,7 +208,7 @@ onUnmounted(() => {
     <!-- Learn Button / Status -->
     <div class="learn-controls">
       <button
-        v-if="!isLearning"
+        v-if="!isLocalLearning"
         @click="handleStartLearning"
         class="btn btn-sm learn-btn"
         :class="{ 'btn-success': !hasLearnedValue, 'btn-info': hasLearnedValue }"
@@ -147,9 +227,7 @@ onUnmounted(() => {
     <div v-if="hasLearnedValue" class="learned-values">
       <span class="value-label">Channel:</span>
       <span class="value-text">{{ channelWithOffset! + 1 }}</span>
-      <span class="value-label">
-        {{ learnedValue! <= 127 ? 'CC' : 'NRPN' }}:
-      </span>
+      <span class="value-label">{{ valueTypeLabel }}:</span>
       <span class="value-text">{{ learnedValue }}</span>
     </div>
 

@@ -26,10 +26,11 @@ import VisuDestinationExtra from './VisuDestinationExtra.vue';
 import VariableDestinationExtra from './VariableDestinationExtra.vue';
 import MidiMonitor from './MidiMonitor.vue';
 import VariableMonitor from './VariableMonitor.vue';
-import MidiLearnSourceExtra from './MidiLearnSourceExtra.vue';
-import MidiLearnDestinationExtra from './MidiLearnDestinationExtra.vue';
+import MidiLearnExtra from './MidiLearnExtra.vue';
 import RowActionButtons from './RowActionButtons.vue';
+import RowCommentSection from './RowCommentSection.vue';
 import { useMidi } from '../composables/useMidi';
+import { useClipboard } from '../composables/useClipboard';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
@@ -37,9 +38,6 @@ const fileInput = ref<HTMLInputElement | null>(null);
 
 const currentlySelectedSourceTypes = ref(new Array<MappingType>());
 const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
-
-// Copy/paste functionality state
-const copiedRowData = ref<MappingRow | null>(null);
 
 // Row selection state
 const selectedRowIndex = ref<number | null>(null);
@@ -52,72 +50,25 @@ const midiMonitorExpanded = ref(false);
 
 const { isSupported: midiSupported } = useMidi();
 
-// Deep clone helper function for row data
-function deepCloneRow(row: MappingRow): MappingRow {
-  const cloned = _.cloneDeep(row);
-  return new MappingRow(
-    cloned.index,
-    new Source(
-      new SourceType(cloned.source.type.key, cloned.source.type.abbr, cloned.source.type.description),
-      new SourceFunction(cloned.source.function.key, cloned.source.function.abbr, cloned.source.function.description),
-      new SourceExtra(cloned.source.extra.keyOrValue, cloned.source.extra.abbr, cloned.source.extra.description)
-    ),
-    new Destination(
-      new DestinationType(cloned.destination.type.key, cloned.destination.type.abbr, cloned.destination.type.description),
-      new DestinationFunction(cloned.destination.function.key, cloned.destination.function.abbr, cloned.destination.function.description),
-      new DestinationExtra(cloned.destination.extra.keyOrValue, cloned.destination.extra.abbr, cloned.destination.extra.description)
-    )
-  );
-}
-
-// Copy/paste methods
-function copyRow(rowIndex: number): void {
-  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  if (!row) return;
-
-  copiedRowData.value = deepCloneRow(row);
-}
-
-function pasteRow(rowIndex: number): void {
-  if (!copiedRowData.value) return;
-
-  const targetRow = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  if (!targetRow) return;
-
-  const clonedData = deepCloneRow(copiedRowData.value);
-  clonedData.index = rowIndex;
-
-  targetRow.source = clonedData.source;
-  targetRow.destination = clonedData.destination;
-
-  currentlySelectedSourceTypes.value[rowIndex] =
-    DataModel.sourceTypes.find(x => x.key === clonedData.source.type.key) as MappingType;
-  currentlySelectedDestinationTypes.value[rowIndex] =
-    DataModel.destinationTypes.find(x => x.key === clonedData.destination.type.key) as MappingType;
-}
-
-function clearRow(rowIndex: number): void {
-  const targetRow = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  if (!targetRow) return;
-
-  targetRow.source = new Source(
-    new SourceType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
-    new SourceFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
-    new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION)
-  );
-  targetRow.destination = new Destination(
-    new DestinationType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
-    new DestinationFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
-    new DestinationExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION)
-  );
-
-  currentlySelectedSourceTypes.value[rowIndex] = DataModel.sourceTypes[0] as MappingType;
-  currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes[0] as MappingType;
-}
-
-function rowHasContent(row: MappingRow): boolean {
-  return row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY;
-}
+// Clipboard functionality via composable
+const {
+  hasCopiedRow,
+  hasCopiedSource,
+  hasCopiedDestination,
+  copyRow,
+  pasteRow,
+  clearRow,
+  copySource,
+  pasteSource,
+  clearSource,
+  copyDestination,
+  pasteDestination,
+  clearDestination
+} = useClipboard({
+  mappingDocument,
+  currentlySelectedSourceTypes,
+  currentlySelectedDestinationTypes
+});
 
 // Row selection functions
 function toggleRowSelection(rowIndex: number): void {
@@ -564,7 +515,7 @@ function downloadMap() {
 
         <RowActionButtons
           :row-index="row.index"
-          :has-copied-data="!!copiedRowData"
+          :has-copied-data="hasCopiedRow"
           :has-content="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
           @copy="copyRow"
           @paste="pasteRow"
@@ -604,9 +555,10 @@ function downloadMap() {
           <!-- Else handel all the edge cases -->
 
           <!-- MIDI Learn for MIDI source types when LRN function selected -->
-          <MidiLearnSourceExtra
+          <MidiLearnExtra
             v-else-if="[5, 6, 7].includes(row.source.type.key) && row.source.function.key === 48"
             v-model="row.source.extra as SourceExtra"
+            mode="source"
             :source-type="row.source.type.key"
             @function-update="(functionKey: number) => {
               const sourceFunc = currentlySelectedSourceTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
@@ -711,9 +663,10 @@ function downloadMap() {
           <!-- Else handel all the edge cases -->
 
           <!-- MIDI Learn for MIDI CC destination when LRN function selected -->
-          <MidiLearnDestinationExtra
+          <MidiLearnExtra
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key === MIDI_LEARN_FUNCTION_KEY"
             v-model="row.destination.extra as DestinationExtra"
+            mode="destination"
             @function-update="(functionKey: number) => {
               const destFunc = currentlySelectedDestinationTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
               if (destFunc) {
@@ -825,17 +778,21 @@ function downloadMap() {
         </div>
 
         <!-- Comment section (unfolds when row is selected) -->
-        <div v-if="selectedRowIndex === row.index" class="row-comment-section">
-          <div class="comment-header">
-            <span class="comment-label">Comment for Row {{ row.index }}:</span>
-          </div>
-          <textarea
-            v-model="rowComments[row.index]"
-            class="comment-textarea"
-            placeholder="Add a comment for this row..."
-            rows="2"
-          ></textarea>
-        </div>
+        <RowCommentSection
+          v-if="selectedRowIndex === row.index"
+          :row-index="row.index"
+          :source-empty="row.source.type.key === EMPTY_KEY"
+          :destination-empty="row.destination.type.key === EMPTY_KEY"
+          :has-copied-source="hasCopiedSource"
+          :has-copied-destination="hasCopiedDestination"
+          v-model="rowComments[row.index]"
+          @copy-source="copySource"
+          @paste-source="pasteSource"
+          @clear-source="clearSource"
+          @copy-destination="copyDestination"
+          @paste-destination="pasteDestination"
+          @clear-destination="clearDestination"
+        />
       </div>
       <div id="variablesContainer" class="pt-3"></div>
     </div>
@@ -980,62 +937,5 @@ label:not(.label-empty) {
   background-color: var(--color-hover);
   color: var(--color-text-primary);
   box-shadow: var(--shadow-hover);
-}
-
-/* Row comment section */
-.row-comment-section {
-  grid-column: 1 / -1;
-  background-color: rgba(241, 247, 0, 0.1);
-  border: 2px solid #F1F700;
-  border-radius: 4px;
-  padding: 8px;
-  margin-top: 4px;
-  margin-bottom: 4px;
-  animation: unfold 0.2s ease-out;
-}
-
-@keyframes unfold {
-  from {
-    opacity: 0;
-    max-height: 0;
-    padding: 0 8px;
-  }
-  to {
-    opacity: 1;
-    max-height: 100px;
-    padding: 8px;
-  }
-}
-
-.comment-header {
-  margin-bottom: 4px;
-}
-
-.comment-label {
-  font-weight: bold;
-  color: #F1F700;
-  font-size: 12px;
-}
-
-.comment-textarea {
-  width: 100%;
-  background-color: #1a1a1a;
-  border: 1px solid #F1F700;
-  border-radius: 4px;
-  color: #F1F700;
-  padding: 6px;
-  font-size: 12px;
-  resize: vertical;
-  min-height: 40px;
-}
-
-.comment-textarea:focus {
-  outline: none;
-  border-color: #34cc99;
-  box-shadow: 0 0 4px rgba(52, 204, 153, 0.5);
-}
-
-.comment-textarea::placeholder {
-  color: #666;
 }
 </style>
