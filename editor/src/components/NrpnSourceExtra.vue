@@ -3,10 +3,10 @@ import { defineModel, onMounted, ref } from 'vue';
 import { EMPTY_KEY, genNrpnSourceExtraDnA } from '../modules/dataModel';
 import { SourceExtra } from '../modules/documentModel';
 
-const LABEL_TEXT = "NPRN Controller #";
+const LABEL_TEXT = "NRPN Controller #";
 const MAX_VALUE = 9999;
 const model = defineModel<SourceExtra>({ required: true });
-const nprnInput = ref<HTMLInputElement>();
+const nrpnInput = ref<HTMLInputElement>();
 
 function numChanged(key: number) {
     const {abbr, description} = genNrpnSourceExtraDnA(key);
@@ -15,7 +15,7 @@ function numChanged(key: number) {
 
 onMounted(() => {
     if (model.value.keyOrValue === EMPTY_KEY) {
-        if (nprnInput?.value) { nprnInput.value.value = ""; }
+        if (nrpnInput?.value) { nrpnInput.value.value = ""; }
     }
 });
 
@@ -25,8 +25,8 @@ defineEmits(['update:modelValue']);
 
 <template>
     <div class="extras-container">
-        <label class="form-label" for="nprn">{{ LABEL_TEXT }}</label>
-        <input type="number" class="form-control" id="nprn" ref="nprnInput" v-model="model.keyOrValue" @change="numChanged(model.keyOrValue)"
+        <label class="form-label" for="nrpn">{{ LABEL_TEXT }}</label>
+        <input type="number" class="form-control" id="nrpn" ref="nrpnInput" v-model="model.keyOrValue" @change="numChanged(model.keyOrValue)"
             :max="MAX_VALUE" :min="0" />
     </div>
 </template>

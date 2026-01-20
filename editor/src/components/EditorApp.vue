@@ -17,7 +17,7 @@ import schema from '../modules/documentModel.schema.json';
 import Ajv from 'ajv';
 
 import CalcSkipSourceExtra from './CalcSkipSourceExtra.vue';
-import NprnSourceExtra from './NprnSourceExtra.vue';
+import NrpnSourceExtra from './NrpnSourceExtra.vue';
 import VariableSourceExtra from './VariableSourceExtra.vue';
 import MidiCcDestinationExtra from './MidiCcDestinationExtra.vue';
 import SkipDestinationExtra from './SkipDestinationExtra.vue';
@@ -589,7 +589,7 @@ function downloadMap() {
             v-else-if="row.source.type.key === CALC_SOURCE_TYPE_KEY || row.source.type.key === SKIP_SOURCE_TYPE_KEY" />
 
           <!-- NRPN Source Type -->
-          <NprnSourceExtra v-model="row.source.extra as SourceExtra"
+          <NrpnSourceExtra v-model="row.source.extra as SourceExtra"
             v-else-if="row.source.type.key === MIDI_NRPN_SOURCE_TYPE_KEY" />
 
           <!-- Variable Source Type -->
