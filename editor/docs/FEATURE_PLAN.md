@@ -12,16 +12,17 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 Automated analysis that scans all 70 rows on load/save and flags potential issues:
 
-| Warning Type | Description | Example |
-|--------------|-------------|---------|
-| Variable Read Before Write | Variable used as source before any row sets it | "Variable B used in Row 12 but never set" |
-| Skip Always True/False | Conditional logic that never changes | "Skip condition `1 == 1` always evaluates to TRUE" |
-| Unreachable Rows | Rows after unconditional Skip | "Row 15-20 unreachable after unconditional Skip in Row 14" |
-| Unused Variables | Variables set but never read | "Variable C set in Row 5 but never used" |
-| Destination Conflicts | Multiple rows writing to same output | "CV Out 3 written by Row 8 and Row 22" |
-| Out-of-Range Values | Offset + maxValue exceeds limits | "Row 7: offset 2000 + maxValue 3000 exceeds 4095" |
+| Warning Type               | Description                                    | Example                                                    |
+| -------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
+| Variable Read Before Write | Variable used as source before any row sets it | "Variable B used in Row 12 but never set"                  |
+| Skip Always True/False     | Conditional logic that never changes           | "Skip condition `1 == 1` always evaluates to TRUE"         |
+| Unreachable Rows           | Rows after unconditional Skip                  | "Row 15-20 unreachable after unconditional Skip in Row 14" |
+| Unused Variables           | Variables set but never read                   | "Variable C set in Row 5 but never used"                   |
+| Destination Conflicts      | Multiple rows writing to same output           | "CV Out 3 written by Row 8 and Row 22"                     |
+| Out-of-Range Values        | Offset + maxValue exceeds limits               | "Row 7: offset 2000 + maxValue 3000 exceeds 4095"          |
 
 **Implementation:**
+
 - Run analysis on document load, save, and on-demand via toolbar button
 - Store warnings in reactive state per row
 - Display warning count badge in header toolbar
@@ -41,6 +42,7 @@ Destination: CV Out 3
 ```
 
 **UI Treatment:**
+
 - Yellow/orange badges for warnings
 - Red badges for errors (critical issues)
 - "Dismiss" option per warning (stored in JSON metadata)
@@ -65,7 +67,7 @@ Add a collapsible textarea in the header for mapping-level documentation:
 ```typescript
 interface MappingDocumentHeader {
   // ... existing fields
-  globalComment?: string;  // Markdown-supported description
+  globalComment?: string; // Markdown-supported description
   author?: string;
   version?: string;
   changelog?: string[];
@@ -86,6 +88,7 @@ interface MappingDocumentHeader {
 JavaScript-based simulation that executes the 70 mapping rows sequentially:
 
 **Core Features:**
+
 - Configurable execution speed (1Hz to 1kHz via slider/potentiometer)
 - Mock data sources for CV inputs, MIDI messages, Track states
 - Variable state management across cycles
@@ -94,11 +97,13 @@ JavaScript-based simulation that executes the 70 mapping rows sequentially:
 - Internal tick clock matching NerdSEQ (6 ticks per step)
 
 **Timing Reference:**
+
 - Based on NerdSEQ manual: 6 ticks per step
 - BPM clock in header section for tempo synchronization
 - Reference: https://xor-electronics.com/forum/attachment.php?aid=628
 
 **Supported Source Types (MVP):**
+
 - [x] Variable (read from state)
 - [x] Calc (arithmetic operations)
 - [x] Skip (conditional logic)
@@ -108,6 +113,7 @@ JavaScript-based simulation that executes the 70 mapping rows sequentially:
 - [ ] Automator, Envelope, etc. (Phase 3)
 
 **Architecture:**
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Simulation Engine                     │
@@ -131,6 +137,7 @@ JavaScript-based simulation that executes the 70 mapping rows sequentially:
 Visual indicator showing the current row position during simulation, similar to the NerdSEQ sequencer running light:
 
 **Running Light Behavior:**
+
 - Highlight active row in Row column with yellow background
 - **Do NOT expand the comment section** when running light passes
 - Only show as visual indicator on the row number area
@@ -138,9 +145,10 @@ Visual indicator showing the current row position during simulation, similar to 
 - Match the sequencer rectangle animation style
 
 **CSS Classes:**
+
 ```css
 .row-executing {
-  background: rgba(255, 193, 7, 0.3);  /* Yellow highlight */
+  background: rgba(255, 193, 7, 0.3); /* Yellow highlight */
 }
 .row-skipped {
   background: rgba(108, 117, 125, 0.2);
@@ -158,21 +166,23 @@ Visual indicator showing the current row position during simulation, similar to 
 
 Add transport controls in header section:
 
-| Control | Icon | Shortcut | Description |
-|---------|------|----------|-------------|
-| Play | ▶ | Space | Start/resume simulation |
-| Pause | ⏸ | Space | Pause at current row |
-| Stop | ⏹ | Escape | Stop and reset to row 0 |
-| Step | ⏭ | F10 | Execute one row |
-| Step Cycle | ⏩ | F11 | Execute all 70 rows once |
-| Continue | ▶➡ | F5 | Run to next breakpoint |
+| Control    | Icon | Shortcut | Description              |
+| ---------- | ---- | -------- | ------------------------ |
+| Play       | ▶   | Space    | Start/resume simulation  |
+| Pause      | ⏸   | Space    | Pause at current row     |
+| Stop       | ⏹   | Escape   | Stop and reset to row 0  |
+| Step       | ⏭   | F10      | Execute one row          |
+| Step Cycle | ⏩   | F11      | Execute all 70 rows once |
+| Continue   | ▶➡ | F5       | Run to next breakpoint   |
 
 **Speed Control (Slider/Poti):**
+
 - Logarithmic slider: 1Hz → 10Hz → 100Hz → 1000Hz
 - Visual potentiometer style matching NerdSEQ aesthetic
 - Allows slow-motion debugging at 1Hz for learning
 
 **BPM Clock:**
+
 - BPM input field in header section
 - Calculate tick interval: `tickInterval = 60000 / (BPM * 6)` ms
 - Syncs simulation to musical timing (6 ticks per step)
@@ -182,46 +192,102 @@ Add transport controls in header section:
 
 ## Phase 3: Breakpoints & Debugging
 
-### 3.1 Breakpoint System
+### 3.1 Arrow Indicator Column with Breakpoints
 
-**Add breakpoint column between Row number and Copy/Paste buttons:**
+**Add a status/breakpoint column between Source Extra and Destination Type:**
+
+This column serves dual purpose:
+1. **Status indicator** - Shows `>` (active/executed) or `X` (skip type)
+2. **Breakpoint control** - Click to open dropdown menu, shapes indicate breakpoint type
 
 ```
-┌─────┬────┬─────────┬──────────────────────────────────┐
-│ Row │ BP │ Copy/   │  Source / Destination Config     │
-│     │    │ Paste   │                                  │
-├─────┼────┼─────────┼──────────────────────────────────┤
-│  1  │ ●  │ [📋][📄] │  MIDI CC 7 → CV Out 3           │
-│  2  │    │ [📋][📄] │  Variable A → SetVar B          │
-│  3  │ ◐  │ [📋][📄] │  Skip if > 2000                 │
-└─────┴────┴─────────┴──────────────────────────────────┘
-      │
-      └─ ● = Unconditional breakpoint
-         ◐ = Conditional breakpoint
-         ⑤ = Hit count breakpoint (shows count)
+┌─────────────┬───┬───────────────┐
+│ Source Extra│ → │ Dest Type     │
+├─────────────┼───┼───────────────┤
+│ Channel 1   │ > │ CV Out 1      │  ← No breakpoint
+│ Value: 100  │(>)│ MIDI CC 7     │  ← Unconditional (circle)
+│ [Empty]     │△> │ [Empty]       │  ← Conditional (triangle)
+│ Skip if >   │[X]│ Skip          │  ← Hit count (rectangle)
+└─────────────┴───┴───────────────┘
 ```
 
-**Breakpoint Types:**
-1. **Unconditional** - Always pause at this row (red dot ●)
-2. **Conditional** - Pause if expression is true (half-filled ◐)
-   - Example: `source.value > 2000`
-   - Example: `variable.A < 100 AND cycle > 50`
-3. **Hit Count** - Pause after N executions (number badge ⑤)
+**Status Symbols:**
+
+| Symbol | Color | Meaning |
+|--------|-------|---------|
+| `>` | Teal (#34cc99) | Active/Executed - includes empty rows |
+| `X` | Red (#dc3545) | Skip type - row has Skip source or destination |
+
+**Note:** Empty rows show `>` because they are still executed by NerdSEQ.
+
+**Breakpoint Shapes (around the > or X symbol):**
+
+| Shape | Background Color | Meaning |
+|-------|------------------|---------|
+| None | Default | No breakpoint |
+| Circle ○ | Red rgba(220, 53, 69, 0.3) | Unconditional - always pause |
+| Triangle △ | Orange rgba(253, 126, 20, 0.3) | Conditional - pause if expression true |
+| Rectangle □ | Yellow rgba(255, 193, 7, 0.3) | Hit Count - pause after N executions |
 
 **UI Interactions:**
-- Click breakpoint column to toggle unconditional breakpoint
-- Right-click for breakpoint options menu (type, condition, hit count)
-- Breakpoint editor modal for complex conditions
+
+- Click on `>` or `X` → Opens dropdown menu with breakpoint options
+- Dropdown shows: No Breakpoint, Unconditional, Conditional, Hit Count
+- Background color and shape change based on selected breakpoint type
 
 **Breakpoint State:**
+
 ```typescript
-interface Breakpoint {
-  rowIndex: number;
-  enabled: boolean;
-  type: 'unconditional' | 'conditional' | 'hitCount';
-  condition?: string;       // e.g., "source.value > 2000"
-  hitCount?: number;        // pause after N hits
-  currentHits?: number;     // tracking current hit count
+interface RowBreakpoint {
+  type: 'none' | 'unconditional' | 'conditional' | 'hitCount';
+  condition?: string;     // e.g., "source.value > 2000"
+  hitCount?: number;      // pause after N hits
+  currentHits?: number;   // tracking current hit count
+}
+```
+
+**Skip Detection Logic:**
+
+```typescript
+function isRowSkipped(row: MappingRow): boolean {
+  const SKIP_SOURCE_TYPE = 11;
+  const SKIP_DEST_TYPE = 15;
+  return (
+    row.source.type.key === SKIP_SOURCE_TYPE ||
+    row.destination.type.key === SKIP_DEST_TYPE
+  );
+}
+```
+
+**CSS Implementation:**
+
+```css
+.arrow-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  cursor: pointer;
+  width: 30px;
+}
+.arrow-active { color: #34cc99; }
+.arrow-skipped { color: #dc3545; }
+
+/* Breakpoint shapes */
+.arrow-cell.bp-unconditional {
+  background: rgba(220, 53, 69, 0.3);
+  border: 2px solid #dc3545;
+  border-radius: 50%;  /* Circle */
+}
+.arrow-cell.bp-conditional {
+  background: rgba(253, 126, 20, 0.3);
+  border: 2px solid #fd7e14;
+  /* Triangle via clip-path */
+}
+.arrow-cell.bp-hitcount {
+  background: rgba(255, 193, 7, 0.3);
+  border: 2px solid #ffc107;
+  border-radius: 2px;  /* Rectangle */
 }
 ```
 
@@ -242,6 +308,7 @@ Last Update: Cycle 1247 (0.5s ago)  ↑ Rising
 ```
 
 **Features:**
+
 - Decimal, hex, and binary representation (matching NerdSEQ mapping menu)
 - Visual progress bar (0-4095 range)
 - Percentage of full range
@@ -252,15 +319,15 @@ Last Update: Cycle 1247 (0.5s ago)  ↑ Rising
 
 Extend the existing VariableMonitor component:
 
-| Column | Description |
-|--------|-------------|
-| Name | Variable A-P |
-| Value | Current 16-bit value (dec/hex/bin toggle) |
-| Writes | Count of writes this session |
-| Reads | Count of reads this session |
-| Last Write | Row number that last wrote |
-| Sparkline | Mini graph of value over last 100 cycles |
-| Status | Warning if never read/written |
+| Column     | Description                               |
+| ---------- | ----------------------------------------- |
+| Name       | Variable A-P                              |
+| Value      | Current 16-bit value (dec/hex/bin toggle) |
+| Writes     | Count of writes this session              |
+| Reads      | Count of reads this session               |
+| Last Write | Row number that last wrote                |
+| Sparkline  | Mini graph of value over last 100 cycles  |
+| Status     | Warning if never read/written             |
 
 ---
 
@@ -271,6 +338,7 @@ Extend the existing VariableMonitor component:
 Enable selecting multiple rows for batch operations:
 
 **Selection Behavior:**
+
 - Shift+Click: Select range from last selected to clicked row
 - Ctrl/Cmd+Click: Toggle individual row selection
 - Selected rows get distinct background color
@@ -292,6 +360,7 @@ Show floating toolbar above multi-selection:
 ```
 
 **Operations:**
+
 - **Cut**: Remove selected rows, store in clipboard
 - **Copy**: Copy selected rows to clipboard
 - **Move Up/Down**: Reorder selected rows within the mapping
@@ -307,6 +376,39 @@ Allow users to set background colors for rows/groups:
 - Stored in JSON metadata
 - Colors: None, Red, Orange, Yellow, Green, Blue, Purple, Gray
 
+### 4.4 Drag-and-Drop Row Reordering (Single Row)
+
+Enable mouse-based row reordering via drag and drop for **single row selection only**:
+
+**Behavior:**
+
+- Drag handle visible on row index column (hover to reveal)
+- **Only enabled when exactly 1 row is selected**
+- Multi-row selection continues to use Move Up/Down buttons in toolbar
+- Visual feedback: ghost row while dragging, drop zone highlights
+
+**Implementation:**
+
+- HTML5 Drag and Drop API
+- Reuse `swapRowContents()` and `swapSelectedTypes()` from useClipboard.ts
+- Animate row transitions for smooth UX
+
+**Keyboard Alternative:**
+
+- Alt+Up/Down to move selected row (single selection only)
+
+**Visual Feedback:**
+
+```
+┌─────┬───────────────────────────────┐
+│  5  │ MIDI CC 7 → CV Out 1         │
+├─────┼───────────────────────────────┤
+│ ⋮⋮⋮ │ [Dragging: Row 6]            │  ← Ghost row
+├ ─ ─ ┼ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤  ← Drop zone indicator
+│  7  │ Variable A → SetVar B        │
+└─────┴───────────────────────────────┘
+```
+
 ---
 
 ## Phase 5: MIDI Integration
@@ -316,11 +418,13 @@ Allow users to set background colors for rows/groups:
 Extend existing MIDI monitoring to show mapping correlations:
 
 **Trace Mode:**
+
 - Toggle in MidiMonitor header
 - When enabled, incoming MIDI highlights matching rows
 - Shows predicted destination values in tooltip
 
 **Row Highlighting:**
+
 ```
 MIDI CC 7 = 64 received
   └─→ Row 5 matches (MIDI CC source = 7)
@@ -332,12 +436,14 @@ MIDI CC 7 = 64 received
 Create virtual MIDI ports from the editor for DAW/software integration:
 
 **Features:**
+
 - Virtual input port: Editor receives MIDI from DAW
 - Virtual output port: Editor sends simulated outputs
 - Cross-platform support (WebMIDI API where available)
 - Fallback to loopback utilities (loopMIDI, IAC Driver)
 
 **Use Cases:**
+
 - Test mappings with DAW automation
 - Record MIDI output from simulation
 - Integrate with Max/MSP, Pure Data, VCV Rack
@@ -391,29 +497,30 @@ Allow manual MIDI message injection for testing:
 ### NerdSEQ Timing Reference
 
 From manual (nerdseq_manual_3_00.pdf):
+
 - 6 ticks per step at current BPM
 - 1kHz internal processing rate
 - Mapping execution once per cycle
 
 ### Performance Targets
 
-| Metric | Target |
-|--------|--------|
+| Metric           | Target                   |
+| ---------------- | ------------------------ |
 | Simulation Speed | 1Hz to 1kHz (adjustable) |
-| UI Update Rate | 60fps (16ms) |
-| Memory (History) | Max 10MB for 100 cycles |
-| Startup Analysis | < 100ms for 70 rows |
+| UI Update Rate   | 60fps (16ms)             |
+| Memory (History) | Max 10MB for 100 cycles  |
+| Startup Analysis | < 100ms for 70 rows      |
 
 ### Data Storage
 
-| Data Type | Storage Location |
-|-----------|------------------|
-| Breakpoints | .json metadata |
-| Row comments | .json metadata |
-| Global comment | .json metadata |
-| Row colors | .json metadata |
-| Warnings | Runtime only (regenerated) |
-| Execution history | Runtime only |
+| Data Type         | Storage Location           |
+| ----------------- | -------------------------- |
+| Breakpoints       | .json metadata             |
+| Row comments      | .json metadata             |
+| Global comment    | .json metadata             |
+| Row colors        | .json metadata             |
+| Warnings          | Runtime only (regenerated) |
+| Execution history | Runtime only               |
 
 ---
 
@@ -458,16 +565,19 @@ Phase 5 (MIDI)                 Phase 6 (Advanced)
 ## User Personas
 
 ### The Precision Mapper (Primary)
+
 - Creates complex CV/MIDI routing
 - Wants to validate logic before hardware upload
 - Values: Static analysis, simulation, conditional debugging
 
 ### The Live Performer (Secondary)
+
 - Uses NerdSEQ in live contexts
 - Needs real-time feedback during performance
 - Values: MIDI monitoring, visual execution indicators
 
 ### The Patch Librarian (Secondary)
+
 - Maintains collections of mappings
 - Shares patches with community
 - Values: Documentation, warnings, export reports

@@ -115,11 +115,20 @@ export interface UseClipboardReturn {
   hasCopiedRow: Ref<boolean>;
   hasCopiedSource: Ref<boolean>;
   hasCopiedDestination: Ref<boolean>;
+  hasCopiedRows: Ref<boolean>;
 
   // Row operations
   copyRow: (rowIndex: number) => void;
   pasteRow: (rowIndex: number) => void;
   clearRow: (rowIndex: number) => void;
+
+  // Multi-row operations
+  copyRows: (rowIndices: number[]) => void;
+  pasteRows: (startIndex: number) => void;
+  cutRows: (rowIndices: number[]) => void;
+  clearRows: (rowIndices: number[]) => void;
+  moveRowsUp: (rowIndices: number[]) => number[];
+  moveRowsDown: (rowIndices: number[]) => number[];
 
   // Source operations
   copySource: (rowIndex: number) => void;
@@ -142,11 +151,13 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   const copiedRowData = ref<MappingRow | null>(null);
   const copiedSourceData = ref<Source | null>(null);
   const copiedDestinationData = ref<Destination | null>(null);
+  const copiedRowsData = ref<MappingRow[]>([]);
 
   // Computed state for UI bindings
   const hasCopiedRow = computed(() => copiedRowData.value !== null);
   const hasCopiedSource = computed(() => copiedSourceData.value !== null);
   const hasCopiedDestination = computed(() => copiedDestinationData.value !== null);
+  const hasCopiedRows = computed(() => copiedRowsData.value.length > 0);
 
   // Helper to find a row by index
   function findRow(rowIndex: number) {
@@ -238,20 +249,130 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes[0] as MappingType;
   }
 
+  // Multi-row operations
+  function copyRows(rowIndices: number[]): void {
+    const sortedIndices = [...rowIndices].sort((a, b) => a - b);
+    copiedRowsData.value = sortedIndices
+      .map(idx => findRow(idx))
+      .filter((row): row is NonNullable<typeof row> => row !== undefined)
+      .map(row => deepCloneRow(row));
+  }
+
+  function pasteRows(startIndex: number): void {
+    if (copiedRowsData.value.length === 0) return;
+
+    const maxRows = mappingDocument.value.rows.length;
+    for (let i = 0; i < copiedRowsData.value.length; i++) {
+      const targetIndex = startIndex + i;
+      if (targetIndex >= maxRows) break;
+
+      const targetRow = findRow(targetIndex);
+      if (!targetRow) continue;
+
+      const clonedData = deepCloneRow(copiedRowsData.value[i]);
+      targetRow.source = clonedData.source;
+      targetRow.destination = clonedData.destination;
+
+      currentlySelectedSourceTypes.value[targetIndex] =
+        DataModel.sourceTypes.find(x => x.key === clonedData.source.type.key) as MappingType;
+      currentlySelectedDestinationTypes.value[targetIndex] =
+        DataModel.destinationTypes.find(x => x.key === clonedData.destination.type.key) as MappingType;
+    }
+  }
+
+  function clearRows(rowIndices: number[]): void {
+    for (const idx of rowIndices) {
+      clearRow(idx);
+    }
+  }
+
+  function cutRows(rowIndices: number[]): void {
+    copyRows(rowIndices);
+    clearRows(rowIndices);
+  }
+
+  // Helper: Swap row contents between two rows
+  function swapRowContents(rowA: NonNullable<ReturnType<typeof findRow>>, rowB: NonNullable<ReturnType<typeof findRow>>): void {
+    const tempSource = deepCloneSource(rowA.source);
+    const tempDest = deepCloneDestination(rowA.destination);
+
+    rowA.source = deepCloneSource(rowB.source);
+    rowA.destination = deepCloneDestination(rowB.destination);
+
+    rowB.source = tempSource;
+    rowB.destination = tempDest;
+  }
+
+  // Helper: Swap selected types between two indices
+  function swapSelectedTypes(idxA: number, idxB: number): void {
+    const tempSourceType = currentlySelectedSourceTypes.value[idxA];
+    const tempDestType = currentlySelectedDestinationTypes.value[idxA];
+
+    currentlySelectedSourceTypes.value[idxA] = currentlySelectedSourceTypes.value[idxB];
+    currentlySelectedDestinationTypes.value[idxA] = currentlySelectedDestinationTypes.value[idxB];
+
+    currentlySelectedSourceTypes.value[idxB] = tempSourceType;
+    currentlySelectedDestinationTypes.value[idxB] = tempDestType;
+  }
+
+  // Internal: Move rows in a given direction
+  type MoveDirection = 'up' | 'down';
+
+  function moveRows(rowIndices: number[], direction: MoveDirection): number[] {
+    const isUp = direction === 'up';
+    const maxIndex = mappingDocument.value.rows.length - 1;
+    const boundaryIndex = isUp ? 0 : maxIndex;
+    const offset = isUp ? -1 : 1;
+
+    // Sort: ascending for up (process top rows first), descending for down (process bottom rows first)
+    const sorted = [...rowIndices].sort((a, b) => isUp ? a - b : b - a);
+
+    // Boundary check
+    if (sorted[0] === boundaryIndex) return rowIndices;
+
+    const newIndices: number[] = [];
+    for (const idx of sorted) {
+      const currentRow = findRow(idx);
+      const adjacentRow = findRow(idx + offset);
+      if (!currentRow || !adjacentRow) continue;
+
+      swapRowContents(currentRow, adjacentRow);
+      swapSelectedTypes(idx, idx + offset);
+      newIndices.push(idx + offset);
+    }
+    return newIndices;
+  }
+
+  function moveRowsUp(rowIndices: number[]): number[] {
+    return moveRows(rowIndices, 'up');
+  }
+
+  function moveRowsDown(rowIndices: number[]): number[] {
+    return moveRows(rowIndices, 'down');
+  }
+
   // Utility
   function clearAllClipboards(): void {
     copiedRowData.value = null;
     copiedSourceData.value = null;
     copiedDestinationData.value = null;
+    copiedRowsData.value = [];
   }
 
   return {
     hasCopiedRow,
     hasCopiedSource,
     hasCopiedDestination,
+    hasCopiedRows,
     copyRow,
     pasteRow,
     clearRow,
+    copyRows,
+    pasteRows,
+    cutRows,
+    clearRows,
+    moveRowsUp,
+    moveRowsDown,
     copySource,
     pasteSource,
     clearSource,

@@ -57,8 +57,14 @@ export function toMarkdown(document: MappingDocument, useAbbrivations: boolean =
     return output;
 }
 
-export function toJson(document: MappingDocument): string {
-    const jsonData = {
+// Metadata interface for editor-specific data
+export interface EditorMetadata {
+    rowColors?: Record<number, string>;
+    rowComments?: Record<number, string>;
+}
+
+export function toJson(document: MappingDocument, metadata?: EditorMetadata): string {
+    const jsonData: Record<string, unknown> = {
         header: document.header.headerText,
         versionMajor: document.header.majorVersion,
         versionMinor: document.header.minorVersion,
@@ -78,7 +84,12 @@ export function toJson(document: MappingDocument): string {
         })),
         variables: document.variables.map(variable => variable.value)
     };
-    
+
+    // Add editor metadata if provided
+    if (metadata && (Object.keys(metadata.rowColors || {}).length > 0 || Object.keys(metadata.rowComments || {}).length > 0)) {
+        jsonData.editorMetadata = metadata;
+    }
+
     return JSON.stringify(jsonData, null, 2);
 }
 

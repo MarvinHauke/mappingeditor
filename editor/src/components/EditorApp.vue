@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import _ from "lodash";
-import { ref } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import {
   DataModel, type MappingTuple, type MappingType, EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION, MIDI_NRPN_SOURCE_TYPE_KEY, CALC_SOURCE_TYPE_KEY, SKIP_SOURCE_TYPE_KEY,
   EXTERNAL_SOURCE_TYPE_KEY, keyboardSourceExtras, segaGamepadSourceExtras, nerdseqButtonsSourceExtras, globalButtonsDestinationExtras, globalModesDestinationExtras, globalScreensDestinationExtras,
@@ -29,9 +29,11 @@ import VariableMonitor from './VariableMonitor.vue';
 import MidiLearnExtra from './MidiLearnExtra.vue';
 import RowActionButtons from './RowActionButtons.vue';
 import RowCommentSection from './RowCommentSection.vue';
+import MultiSelectionToolbar from './MultiSelectionToolbar.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
+import { COLOR_PALETTE } from '../constants/colors';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -39,14 +41,29 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const currentlySelectedSourceTypes = ref(new Array<MappingType>());
 const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
 
-// Row selection state
-const selectedRowIndex = ref<number | null>(null);
+// Multi-selection state
+const selectedRowIndices = ref<Set<number>>(new Set());
+const lastClickedRowIndex = ref<number | null>(null);
+
+// Computed for backwards compatibility with single selection UI
+const selectedRowIndex = computed(() =>
+  selectedRowIndices.value.size === 1
+    ? [...selectedRowIndices.value][0]
+    : null
+);
 
 // Row comments storage (keyed by row index)
 const rowComments = ref<Record<number, string>>({});
 
+// Row colors storage (keyed by row index)
+const rowColors = ref<Map<number, string>>(new Map());
+
+
 // MIDI Monitor expanded state (for Variable Monitor positioning)
 const midiMonitorExpanded = ref(false);
+
+// Variable Monitor expanded state (for toolbar positioning)
+const variableMonitorExpanded = ref(false);
 
 const { isSupported: midiSupported } = useMidi();
 
@@ -55,9 +72,16 @@ const {
   hasCopiedRow,
   hasCopiedSource,
   hasCopiedDestination,
+  hasCopiedRows,
   copyRow,
   pasteRow,
   clearRow,
+  copyRows,
+  pasteRows,
+  cutRows,
+  clearRows,
+  moveRowsUp,
+  moveRowsDown,
   copySource,
   pasteSource,
   clearSource,
@@ -71,13 +95,159 @@ const {
 });
 
 // Row selection functions
-function toggleRowSelection(rowIndex: number): void {
-  selectedRowIndex.value = selectedRowIndex.value === rowIndex ? null : rowIndex;
+function handleRowClick(rowIndex: number, event: MouseEvent): void {
+  if (event.shiftKey && lastClickedRowIndex.value !== null) {
+    // Shift+Click: Select range
+    const start = Math.min(lastClickedRowIndex.value, rowIndex);
+    const end = Math.max(lastClickedRowIndex.value, rowIndex);
+    for (let i = start; i <= end; i++) {
+      selectedRowIndices.value.add(i);
+    }
+  } else if (event.ctrlKey || event.metaKey) {
+    // Ctrl/Cmd+Click: Toggle individual
+    if (selectedRowIndices.value.has(rowIndex)) {
+      selectedRowIndices.value.delete(rowIndex);
+    } else {
+      selectedRowIndices.value.add(rowIndex);
+    }
+  } else {
+    // Normal click: Toggle single selection
+    if (selectedRowIndices.value.size === 1 && selectedRowIndices.value.has(rowIndex)) {
+      // Clicking on the only selected row - deselect it
+      selectedRowIndices.value.clear();
+    } else {
+      // Select only this row
+      selectedRowIndices.value.clear();
+      selectedRowIndices.value.add(rowIndex);
+    }
+  }
+  lastClickedRowIndex.value = rowIndex;
+  // Force reactivity
+  selectedRowIndices.value = new Set(selectedRowIndices.value);
 }
 
 function clearRowSelection(): void {
-  selectedRowIndex.value = null;
+  selectedRowIndices.value.clear();
+  selectedRowIndices.value = new Set();
+  lastClickedRowIndex.value = null;
 }
+
+function isRowSelected(rowIndex: number): boolean {
+  return selectedRowIndices.value.has(rowIndex);
+}
+
+// Multi-selection computed properties
+const sortedSelectedIndices = computed(() =>
+  [...selectedRowIndices.value].sort((a, b) => a - b)
+);
+
+const canMoveUp = computed(() => {
+  if (selectedRowIndices.value.size === 0) return false;
+  return sortedSelectedIndices.value[0] > 0;
+});
+
+const canMoveDown = computed(() => {
+  if (selectedRowIndices.value.size === 0) return false;
+  const maxIndex = mappingDocument.value.rows.length - 1;
+  return sortedSelectedIndices.value[sortedSelectedIndices.value.length - 1] < maxIndex;
+});
+
+// Multi-selection toolbar handlers
+function handleMultiCut(): void {
+  cutRows(sortedSelectedIndices.value);
+}
+
+function handleMultiCopy(): void {
+  copyRows(sortedSelectedIndices.value);
+}
+
+function handleMultiPaste(): void {
+  if (sortedSelectedIndices.value.length > 0) {
+    pasteRows(sortedSelectedIndices.value[0]);
+  }
+}
+
+function handleMultiMoveUp(): void {
+  const newIndices = moveRowsUp(sortedSelectedIndices.value);
+  selectedRowIndices.value = new Set(newIndices);
+}
+
+function handleMultiMoveDown(): void {
+  const newIndices = moveRowsDown(sortedSelectedIndices.value);
+  selectedRowIndices.value = new Set(newIndices);
+}
+
+function handleMultiClear(): void {
+  clearRows(sortedSelectedIndices.value);
+}
+
+function setRowColor(color: string | null): void {
+  for (const idx of selectedRowIndices.value) {
+    if (color && COLOR_PALETTE[color]) {
+      rowColors.value.set(idx, COLOR_PALETTE[color]);
+    } else {
+      rowColors.value.delete(idx);
+    }
+  }
+  // Force reactivity
+  rowColors.value = new Map(rowColors.value);
+}
+
+function getRowBackgroundColor(rowIndex: number): string | undefined {
+  return rowColors.value.get(rowIndex);
+}
+
+// Keyboard shortcuts for multi-selection
+function handleKeyDown(event: KeyboardEvent): void {
+  if (selectedRowIndices.value.size === 0) return;
+
+  // Don't handle shortcuts if user is typing in an input
+  const target = event.target as HTMLElement;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+    return;
+  }
+
+  const indices = sortedSelectedIndices.value;
+
+  if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+    if (selectedRowIndices.value.size > 1) {
+      copyRows(indices);
+    } else if (indices.length === 1) {
+      copyRow(indices[0]);
+    }
+    event.preventDefault();
+  } else if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
+    if (selectedRowIndices.value.size > 1) {
+      cutRows(indices);
+    }
+    event.preventDefault();
+  } else if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+    if (hasCopiedRows.value && indices.length > 0) {
+      pasteRows(indices[0]);
+    } else if (hasCopiedRow.value && indices.length === 1) {
+      pasteRow(indices[0]);
+    }
+    event.preventDefault();
+  } else if (event.key === 'Escape') {
+    clearRowSelection();
+    event.preventDefault();
+  } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (selectedRowIndices.value.size > 1) {
+      clearRows(indices);
+    } else if (indices.length === 1) {
+      clearRow(indices[0]);
+    }
+    event.preventDefault();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown);
+});
 
 function readFile() {
   const file = fileInput.value?.files?.[0];
@@ -220,7 +390,28 @@ function readFile() {
               }
             }
           }
-          
+
+          // Load editor metadata (row colors and comments)
+          if (jsonObj.editorMetadata) {
+            const metadata = jsonObj.editorMetadata;
+
+            // Load row colors
+            if (metadata.rowColors && typeof metadata.rowColors === 'object') {
+              rowColors.value = new Map();
+              for (const [indexStr, color] of Object.entries(metadata.rowColors)) {
+                const index = parseInt(indexStr, 10);
+                if (!isNaN(index) && typeof color === 'string') {
+                  rowColors.value.set(index, color);
+                }
+              }
+            }
+
+            // Load row comments
+            if (metadata.rowComments && typeof metadata.rowComments === 'object') {
+              rowComments.value = metadata.rowComments as Record<number, string>;
+            }
+          }
+
           mappingDocument.value = mappingDoc;
           init();
           console.log('.json file loaded successfully');
@@ -254,6 +445,7 @@ function reset() {
   currentlySelectedDestinationTypes.value = new Array<MappingType>();
   clearRowSelection();
   rowComments.value = {};
+  rowColors.value = new Map();
 }
 
 function init() {
@@ -423,7 +615,23 @@ function downloadMarkdown(useAbbrs: boolean = false) {
 }
 
 function downloadJson() {
-  const output = formatters.toJson(mappingDocument.value as MappingDocument);
+  // Prepare editor metadata
+  const metadata: formatters.EditorMetadata = {};
+
+  // Convert rowColors Map to Record for JSON serialization
+  if (rowColors.value.size > 0) {
+    metadata.rowColors = {};
+    rowColors.value.forEach((color, index) => {
+      metadata.rowColors![index] = color;
+    });
+  }
+
+  // Add row comments if any
+  if (Object.keys(rowComments.value).length > 0) {
+    metadata.rowComments = rowComments.value;
+  }
+
+  const output = formatters.toJson(mappingDocument.value as MappingDocument, metadata);
   const blob = new Blob([output], { type: "application/json" });
   downloadFile(blob, `${mappingDocument.value.header.fileName}.json`);
 }
@@ -446,7 +654,25 @@ function downloadMap() {
   <MidiMonitor v-if="midiSupported" @expanded-change="midiMonitorExpanded = $event" />
 
   <!-- Variable Monitor -->
-  <VariableMonitor :variables="mappingDocument.variables" :midi-monitor-expanded="midiMonitorExpanded" />
+  <VariableMonitor :variables="mappingDocument.variables" :midi-monitor-expanded="midiMonitorExpanded" @expanded-change="variableMonitorExpanded = $event" />
+
+  <!-- Multi-selection Toolbar (docked to left of Variable Monitor) -->
+  <MultiSelectionToolbar
+    :selected-count="selectedRowIndices.size"
+    :has-copied-rows="hasCopiedRows"
+    :can-move-up="canMoveUp"
+    :can-move-down="canMoveDown"
+    :midi-monitor-expanded="midiMonitorExpanded"
+    :variable-monitor-expanded="variableMonitorExpanded"
+    @cut="handleMultiCut"
+    @copy="handleMultiCopy"
+    @paste="handleMultiPaste"
+    @move-up="handleMultiMoveUp"
+    @move-down="handleMultiMoveDown"
+    @clear="handleMultiClear"
+    @set-color="setRowColor"
+    @cancel="clearRowSelection"
+  />
 
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
@@ -500,15 +726,16 @@ function downloadMap() {
         <div>Destination Extra</div>
         <div>Clear</div>
       </div>
-      <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index">
+      <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index" :style="{ backgroundColor: getRowBackgroundColor(row.index) }">
 
         <div
           class="gridItem rowIndex pt-1"
           :class="{
             'row-empty': row.source.type.key === EMPTY_KEY,
-            'row-selected': selectedRowIndex === row.index
+            'row-selected': isRowSelected(row.index),
+            'row-multi-selected': selectedRowIndices.size > 1 && isRowSelected(row.index)
           }"
-          @click="toggleRowSelection(row.index)"
+          @click="handleRowClick(row.index, $event)"
         >
           {{ row.index }}
         </div>
@@ -777,9 +1004,9 @@ function downloadMap() {
           </button>
         </div>
 
-        <!-- Comment section (unfolds when row is selected) -->
+        <!-- Comment section (unfolds only when single row is selected) -->
         <RowCommentSection
-          v-if="selectedRowIndex === row.index"
+          v-if="selectedRowIndices.size === 1 && isRowSelected(row.index)"
           :row-index="row.index"
           :source-empty="row.source.type.key === EMPTY_KEY"
           :destination-empty="row.destination.type.key === EMPTY_KEY"
@@ -877,6 +1104,12 @@ label:not(.label-empty) {
   background-color: #F1F700 !important;
   color: #000;
   box-shadow: 0 0 8px rgba(241, 247, 0, 0.5);
+}
+
+.rowIndex.row-multi-selected {
+  background-color: rgba(241, 247, 0, 0.7) !important;
+  color: #000;
+  border-left: 3px solid #F1F700;
 }
 
 .gridItem {

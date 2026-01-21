@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 
 interface VariableLike {
   readonly name: string
@@ -11,12 +11,24 @@ const props = defineProps<{
   midiMonitorExpanded: boolean
 }>()
 
+const emit = defineEmits<{
+  expandedChange: [expanded: boolean]
+}>()
+
 const isExpanded = ref(false)
 
 // Persist expanded state
 const STORAGE_KEY = 'variable-monitor-expanded'
 isExpanded.value = localStorage.getItem(STORAGE_KEY) === 'true'
-watch(isExpanded, (val) => localStorage.setItem(STORAGE_KEY, val.toString()))
+watch(isExpanded, (val) => {
+  localStorage.setItem(STORAGE_KEY, val.toString())
+  emit('expandedChange', val)
+})
+
+// Emit initial state on mount
+onMounted(() => {
+  emit('expandedChange', isExpanded.value)
+})
 
 // Variable labels A-P
 const variableLabels = computed(() => {
