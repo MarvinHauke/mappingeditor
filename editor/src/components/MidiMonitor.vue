@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
+import BasePanel from './BasePanel.vue'
+
+const props = defineProps<{
+  settingsPanelExpanded: boolean
+}>()
 
 const emit = defineEmits<{
   expandedChange: [expanded: boolean]
@@ -8,21 +13,10 @@ const emit = defineEmits<{
 
 const { isSupported, isEnabled, messageHistory, lastMessage, enableMidi, clearHistory: clearHistoryComposable } = useMidi()
 
-const isExpanded = ref(false)
+// Position based on Settings Panel state (minimized: 100px, expanded: 180px, plus 10px gap each side)
+const rightPosition = computed(() => props.settingsPanelExpanded ? '200px' : '120px')
+
 const showActivity = ref(false)
-
-// Persist expanded state
-const STORAGE_KEY = 'midi-monitor-expanded'
-isExpanded.value = localStorage.getItem(STORAGE_KEY) === 'true'
-watch(isExpanded, (val) => {
-  localStorage.setItem(STORAGE_KEY, val.toString())
-  emit('expandedChange', val)
-})
-
-// Emit initial state on mount
-onMounted(() => {
-  emit('expandedChange', isExpanded.value)
-})
 
 // Activity indicator (blink on new message)
 watch(lastMessage, () => {
@@ -67,8 +61,8 @@ function clearHistory(): void {
   clearHistoryComposable()
 }
 
-function toggleExpand(): void {
-  isExpanded.value = !isExpanded.value
+function onExpandedChange(expanded: boolean): void {
+  emit('expandedChange', expanded)
 }
 
 // Auto-enable MIDI on mount if supported
@@ -84,92 +78,54 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="midi-monitor" :class="{ expanded: isExpanded, minimized: !isExpanded }">
-    <div class="monitor-header" @click="toggleExpand">
-      <span class="title">MIDI Monitor</span>
+  <BasePanel
+    title="MIDI Monitor"
+    storage-key="midi-monitor-expanded"
+    :right-position="rightPosition"
+    minimized-width="150px"
+    expanded-width="320px"
+    @expanded-change="onExpandedChange"
+  >
+    <template #header-extra>
       <span v-if="showActivity" class="activity-dot"></span>
-      <span class="toggle">{{ isExpanded ? '▼' : '▲' }}</span>
+    </template>
+
+    <div v-if="!isSupported" class="message-item error">
+      MIDI not supported in this browser
     </div>
 
-    <div v-if="isExpanded" class="monitor-body">
-      <div v-if="!isSupported" class="message-item error">
-        MIDI not supported in this browser
-      </div>
+    <div v-else-if="recentMessages.length === 0" class="message-item empty">
+      No MIDI messages received
+    </div>
 
-      <div v-else-if="recentMessages.length === 0" class="message-item empty">
-        No MIDI messages received
-      </div>
-
-      <div v-else class="messages-list">
-        <div
-          v-for="(msg, idx) in recentMessages"
-          :key="`${msg.timestamp}-${idx}`"
-          class="message-item"
-          :style="{ borderLeftColor: getMessageColor(msg.type) }"
-        >
-          <span class="message-bullet">•</span>
-          <span class="message-text">{{ formatMessage(msg) }}</span>
-        </div>
-      </div>
-
-      <button
-        v-if="recentMessages.length > 0"
-        @click.stop="clearHistory"
-        class="btn btn-sm clear-btn"
+    <div v-else class="messages-list">
+      <div
+        v-for="(msg, idx) in recentMessages"
+        :key="`${msg.timestamp}-${idx}`"
+        class="message-item"
+        :style="{ borderLeftColor: getMessageColor(msg.type) }"
       >
-        Clear
-      </button>
+        <span class="message-bullet">•</span>
+        <span class="message-text">{{ formatMessage(msg) }}</span>
+      </div>
     </div>
-  </div>
+
+    <button
+      v-if="recentMessages.length > 0"
+      @click.stop="clearHistory"
+      class="btn btn-sm clear-btn"
+    >
+      Clear
+    </button>
+  </BasePanel>
 </template>
 
 <style scoped>
-.midi-monitor {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background-color: #34cc99;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  transition: all 0.3s ease;
-  font-size: 12px;
-}
-
-.minimized {
-  width: 150px;
-}
-
-.expanded {
-  width: 320px;
-  max-height: 400px;
-}
-
-.monitor-header {
-  display: flex;
-  align-items: center;
-  padding: 2px 8px;
-  cursor: pointer;
-  user-select: none;
-  font-weight: bold;
-  color: black;
-  background-color: #34cc99;
-  border-bottom: 2px solid #000;
-}
-
-.monitor-header:hover {
-  background-color: #F1F700;
-}
-
-.title {
-  flex: 1;
-}
-
 .activity-dot {
   width: 8px;
   height: 8px;
   background-color: #ff4444;
   border-radius: 50%;
-  margin-right: 8px;
   animation: blink 0.2s ease;
 }
 
@@ -181,19 +137,6 @@ onMounted(async () => {
   50% {
     opacity: 0.3;
   }
-}
-
-.toggle {
-  font-size: 12px;
-  color: #000;
-}
-
-.monitor-body {
-  padding: 4px;
-  max-height: 350px;
-  overflow-y: auto;
-  background-color: #000;
-  border: 2px solid #34cc99;
 }
 
 .messages-list {
@@ -249,22 +192,5 @@ onMounted(async () => {
 
 .clear-btn:hover {
   background-color: #b87429 !important;
-}
-
-/* Scrollbar styling */
-.monitor-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.monitor-body::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.monitor-body::-webkit-scrollbar-thumb {
-  background: rgba(52, 204, 153, 0.5);
-}
-
-.monitor-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(52, 204, 153, 0.8);
 }
 </style>

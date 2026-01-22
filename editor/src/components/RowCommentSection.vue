@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { AnalyzerWarning } from '../composables/useStaticAnalyzer';
+
 defineProps<{
   rowIndex: number;
   sourceEmpty: boolean;
@@ -6,6 +8,7 @@ defineProps<{
   hasCopiedSource: boolean;
   hasCopiedDestination: boolean;
   modelValue: string;
+  warnings: AnalyzerWarning[];
 }>();
 
 const emit = defineEmits<{
@@ -17,6 +20,15 @@ const emit = defineEmits<{
   'pasteDestination': [rowIndex: number];
   'clearDestination': [rowIndex: number];
 }>();
+
+function getWarningIcon(severity: string): string {
+  switch (severity) {
+    case 'error': return '!';
+    case 'warning': return '!';
+    case 'info': return 'i';
+    default: return '!';
+  }
+}
 </script>
 
 <template>
@@ -68,6 +80,25 @@ const emit = defineEmits<{
         </div>
       </div>
     </div>
+
+    <!-- Warnings Section -->
+    <div v-if="warnings.length > 0" class="warnings-section">
+      <div
+        v-for="(warning, idx) in warnings"
+        :key="idx"
+        class="warning-item"
+        :class="`warning-${warning.severity}`"
+      >
+        <span class="warning-badge" :class="`badge-${warning.severity}`">
+          {{ getWarningIcon(warning.severity) }}
+        </span>
+        <div class="warning-content">
+          <span class="warning-message">{{ warning.message }}</span>
+          <span v-if="warning.details" class="warning-details">{{ warning.details }}</span>
+        </div>
+      </div>
+    </div>
+
     <textarea
       :value="modelValue"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
@@ -98,7 +129,7 @@ const emit = defineEmits<{
   }
   to {
     opacity: 1;
-    max-height: 100px;
+    max-height: 200px;
     padding: 8px;
   }
 }
@@ -158,6 +189,81 @@ const emit = defineEmits<{
 .action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Warnings Section */
+.warnings-section {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.warning-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+.warning-error {
+  background-color: rgba(220, 53, 69, 0.2);
+  border: 1px solid rgba(220, 53, 69, 0.5);
+}
+
+.warning-warning {
+  background-color: rgba(255, 193, 7, 0.2);
+  border: 1px solid rgba(255, 193, 7, 0.5);
+}
+
+.warning-info {
+  background-color: rgba(13, 202, 240, 0.15);
+  border: 1px solid rgba(13, 202, 240, 0.4);
+}
+
+.warning-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.badge-error {
+  background-color: #dc3545;
+  color: #fff;
+}
+
+.badge-warning {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.badge-info {
+  background-color: #0dcaf0;
+  color: #000;
+}
+
+.warning-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.warning-message {
+  color: #fff;
+  font-weight: 500;
+}
+
+.warning-details {
+  color: #aaa;
+  font-size: 10px;
 }
 
 .comment-textarea {

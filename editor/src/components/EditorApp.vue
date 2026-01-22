@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import _ from "lodash";
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import {
   DataModel, type MappingTuple, type MappingType, EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION, MIDI_NRPN_SOURCE_TYPE_KEY, CALC_SOURCE_TYPE_KEY, SKIP_SOURCE_TYPE_KEY,
   EXTERNAL_SOURCE_TYPE_KEY, keyboardSourceExtras, segaGamepadSourceExtras, nerdseqButtonsSourceExtras, globalButtonsDestinationExtras, globalModesDestinationExtras, globalScreensDestinationExtras,
@@ -30,8 +30,10 @@ import MidiLearnExtra from './MidiLearnExtra.vue';
 import RowActionButtons from './RowActionButtons.vue';
 import RowCommentSection from './RowCommentSection.vue';
 import MultiSelectionToolbar from './MultiSelectionToolbar.vue';
+import SettingsPanel from './SettingsPanel.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
+import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
@@ -59,11 +61,18 @@ const rowComments = ref<Record<number, string>>({});
 const rowColors = ref<Map<number, string>>(new Map());
 
 
+// Settings Panel expanded state (for MIDI Monitor positioning)
+const settingsPanelExpanded = ref(false);
+
 // MIDI Monitor expanded state (for Variable Monitor positioning)
 const midiMonitorExpanded = ref(false);
 
 // Variable Monitor expanded state (for toolbar positioning)
 const variableMonitorExpanded = ref(false);
+
+// Row index display format (hex/decimal)
+const displayRowIndexAsHex = ref(false);
+const ROW_INDEX_DISPLAY_KEY = 'row-index-display-hex';
 
 const { isSupported: midiSupported } = useMidi();
 
@@ -93,6 +102,16 @@ const {
   currentlySelectedSourceTypes,
   currentlySelectedDestinationTypes
 });
+
+// Static Logic Analyzer
+const {
+  warnings: analyzerWarnings,
+  warningCount,
+  errorCount,
+  analyzeDocument,
+  getRowWarnings,
+  rowHasWarnings
+} = useStaticAnalyzer(mappingDocument);
 
 // Row selection functions
 function handleRowClick(rowIndex: number, event: MouseEvent): void {
@@ -134,6 +153,13 @@ function clearRowSelection(): void {
 
 function isRowSelected(rowIndex: number): boolean {
   return selectedRowIndices.value.has(rowIndex);
+}
+
+function formatRowIndex(index: number): string {
+  if (displayRowIndexAsHex.value) {
+    return index.toString(16).toUpperCase().padStart(2, '0');
+  }
+  return index.toString();
 }
 
 // Multi-selection computed properties
@@ -243,6 +269,13 @@ function handleKeyDown(event: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown);
+  // Load row index display preference from localStorage
+  displayRowIndexAsHex.value = localStorage.getItem(ROW_INDEX_DISPLAY_KEY) === 'true';
+});
+
+// Persist row index display preference
+watch(displayRowIndexAsHex, (val) => {
+  localStorage.setItem(ROW_INDEX_DISPLAY_KEY, val.toString());
 });
 
 onUnmounted(() => {
@@ -446,6 +479,8 @@ function reset() {
   clearRowSelection();
   rowComments.value = {};
   rowColors.value = new Map();
+  // Clear analysis warnings for empty document
+  analyzeDocument();
 }
 
 function init() {
@@ -463,6 +498,8 @@ function init() {
       currentlySelectedDestinationTypes.value[rowIndex] = DataModel.destinationTypes.find(x => x.key === row.destination.type.key) as MappingType;
     }
   }
+  // Run static analysis after loading
+  analyzeDocument();
 }
 
 function sourceTypeSelectionChanged(event: Event, rowIndex: number) {
@@ -650,11 +687,26 @@ function downloadMap() {
     </div>
   </header>
 
+  <!-- Settings Panel -->
+  <SettingsPanel
+    v-model:display-row-index-as-hex="displayRowIndexAsHex"
+    @expanded-change="settingsPanelExpanded = $event"
+  />
+
   <!-- MIDI Monitor -->
-  <MidiMonitor v-if="midiSupported" @expanded-change="midiMonitorExpanded = $event" />
+  <MidiMonitor
+    v-if="midiSupported"
+    :settings-panel-expanded="settingsPanelExpanded"
+    @expanded-change="midiMonitorExpanded = $event"
+  />
 
   <!-- Variable Monitor -->
-  <VariableMonitor :variables="mappingDocument.variables" :midi-monitor-expanded="midiMonitorExpanded" @expanded-change="variableMonitorExpanded = $event" />
+  <VariableMonitor
+    :variables="mappingDocument.variables"
+    :midi-monitor-expanded="midiMonitorExpanded"
+    :settings-panel-expanded="settingsPanelExpanded"
+    @expanded-change="variableMonitorExpanded = $event"
+  />
 
   <!-- Multi-selection Toolbar (docked to left of Variable Monitor) -->
   <MultiSelectionToolbar
@@ -681,6 +733,22 @@ function downloadMap() {
         Mapping File</label>
       <input id="fileInput" class="d-none" type="file" accept=".map, .json" ref="fileInput" @change="readFile" />
       <button id="buttonReset" type="button" class="btn btn-info border-dark" @click="reset">Reset</button>
+      <button
+        id="buttonAnalyze"
+        type="button"
+        class="btn border-dark position-relative"
+        :class="warningCount > 0 ? 'btn-warning' : 'btn-info'"
+        @click="analyzeDocument"
+        title="Run static analysis to detect potential issues">
+        Analyze
+        <span
+          v-if="warningCount > 0"
+          class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
+          :class="errorCount > 0 ? 'bg-danger' : 'bg-warning text-dark'">
+          {{ warningCount }}
+          <span class="visually-hidden">warnings</span>
+        </span>
+      </button>
     </div>
     <div id="downloadActionsContainer" class="pt-3">
       <div class="header-label">Save as:</div>
@@ -733,11 +801,14 @@ function downloadMap() {
           :class="{
             'row-empty': row.source.type.key === EMPTY_KEY,
             'row-selected': isRowSelected(row.index),
-            'row-multi-selected': selectedRowIndices.size > 1 && isRowSelected(row.index)
+            'row-multi-selected': selectedRowIndices.size > 1 && isRowSelected(row.index),
+            'row-has-warning': rowHasWarnings(row.index)
           }"
           @click="handleRowClick(row.index, $event)"
+          :title="rowHasWarnings(row.index) ? getRowWarnings(row.index).map(w => w.message).join('; ') : ''"
         >
-          {{ row.index }}
+          {{ formatRowIndex(row.index) }}
+          <span v-if="rowHasWarnings(row.index)" class="warning-indicator">!</span>
         </div>
 
         <RowActionButtons
@@ -1012,6 +1083,7 @@ function downloadMap() {
           :destination-empty="row.destination.type.key === EMPTY_KEY"
           :has-copied-source="hasCopiedSource"
           :has-copied-destination="hasCopiedDestination"
+          :warnings="getRowWarnings(row.index)"
           v-model="rowComments[row.index]"
           @copy-source="copySource"
           @paste-source="pasteSource"
@@ -1110,6 +1182,35 @@ label:not(.label-empty) {
   background-color: rgba(241, 247, 0, 0.7) !important;
   color: #000;
   border-left: 3px solid #F1F700;
+}
+
+.rowIndex.row-has-warning {
+  border-left: 3px solid #ffc107;
+}
+
+.rowIndex.row-has-warning:not(.row-selected):not(.row-multi-selected) {
+  background-color: rgba(255, 193, 7, 0.15) !important;
+}
+
+.warning-indicator {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background-color: #ffc107;
+  color: #000;
+  font-size: 9px;
+  font-weight: bold;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.rowIndex {
+  position: relative;
 }
 
 .gridItem {
