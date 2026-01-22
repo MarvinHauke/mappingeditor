@@ -868,7 +868,8 @@ function downloadMap() {
 
           <!-- Calc or Skip Source Type -->
           <CalcSkipSourceExtra v-model="row.source.extra as SourceExtra"
-            v-else-if="row.source.type.key === CALC_SOURCE_TYPE_KEY || row.source.type.key === SKIP_SOURCE_TYPE_KEY" />
+            v-else-if="row.source.type.key === CALC_SOURCE_TYPE_KEY || row.source.type.key === SKIP_SOURCE_TYPE_KEY"
+            :display-row-index-as-hex="displayRowIndexAsHex" />
 
           <!-- NRPN Source Type -->
           <NrpnSourceExtra v-model="row.source.extra as SourceExtra"
