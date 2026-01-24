@@ -27,13 +27,15 @@ import VariableDestinationExtra from './VariableDestinationExtra.vue';
 import MidiMonitor from './MidiMonitor.vue';
 import VariableMonitor from './VariableMonitor.vue';
 import MidiLearnExtra from './MidiLearnExtra.vue';
-import RowActionButtons from './RowActionButtons.vue';
 import RowCommentSection from './RowCommentSection.vue';
-import MultiSelectionToolbar from './MultiSelectionToolbar.vue';
+import SelectionToolbar from './SelectionToolbar.vue';
 import SettingsPanel from './SettingsPanel.vue';
+import WarningLog from './WarningLog.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
+import { useWarningLog } from '../composables/useWarningLog';
+import { useMappingCache, type CachedMapping } from '../composables/useMappingCache';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
@@ -60,6 +62,42 @@ const rowComments = ref<Record<number, string>>({});
 // Row colors storage (keyed by row index)
 const rowColors = ref<Map<number, string>>(new Map());
 
+// Toast notification state for transient messages
+interface ToastMessage {
+  message: string;
+  type: 'info' | 'warning' | 'error';
+  timeout?: number;
+}
+const toastMessages = ref<ToastMessage[]>([]);
+let toastIdCounter = 0;
+
+function showToast(message: string, type: 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
+  const toast: ToastMessage = { message, type };
+  toastMessages.value.push(toast);
+
+  // Also log to warning log
+  if (type === 'info') {
+    logInfo('system', message);
+  } else if (type === 'warning') {
+    logWarning('system', message);
+  } else {
+    logError('system', message);
+  }
+
+  if (duration > 0) {
+    setTimeout(() => {
+      const index = toastMessages.value.indexOf(toast);
+      if (index > -1) {
+        toastMessages.value.splice(index, 1);
+      }
+    }, duration);
+  }
+}
+
+function dismissToast(index: number): void {
+  toastMessages.value.splice(index, 1);
+}
+
 
 // Settings Panel expanded state (for MIDI Monitor positioning)
 const settingsPanelExpanded = ref(false);
@@ -69,6 +107,41 @@ const midiMonitorExpanded = ref(false);
 
 // Variable Monitor expanded state (for toolbar positioning)
 const variableMonitorExpanded = ref(false);
+
+// Selection Toolbar expanded state
+const selectionToolbarExpanded = ref(false);
+
+// Warning Log expanded state
+const warningLogExpanded = ref(false);
+
+// Panel visibility state (controlled from Settings Panel)
+const SELECTION_TOOLBAR_VISIBLE_KEY = 'nerdseq-show-selection-toolbar';
+const MIDI_MONITOR_VISIBLE_KEY = 'nerdseq-show-midi-monitor';
+const VARIABLE_MONITOR_VISIBLE_KEY = 'nerdseq-show-variable-monitor';
+const WARNING_LOG_VISIBLE_KEY = 'nerdseq-show-warning-log';
+// Selection Toolbar defaults to true (enabled by default)
+const showSelectionToolbar = ref(localStorage.getItem(SELECTION_TOOLBAR_VISIBLE_KEY) !== 'false');
+const showMidiMonitor = ref(localStorage.getItem(MIDI_MONITOR_VISIBLE_KEY) === 'true');
+const showVariableMonitor = ref(localStorage.getItem(VARIABLE_MONITOR_VISIBLE_KEY) === 'true');
+const showWarningLog = ref(localStorage.getItem(WARNING_LOG_VISIBLE_KEY) === 'true');
+
+// Watch and persist panel visibility
+watch(showSelectionToolbar, (val) => {
+  localStorage.setItem(SELECTION_TOOLBAR_VISIBLE_KEY, val.toString());
+  if (!val) selectionToolbarExpanded.value = false;
+});
+watch(showMidiMonitor, (val) => {
+  localStorage.setItem(MIDI_MONITOR_VISIBLE_KEY, val.toString());
+  if (!val) midiMonitorExpanded.value = false;
+});
+watch(showVariableMonitor, (val) => {
+  localStorage.setItem(VARIABLE_MONITOR_VISIBLE_KEY, val.toString());
+  if (!val) variableMonitorExpanded.value = false;
+});
+watch(showWarningLog, (val) => {
+  localStorage.setItem(WARNING_LOG_VISIBLE_KEY, val.toString());
+  if (!val) warningLogExpanded.value = false;
+});
 
 // Row index display format (hex/decimal)
 const displayRowIndexAsHex = ref(false);
@@ -112,6 +185,197 @@ const {
   getRowWarnings,
   rowHasWarnings
 } = useStaticAnalyzer(mappingDocument);
+
+// Warning Log
+const {
+  addInfo: logInfo,
+  addWarning: logWarning,
+  addError: logError
+} = useWarningLog();
+
+// Mapping Cache (A/B toggle)
+const {
+  activeSlot,
+  isLockedA,
+  isLockedB,
+  isCurrentLocked,
+  hasDataA,
+  hasDataB,
+  switchToA,
+  switchToB,
+  toggleLockA,
+  toggleLockB,
+  saveToActiveSlot,
+  loadFromSlot
+} = useMappingCache();
+
+// Serialize current document for caching
+function serializeDocument(): CachedMapping {
+  const doc = mappingDocument.value;
+  return {
+    document: {
+      header: {
+        headerText: doc.header.headerText,
+        majorVersion: doc.header.majorVersion,
+        minorVersion: doc.header.minorVersion,
+        fileName: doc.header.fileName
+      },
+      rows: doc.rows.map(row => ({
+        sourceType: row.source.type.key,
+        sourceFunction: row.source.function.key,
+        sourceExtra: row.source.extra.keyOrValue,
+        destinationType: row.destination.type.key,
+        destinationFunction: row.destination.function.key,
+        destinationExtra: row.destination.extra.keyOrValue,
+        unused1: row.unused1,
+        unused2: row.unused2,
+        unused3: row.unused3,
+        unused4: row.unused4
+      })),
+      variables: doc.variables.map(v => v.value)
+    },
+    rowColors: Object.fromEntries(rowColors.value),
+    rowComments: { ...rowComments.value },
+    timestamp: Date.now()
+  };
+}
+
+// Deserialize cached data to document
+function deserializeToDocument(cached: CachedMapping): void {
+  const doc = new MappingDocument();
+  
+  // Restore header
+  doc.header.headerText = cached.document.header.headerText;
+  doc.header.majorVersion = cached.document.header.majorVersion;
+  doc.header.minorVersion = cached.document.header.minorVersion;
+  doc.header.fileName = cached.document.header.fileName;
+  
+  // Restore rows
+  cached.document.rows.forEach((serialized, i) => {
+    if (i < doc.rows.length) {
+      const row = doc.rows[i];
+      
+      // Source
+      const sourceTypeData = DataModel.sourceTypes.find(st => st.key === serialized.sourceType);
+      if (sourceTypeData) {
+        row.source.type = new SourceType(sourceTypeData.key, sourceTypeData.abbr, sourceTypeData.description);
+        currentlySelectedSourceTypes.value[i] = sourceTypeData as MappingType;
+        
+        const sourceFuncData = sourceTypeData.functions.find((f: MappingTuple) => f.key === serialized.sourceFunction);
+        if (sourceFuncData) {
+          row.source.function = new SourceFunction(sourceFuncData.key, sourceFuncData.abbr, sourceFuncData.description);
+        }
+        
+        row.source.extra = new SourceExtra(serialized.sourceExtra, '', '');
+      }
+      
+      // Destination
+      const destTypeData = DataModel.destinationTypes.find(dt => dt.key === serialized.destinationType);
+      if (destTypeData) {
+        row.destination.type = new DestinationType(destTypeData.key, destTypeData.abbr, destTypeData.description);
+        currentlySelectedDestinationTypes.value[i] = destTypeData as MappingType;
+        
+        const destFuncData = destTypeData.functions.find((f: MappingTuple) => f.key === serialized.destinationFunction);
+        if (destFuncData) {
+          row.destination.function = new DestinationFunction(destFuncData.key, destFuncData.abbr, destFuncData.description);
+        }
+        
+        row.destination.extra = new DestinationExtra(serialized.destinationExtra, '', '');
+      }
+      
+      // Unused fields
+      row.unused1 = serialized.unused1;
+      row.unused2 = serialized.unused2;
+      row.unused3 = serialized.unused3;
+      row.unused4 = serialized.unused4;
+    }
+  });
+  
+  // Restore variables
+  cached.document.variables.forEach((val, i) => {
+    if (i < doc.variables.length) {
+      doc.variables[i].value = val;
+    }
+  });
+  
+  // Apply to reactive state
+  mappingDocument.value = doc;
+  
+  // Restore colors
+  rowColors.value = new Map(Object.entries(cached.rowColors).map(([k, v]) => [parseInt(k), v]));
+  
+  // Restore comments
+  rowComments.value = { ...cached.rowComments };
+  
+  // Clear selection
+  clearRowSelection();
+  
+  // Run analysis
+  analyzeDocument();
+}
+
+// Save current document to cache (debounced)
+let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+function scheduleCacheSave(): void {
+  if (isCurrentLocked.value) return;
+  
+  if (saveTimeout) {
+    clearTimeout(saveTimeout);
+  }
+  
+  saveTimeout = setTimeout(async () => {
+    try {
+      await saveToActiveSlot(serializeDocument());
+    } catch (error) {
+      console.error('Failed to save to cache:', error);
+    }
+  }, 1000);
+}
+
+// Handle A/B slot click - switch or toggle lock
+async function handleSlotSwitch(slot: 'A' | 'B'): Promise<void> {
+  // If clicking on already active slot, toggle lock
+  if (activeSlot.value === slot) {
+    if (slot === 'A') {
+      toggleLockA();
+    } else {
+      toggleLockB();
+    }
+    return;
+  }
+
+  // Save current to active slot first (if not locked)
+  if (!isCurrentLocked.value) {
+    try {
+      await saveToActiveSlot(serializeDocument());
+    } catch (error) {
+      console.error('Failed to save before switch:', error);
+    }
+  }
+
+  // Switch slot
+  if (slot === 'A') {
+    await switchToA();
+  } else {
+    await switchToB();
+  }
+
+  // Load from new slot
+  try {
+    const cached = await loadFromSlot(slot);
+    if (cached) {
+      deserializeToDocument(cached);
+      showToast(`Loaded mapping from slot ${slot}`, 'info');
+    } else {
+      // No data in slot, reset to empty
+      reset();
+      showToast(`Slot ${slot} is empty`, 'info');
+    }
+  } catch (error) {
+    console.error('Failed to load from slot:', error);
+    showToast('Failed to load cached mapping', 'error');
+  }
+}
 
 // Row selection functions
 function handleRowClick(rowIndex: number, event: MouseEvent): void {
@@ -194,13 +458,29 @@ function handleMultiPaste(): void {
 }
 
 function handleMultiMoveUp(): void {
-  const newIndices = moveRowsUp(sortedSelectedIndices.value);
-  selectedRowIndices.value = new Set(newIndices);
+  const result = moveRowsUp(sortedSelectedIndices.value);
+  selectedRowIndices.value = new Set(result.newIndices);
+  handleMoveWarnings(result.referenceUpdateResult);
 }
 
 function handleMultiMoveDown(): void {
-  const newIndices = moveRowsDown(sortedSelectedIndices.value);
-  selectedRowIndices.value = new Set(newIndices);
+  const result = moveRowsDown(sortedSelectedIndices.value);
+  selectedRowIndices.value = new Set(result.newIndices);
+  handleMoveWarnings(result.referenceUpdateResult);
+}
+
+function handleMoveWarnings(result: { updatedCount: number; warnings: Array<{ message: string; type: string }> }): void {
+  // Show notification about updated references (logging handled by showToast)
+  if (result.updatedCount > 0) {
+    const msg = `Updated ${result.updatedCount} row reference${result.updatedCount > 1 ? 's' : ''}.`;
+    showToast(msg, 'info');
+  }
+
+  // Show any definition order warnings (logging handled by showToast)
+  const definitionOrderWarnings = result.warnings.filter(w => w.type === 'definition_order');
+  for (const warning of definitionOrderWarnings) {
+    showToast(warning.message, 'warning', 8000);
+  }
 }
 
 function handleMultiClear(): void {
@@ -277,6 +557,19 @@ onMounted(() => {
 watch(displayRowIndexAsHex, (val) => {
   localStorage.setItem(ROW_INDEX_DISPLAY_KEY, val.toString());
 });
+
+// Auto-save to cache when document changes
+watch(
+  () => mappingDocument.value,
+  () => {
+    scheduleCacheSave();
+  },
+  { deep: true }
+);
+
+// Also save when colors or comments change
+watch(rowColors, () => scheduleCacheSave(), { deep: true });
+watch(rowComments, () => scheduleCacheSave(), { deep: true });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown);
@@ -680,6 +973,35 @@ function downloadMap() {
 
 </script>
 <template>
+  <!-- Toast Notifications -->
+  <div class="toast-container position-fixed bottom-0 start-0 p-3" style="z-index: 1100;">
+    <div
+      v-for="(toast, index) in toastMessages"
+      :key="index"
+      class="toast show"
+      :class="{
+        'bg-info text-white': toast.type === 'info',
+        'bg-warning text-dark': toast.type === 'warning',
+        'bg-danger text-white': toast.type === 'error'
+      }"
+      role="alert"
+      aria-live="assertive"
+      aria-atomic="true"
+    >
+      <div class="toast-header">
+        <strong class="me-auto">
+          <span class="toast-type-label" :class="'toast-type-' + toast.type">
+            {{ toast.type.toUpperCase() }}
+          </span>
+        </strong>
+        <button type="button" class="btn-close" @click="dismissToast(index)" aria-label="Close"></button>
+      </div>
+      <div class="toast-body">
+        {{ toast.message }}
+      </div>
+    </div>
+  </div>
+
   <header>
     <div class="pt-5">
       <img alt="NerdSeq Logo" class="logo" src="/src/assets/images/nerdseq-logo.png" height="100" />
@@ -687,35 +1009,27 @@ function downloadMap() {
     </div>
   </header>
 
-  <!-- Settings Panel -->
+  <!-- Settings Panel (rightmost) -->
   <SettingsPanel
     v-model:display-row-index-as-hex="displayRowIndexAsHex"
+    v-model:show-selection-toolbar="showSelectionToolbar"
+    v-model:show-midi-monitor="showMidiMonitor"
+    v-model:show-variable-monitor="showVariableMonitor"
+    v-model:show-warning-log="showWarningLog"
     @expanded-change="settingsPanelExpanded = $event"
   />
 
-  <!-- MIDI Monitor -->
-  <MidiMonitor
-    v-if="midiSupported"
-    :settings-panel-expanded="settingsPanelExpanded"
-    @expanded-change="midiMonitorExpanded = $event"
-  />
-
-  <!-- Variable Monitor -->
-  <VariableMonitor
-    :variables="mappingDocument.variables"
-    :midi-monitor-expanded="midiMonitorExpanded"
-    :settings-panel-expanded="settingsPanelExpanded"
-    @expanded-change="variableMonitorExpanded = $event"
-  />
-
-  <!-- Multi-selection Toolbar (docked to left of Variable Monitor) -->
-  <MultiSelectionToolbar
+  <!-- Selection Toolbar (docked to left of Settings) -->
+  <SelectionToolbar
+    v-if="showSelectionToolbar"
     :selected-count="selectedRowIndices.size"
+    :has-copied-row="hasCopiedRow"
     :has-copied-rows="hasCopiedRows"
     :can-move-up="canMoveUp"
     :can-move-down="canMoveDown"
-    :midi-monitor-expanded="midiMonitorExpanded"
-    :variable-monitor-expanded="variableMonitorExpanded"
+    :is-locked="isCurrentLocked"
+    :settings-panel-expanded="settingsPanelExpanded"
+    @expanded-change="selectionToolbarExpanded = $event"
     @cut="handleMultiCut"
     @copy="handleMultiCopy"
     @paste="handleMultiPaste"
@@ -724,6 +1038,40 @@ function downloadMap() {
     @clear="handleMultiClear"
     @set-color="setRowColor"
     @cancel="clearRowSelection"
+  />
+
+  <!-- MIDI Monitor (docked to left of Selection Toolbar) -->
+  <MidiMonitor
+    v-if="midiSupported && showMidiMonitor"
+    :settings-panel-expanded="settingsPanelExpanded"
+    :show-selection-toolbar="showSelectionToolbar"
+    :selection-toolbar-expanded="selectionToolbarExpanded"
+    @expanded-change="midiMonitorExpanded = $event"
+  />
+
+  <!-- Variable Monitor (docked to left of MIDI Monitor) -->
+  <VariableMonitor
+    v-if="showVariableMonitor"
+    :variables="mappingDocument.variables"
+    :settings-panel-expanded="settingsPanelExpanded"
+    :show-selection-toolbar="showSelectionToolbar"
+    :selection-toolbar-expanded="selectionToolbarExpanded"
+    :show-midi-monitor="midiSupported && showMidiMonitor"
+    :midi-monitor-expanded="midiMonitorExpanded"
+    @expanded-change="variableMonitorExpanded = $event"
+  />
+
+  <!-- Warning Log (docked to left of Variable Monitor) -->
+  <WarningLog
+    v-if="showWarningLog"
+    :settings-panel-expanded="settingsPanelExpanded"
+    :show-selection-toolbar="showSelectionToolbar"
+    :selection-toolbar-expanded="selectionToolbarExpanded"
+    :show-midi-monitor="midiSupported && showMidiMonitor"
+    :midi-monitor-expanded="midiMonitorExpanded"
+    :show-variable-monitor="showVariableMonitor"
+    :variable-monitor-expanded="variableMonitorExpanded"
+    @expanded-change="warningLogExpanded = $event"
   />
 
   <main>
@@ -749,6 +1097,26 @@ function downloadMap() {
           <span class="visually-hidden">warnings</span>
         </span>
       </button>
+
+      <!-- A/B Cache Toggle -->
+      <div class="slot-toggle-group">
+        <button
+          class="slot-btn"
+          :class="{ active: activeSlot === 'A', 'has-data': hasDataA, locked: activeSlot === 'A' && isLockedA }"
+          @click="handleSlotSwitch('A')"
+          :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock' : 'Click to lock') : 'Switch to slot A'"
+        >
+          A
+        </button>
+        <button
+          class="slot-btn"
+          :class="{ active: activeSlot === 'B', 'has-data': hasDataB, locked: activeSlot === 'B' && isLockedB }"
+          @click="handleSlotSwitch('B')"
+          :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock' : 'Click to lock') : 'Switch to slot B'"
+        >
+          B
+        </button>
+      </div>
     </div>
     <div id="downloadActionsContainer" class="pt-3">
       <div class="header-label">Save as:</div>
@@ -780,12 +1148,10 @@ function downloadMap() {
       </div>
       <div class="pt-2">
         <div class="header-label">File Name:</div>
-        <div class="header-val"><input type="text" id="input" v-model="mappingDocument.header.fileName" /></div>
+        <div class="header-val"><input type="text" id="input" v-model="mappingDocument.header.fileName" :disabled="isCurrentLocked" :class="{ 'input-locked': isCurrentLocked }" /></div>
       </div>
       <div id="rowsGridContainerHeader" class="pt-3">
         <div>Row</div>
-        <div>Copy</div>
-        <div>Paste</div>
         <div>Source Type</div>
         <div>Source Function</div>
         <div>Source Extra(s)</div>
@@ -811,18 +1177,11 @@ function downloadMap() {
           <span v-if="rowHasWarnings(row.index)" class="warning-indicator">!</span>
         </div>
 
-        <RowActionButtons
-          :row-index="row.index"
-          :has-copied-data="hasCopiedRow"
-          :has-content="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
-          @copy="copyRow"
-          @paste="pasteRow"
-        />
-
         <div class="gridItem">
           <select :value="row.source.type.key" @change="sourceTypeSelectionChanged($event, row.index)"
             :title="row.source.type.abbr" class="form-select pt-1"
-            :class="{ 'select-empty': row.source.type.key === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.type.key === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="sourceType in DataModel.sourceTypes" :key="sourceType.key" :value="sourceType.key"
               :title="sourceType.abbr">
@@ -837,7 +1196,8 @@ function downloadMap() {
 
           <select v-else :value="row.source.function.key" @change="sourceFunctionSelectionChanged($event, row.index)"
             :title="row.source.function.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.source.function.key === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.function.key === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="func in currentlySelectedSourceTypes[row.index]?.functions" :key="func.key" :value="func.key"
               :title="func.abbr">
@@ -885,7 +1245,8 @@ function downloadMap() {
             :value="row.source.extra.keyOrValue"
             @change="sourceExtraSelectionChanged($event, row.index, SourceExtraVariant.EXTERNAL_KEYBOARD)"
             :title="row.source.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="extra in keyboardSourceExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
               {{ extra.description }}</option>
@@ -897,7 +1258,8 @@ function downloadMap() {
             :value="row.source.extra.keyOrValue"
             @change="sourceExtraSelectionChanged($event, row.index, SourceExtraVariant.EXTERNAL_SEGA_GAMEPAD)"
             :title="row.source.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="extra in segaGamepadSourceExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
               {{ extra.description }}</option>
@@ -909,7 +1271,8 @@ function downloadMap() {
             :value="row.source.extra.keyOrValue"
             @change="sourceExtraSelectionChanged($event, row.index, SourceExtraVariant.EXTERNAL_NERDSEQ_BUTTONS)"
             :title="row.source.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="extra in nerdseqButtonsSourceExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
               {{ extra.description }}</option>
@@ -918,7 +1281,8 @@ function downloadMap() {
           <!-- Else show a select with all the extras for this source type -->
           <select v-else :value="row.source.extra.keyOrValue" @change="sourceExtraSelectionChanged($event, row.index)"
             :title="row.source.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.source.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="extra in currentlySelectedSourceTypes[row.index]?.extras" :key="extra.key" :value="extra.key"
               :title="extra.abbr">
@@ -930,7 +1294,8 @@ function downloadMap() {
         <div class="gridItem">
           <select :value="row.destination.type.key" @change="destinationTypeSelectionChanged($event, row.index)"
             :title="row.destination.type.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.type.key === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.type.key === EMPTY_KEY, 'select-locked': isCurrentLocked }">
 
             <option v-for="destinationType in DataModel.destinationTypes" :key="destinationType.key"
               :value="destinationType.key" :title="destinationType.abbr">
@@ -946,7 +1311,8 @@ function downloadMap() {
           <select v-else :value="row.destination.function.key"
             @change="destinationFunctionSelectionChanged($event, row.index)" :title="row.destination.function.abbr"
             class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.function.key === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.function.key === EMPTY_KEY, 'select-locked': isCurrentLocked }">
             <option v-for="func in currentlySelectedDestinationTypes[row.index]?.functions" :key="func.key"
               :value="func.key" :title="func.abbr">
               {{ func.description }}</option>
@@ -1023,7 +1389,8 @@ function downloadMap() {
             :value="row.destination.extra.keyOrValue"
             @change="destinationExtraSelectionChanged($event, row.index, false, DestinationExtraVariant.GLOBAL_BUTTONS)"
             :title="row.destination.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
             <option v-for="extra in globalButtonsDestinationExtras" :key="extra.key" :value="extra.key"
               :title="extra.abbr">
               {{ extra.description }}</option>
@@ -1035,7 +1402,8 @@ function downloadMap() {
             :value="row.destination.extra.keyOrValue"
             @change="destinationExtraSelectionChanged($event, row.index, false, DestinationExtraVariant.GLOBAL_SCREENS)"
             :title="row.destination.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
             <option v-for="extra in globalScreensDestinationExtras" :key="extra.key" :value="extra.key"
               :title="extra.abbr">
               {{ extra.description }}</option>
@@ -1047,7 +1415,8 @@ function downloadMap() {
             :value="row.destination.extra.keyOrValue"
             @change="destinationExtraSelectionChanged($event, row.index, false, DestinationExtraVariant.GLOBAL_MODES)"
             :title="row.destination.extra.abbr" class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
             <option v-for="extra in globalModesDestinationExtras" :key="extra.key" :value="extra.key"
               :title="extra.abbr">
               {{ extra.description }}</option>
@@ -1057,7 +1426,8 @@ function downloadMap() {
           <select v-else :value="row.destination.extra.keyOrValue"
             @change="destinationExtraSelectionChanged($event, row.index)" :title="row.destination.extra.abbr"
             class="form-select border-dark pt-1"
-            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY }">
+            :disabled="isCurrentLocked"
+            :class="{ 'select-empty': row.destination.extra.keyOrValue === EMPTY_KEY, 'select-locked': isCurrentLocked }">
             <option v-for="extra in currentlySelectedDestinationTypes[row.index]?.extras" :key="extra.key"
               :value="extra.key" :title="extra.abbr">
               {{ extra.description }}</option>
@@ -1069,6 +1439,8 @@ function downloadMap() {
           <button
             v-if="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
             class="btn btn-sm clear-btn-fixed"
+            :class="{ 'btn-locked': isCurrentLocked }"
+            :disabled="isCurrentLocked"
             @click="clearRow(row.index)"
             title="Clear this row"
           >
@@ -1139,7 +1511,7 @@ label:not(.label-empty) {
 #rowsGridContainer,
 #rowsGridContainerHeader {
   display: grid;
-  grid-template-columns: 2.5em 3.5em 3.5em 1.3fr 2fr 2.5fr 1.3fr 2fr 2.5fr 3.5em;
+  grid-template-columns: 2.5em 1.3fr 2fr 2.5fr 1.3fr 2fr 2.5fr 3.5em;
   gap: var(--grid-gap);
   width: 100%;
 }
@@ -1272,5 +1644,123 @@ label:not(.label-empty) {
   background-color: var(--color-hover);
   color: var(--color-text-primary);
   box-shadow: var(--shadow-hover);
+}
+
+/* Toast type labels */
+.toast-type-label {
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.toast-type-info {
+  background: #34cc99;
+  color: #000;
+}
+
+.toast-type-warning {
+  background: #ffc107;
+  color: #000;
+}
+
+.toast-type-error {
+  background: #dc3545;
+  color: #fff;
+}
+
+/* A/B Cache Toggle Buttons */
+.slot-toggle-group {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 20px;
+  align-items: center;
+}
+
+.slot-btn {
+  width: var(--form-height);
+  height: var(--form-height);
+  border: 2px solid var(--color-primary);
+  background-color: var(--color-dark-bg);
+  color: #fff;
+  font-weight: bold;
+  font-size: var(--form-font-size);
+  cursor: pointer;
+  transition: background-color var(--transition-standard);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot-btn:hover:not(:disabled) {
+  background-color: rgba(52, 204, 153, 0.3);
+}
+
+.slot-btn.active {
+  background-color: #F1F700;
+  color: #000;
+  border-color: #F1F700;
+  cursor: pointer;
+}
+
+.slot-btn.has-data:not(.active) {
+  border-style: solid;
+}
+
+.slot-btn:not(.has-data):not(.active) {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.slot-btn.active.locked {
+  box-shadow: 0 0 8px 2px #dc3545, inset 0 0 4px rgba(220, 53, 69, 0.3);
+  border-color: #dc3545;
+}
+
+/* Locked state overlay for editor */
+.editor-locked-overlay {
+  position: relative;
+}
+
+.editor-locked-overlay::after {
+  content: 'LOCKED';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(220, 53, 69, 0.9);
+  color: #fff;
+  padding: 10px 30px;
+  font-size: 24px;
+  font-weight: bold;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Locked state for form elements */
+.select-locked {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  background-color: var(--color-disabled, #333) !important;
+}
+
+.select-locked:disabled {
+  pointer-events: none;
+}
+
+.btn-locked {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+}
+
+.btn-locked:disabled {
+  pointer-events: none;
+}
+
+.input-locked {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  background-color: var(--color-disabled, #333) !important;
 }
 </style>

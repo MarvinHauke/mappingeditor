@@ -5,6 +5,8 @@ import BasePanel from './BasePanel.vue'
 
 const props = defineProps<{
   settingsPanelExpanded: boolean
+  showSelectionToolbar: boolean
+  selectionToolbarExpanded: boolean
 }>()
 
 const emit = defineEmits<{
@@ -13,8 +15,15 @@ const emit = defineEmits<{
 
 const { isSupported, isEnabled, messageHistory, lastMessage, enableMidi, clearHistory: clearHistoryComposable } = useMidi()
 
-// Position based on Settings Panel state (minimized: 100px, expanded: 180px, plus 10px gap each side)
-const rightPosition = computed(() => props.settingsPanelExpanded ? '200px' : '120px')
+// Position based on Settings Panel and Selection Toolbar states
+// Settings: minimized 100px, expanded 180px
+// Selection Toolbar: minimized 120px, expanded 260px (only if visible)
+const rightPosition = computed(() => {
+  const settingsWidth = props.settingsPanelExpanded ? 180 : 100
+  const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0
+  const gaps = props.showSelectionToolbar ? 20 : 10 // 10px gap between each visible panel
+  return `${settingsWidth + selWidth + gaps + 10}px`
+})
 
 const showActivity = ref(false)
 

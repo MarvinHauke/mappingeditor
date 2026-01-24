@@ -9,8 +9,11 @@ interface VariableLike {
 
 const props = defineProps<{
   variables: VariableLike[]
-  midiMonitorExpanded: boolean
   settingsPanelExpanded: boolean
+  showSelectionToolbar: boolean
+  selectionToolbarExpanded: boolean
+  showMidiMonitor: boolean
+  midiMonitorExpanded: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,15 +31,19 @@ const rightColumn = computed(() => props.variables.slice(8, 16))
 const leftLabels = computed(() => variableLabels.value.slice(0, 8))
 const rightLabels = computed(() => variableLabels.value.slice(8, 16))
 
-// Position based on Settings Panel and MIDI Monitor states
+// Position based on Settings, Selection Toolbar, and MIDI Monitor states
 // Settings: minimized 100px, expanded 180px
-// MIDI: minimized 150px, expanded 320px
-// Gap: 10px between each
+// Selection Toolbar: minimized 120px, expanded 260px (only if visible)
+// MIDI: minimized 150px, expanded 320px (only if visible)
+// Gap: 10px between each visible panel
 const rightPosition = computed(() => {
   const settingsWidth = props.settingsPanelExpanded ? 180 : 100
-  const midiWidth = props.midiMonitorExpanded ? 320 : 150
-  const gaps = 20 // 10px gap on each side
-  return `${settingsWidth + midiWidth + gaps + 10}px`
+  const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0
+  const midiWidth = props.showMidiMonitor ? (props.midiMonitorExpanded ? 320 : 150) : 0
+  // Count visible panels for gap calculation: Settings always visible
+  const visiblePanelCount = 1 + (props.showSelectionToolbar ? 1 : 0) + (props.showMidiMonitor ? 1 : 0)
+  const gaps = visiblePanelCount * 10 // 10px gap between each visible panel
+  return `${settingsWidth + selWidth + midiWidth + gaps + 10}px`
 })
 
 function onExpandedChange(expanded: boolean): void {

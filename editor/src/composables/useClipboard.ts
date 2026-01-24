@@ -7,6 +7,12 @@ import {
   EMPTY_DESCRIPTION
 } from '../modules/dataModel';
 import {
+  buildPositionMapping,
+  updateRowReferencesAfterMove,
+  type ReferenceUpdateResult,
+  type ReferenceWarning
+} from '../services/rowReferenceService';
+import {
   Row as MappingRow,
   Source,
   SourceType,
@@ -109,6 +115,15 @@ export interface UseClipboardOptions {
   currentlySelectedDestinationTypes: Ref<MappingType[]>;
 }
 
+// Result type for move operations including reference warnings
+export interface MoveRowsResult {
+  newIndices: number[];
+  referenceUpdateResult: ReferenceUpdateResult;
+}
+
+// Re-export types for convenience
+export type { ReferenceWarning, ReferenceUpdateResult };
+
 // Return interface for the composable
 export interface UseClipboardReturn {
   // State (computed booleans for UI)
@@ -127,8 +142,8 @@ export interface UseClipboardReturn {
   pasteRows: (startIndex: number) => void;
   cutRows: (rowIndices: number[]) => void;
   clearRows: (rowIndices: number[]) => void;
-  moveRowsUp: (rowIndices: number[]) => number[];
-  moveRowsDown: (rowIndices: number[]) => number[];
+  moveRowsUp: (rowIndices: number[]) => MoveRowsResult;
+  moveRowsDown: (rowIndices: number[]) => MoveRowsResult;
 
   // Source operations
   copySource: (rowIndex: number) => void;
@@ -318,7 +333,7 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   // Internal: Move rows in a given direction
   type MoveDirection = 'up' | 'down';
 
-  function moveRows(rowIndices: number[], direction: MoveDirection): number[] {
+  function moveRows(rowIndices: number[], direction: MoveDirection): MoveRowsResult {
     const isUp = direction === 'up';
     const maxIndex = mappingDocument.value.rows.length - 1;
     const boundaryIndex = isUp ? 0 : maxIndex;
@@ -328,7 +343,15 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     const sorted = [...rowIndices].sort((a, b) => isUp ? a - b : b - a);
 
     // Boundary check
-    if (sorted[0] === boundaryIndex) return rowIndices;
+    if (sorted[0] === boundaryIndex) {
+      return {
+        newIndices: rowIndices,
+        referenceUpdateResult: { updatedCount: 0, warnings: [] }
+      };
+    }
+
+    // Build position mapping before the move
+    const positionMapping = buildPositionMapping(rowIndices, direction);
 
     const newIndices: number[] = [];
     for (const idx of sorted) {
@@ -340,14 +363,21 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
       swapSelectedTypes(idx, idx + offset);
       newIndices.push(idx + offset);
     }
-    return newIndices;
+
+    // Update row references after the move
+    const referenceUpdateResult = updateRowReferencesAfterMove(
+      mappingDocument.value.rows as MappingRow[],
+      positionMapping
+    );
+
+    return { newIndices, referenceUpdateResult };
   }
 
-  function moveRowsUp(rowIndices: number[]): number[] {
+  function moveRowsUp(rowIndices: number[]): MoveRowsResult {
     return moveRows(rowIndices, 'up');
   }
 
-  function moveRowsDown(rowIndices: number[]): number[] {
+  function moveRowsDown(rowIndices: number[]): MoveRowsResult {
     return moveRows(rowIndices, 'down');
   }
 

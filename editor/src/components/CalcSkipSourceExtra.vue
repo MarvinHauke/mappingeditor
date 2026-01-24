@@ -5,6 +5,7 @@ import { SourceExtra } from '../modules/documentModel';
 
 const props = defineProps<{
   displayRowIndexAsHex: boolean
+  isLocked?: boolean
 }>();
 
 const model = defineModel<SourceExtra>({ required: true });

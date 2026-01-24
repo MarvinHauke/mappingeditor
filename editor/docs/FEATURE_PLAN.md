@@ -6,6 +6,27 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 ---
 
+## Phase 0.1 change the multi-selection toolbar to selection toolbar
+
+- make a basepanel component out of it
+- make it always visible, also for single selections.
+- doc it initaliy to the top row, next to the variables view.
+
+### Advanced planning required:
+
+- give all basepanels a handle "::" on the left side to move them across the display.
+- add docking functionality to fix the current position on the display, while the background keeps scrolling.
+  - like Minimeters
+
+## Phase 0.2 Cache currently build or imported mapping
+
+Add a local folder (path) for fast importing mappings.
+
+- save the current mapping in the browser (cache?)
+- implement a A/B button for fast toggeling between two mappings.
+  - give clear indicator which mapping is selected
+- Add a locking function which disables modifications to the current mapping. Give A and B a seperate lock for better referencing
+
 ## Phase 1: Foundation (MVP)
 
 ### 1.1 Static Logic Analyzer
@@ -197,6 +218,7 @@ Add transport controls in header section:
 **Add a status/breakpoint column between Source Extra and Destination Type:**
 
 This column serves dual purpose:
+
 1. **Status indicator** - Shows `>` (active/executed) or `X` (skip type)
 2. **Breakpoint control** - Click to open dropdown menu, shapes indicate breakpoint type
 
@@ -213,21 +235,21 @@ This column serves dual purpose:
 
 **Status Symbols:**
 
-| Symbol | Color | Meaning |
-|--------|-------|---------|
-| `>` | Teal (#34cc99) | Active/Executed - includes empty rows |
-| `X` | Red (#dc3545) | Skip type - row has Skip source or destination |
+| Symbol | Color          | Meaning                                        |
+| ------ | -------------- | ---------------------------------------------- |
+| `>`    | Teal (#34cc99) | Active/Executed - includes empty rows          |
+| `X`    | Red (#dc3545)  | Skip type - row has Skip source or destination |
 
 **Note:** Empty rows show `>` because they are still executed by NerdSEQ.
 
 **Breakpoint Shapes (around the > or X symbol):**
 
-| Shape | Background Color | Meaning |
-|-------|------------------|---------|
-| None | Default | No breakpoint |
-| Circle ○ | Red rgba(220, 53, 69, 0.3) | Unconditional - always pause |
-| Triangle △ | Orange rgba(253, 126, 20, 0.3) | Conditional - pause if expression true |
-| Rectangle □ | Yellow rgba(255, 193, 7, 0.3) | Hit Count - pause after N executions |
+| Shape       | Background Color               | Meaning                                |
+| ----------- | ------------------------------ | -------------------------------------- |
+| None        | Default                        | No breakpoint                          |
+| Circle ○    | Red rgba(220, 53, 69, 0.3)     | Unconditional - always pause           |
+| Triangle △  | Orange rgba(253, 126, 20, 0.3) | Conditional - pause if expression true |
+| Rectangle □ | Yellow rgba(255, 193, 7, 0.3)  | Hit Count - pause after N executions   |
 
 **UI Interactions:**
 
@@ -239,10 +261,10 @@ This column serves dual purpose:
 
 ```typescript
 interface RowBreakpoint {
-  type: 'none' | 'unconditional' | 'conditional' | 'hitCount';
-  condition?: string;     // e.g., "source.value > 2000"
-  hitCount?: number;      // pause after N hits
-  currentHits?: number;   // tracking current hit count
+  type: "none" | "unconditional" | "conditional" | "hitCount";
+  condition?: string; // e.g., "source.value > 2000"
+  hitCount?: number; // pause after N hits
+  currentHits?: number; // tracking current hit count
 }
 ```
 
@@ -270,14 +292,18 @@ function isRowSkipped(row: MappingRow): boolean {
   cursor: pointer;
   width: 30px;
 }
-.arrow-active { color: #34cc99; }
-.arrow-skipped { color: #dc3545; }
+.arrow-active {
+  color: #34cc99;
+}
+.arrow-skipped {
+  color: #dc3545;
+}
 
 /* Breakpoint shapes */
 .arrow-cell.bp-unconditional {
   background: rgba(220, 53, 69, 0.3);
   border: 2px solid #dc3545;
-  border-radius: 50%;  /* Circle */
+  border-radius: 50%; /* Circle */
 }
 .arrow-cell.bp-conditional {
   background: rgba(253, 126, 20, 0.3);
@@ -287,7 +313,7 @@ function isRowSkipped(row: MappingRow): boolean {
 .arrow-cell.bp-hitcount {
   background: rgba(255, 193, 7, 0.3);
   border: 2px solid #ffc107;
-  border-radius: 2px;  /* Rectangle */
+  border-radius: 2px; /* Rectangle */
 }
 ```
 
