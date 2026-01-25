@@ -82,6 +82,8 @@ defineExpose({ isExpanded })
   color: black;
   background-color: #34cc99;
   border-bottom: 2px solid #000;
+  white-space: nowrap;
+  gap: 2px;
 }
 
 .panel-header:hover {

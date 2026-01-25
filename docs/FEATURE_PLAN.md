@@ -452,6 +452,31 @@ Allow manual MIDI message injection for testing:
 - Identify rows with complex calculations
 - Optimization suggestions
 
+### 6.4 Comprehensive Action Logging & Undo System
+
+**Status:** Planning required
+
+A comprehensive logging system to track all user actions for undo/redo functionality and audit trails.
+
+**Key Features:**
+- Action log tracking all document modifications (row edits, adds, deletes, moves)
+- Undo/Redo stack with keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
+- Event log display panel showing recent actions with timestamps
+- Export action log for debugging and documentation
+- Selective undo (undo specific actions, not just last action)
+
+**Benefits:**
+- Reduces need for individual toast notifications (actions visible in log)
+- Enables experimentation with easy rollback
+- Provides audit trail for complex mapping development
+- Supports collaborative workflows (action history export/import)
+
+**Implementation Notes:**
+- Use command pattern for undoable actions
+- Persist undo history to IndexedDB (per session)
+- Integrate with A/B slot system (separate undo stacks per slot)
+- Show unobtrusive log indicator in header toolbar
+
 ---
 
 ## Technical Considerations

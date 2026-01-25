@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import BasePanel from './BasePanel.vue'
+import IconButton from './IconButton.vue'
 
 const props = defineProps<{
   displayRowIndexAsHex: boolean
@@ -58,14 +59,16 @@ function onExpandedChange(expanded: boolean): void {
   >
     <div class="setting-item">
       <span class="setting-label">Row Index Format</span>
-      <button
-        class="btn btn-sm toggle-btn"
+      <IconButton
+        class="toggle-btn"
         :class="{ active: displayRowIndexAsHex }"
-        @click.stop="toggleHexDisplay"
+        size="sm"
+        variant="secondary"
+        @click="toggleHexDisplay"
         :title="displayRowIndexAsHex ? 'Switch to decimal (0-69)' : 'Switch to hexadecimal (00-45)'"
       >
         {{ displayRowIndexAsHex ? 'HEX' : 'DEC' }}
-      </button>
+      </IconButton>
     </div>
     
     <div class="setting-divider">
@@ -149,9 +152,8 @@ function onExpandedChange(expanded: boolean): void {
 .toggle-btn {
   width: 100%;
   font-size: 11px;
-  padding: 4px 8px;
   background-color: rgba(52, 204, 153, 0.2) !important;
-  border: 1px solid #34cc99;
+  border-color: #34cc99 !important;
   color: #34cc99;
   font-weight: bold;
 }
@@ -163,7 +165,7 @@ function onExpandedChange(expanded: boolean): void {
 .toggle-btn.active {
   background-color: #F1F700 !important;
   color: #000;
-  border-color: #F1F700;
+  border-color: #F1F700 !important;
 }
 
 .setting-divider {

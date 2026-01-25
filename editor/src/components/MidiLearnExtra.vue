@@ -8,6 +8,7 @@ import {
   LEARN_TIMEOUT_MS,
   type MidiInterface
 } from '../constants/midi'
+import IconButton from './IconButton.vue'
 
 // Props to distinguish between source and destination modes
 const props = defineProps<{
@@ -208,20 +209,22 @@ onUnmounted(() => {
 
     <!-- Learn Button / Status -->
     <div class="learn-controls">
-      <button
+      <IconButton
         v-if="!isLocalLearning"
         @click="handleStartLearning"
-        class="btn btn-sm learn-btn"
-        :class="{ 'btn-success': !hasLearnedValue, 'btn-info': hasLearnedValue, 'btn-locked': isLocked }"
+        class="learn-btn"
+        :class="{ 'has-learned': hasLearnedValue, 'btn-locked': isLocked }"
+        size="sm"
+        variant="success"
         :disabled="isLocked"
       >
         {{ hasLearnedValue ? 'Re-Learn' : 'Start Learning' }}
-      </button>
+      </IconButton>
 
       <div v-else class="learning-status">
         <span class="listening-text">Listening...</span>
         <span class="countdown">{{ learningCountdown }}s</span>
-        <button @click="handleStopLearning" class="btn btn-sm btn-danger">Cancel</button>
+        <IconButton @click="handleStopLearning" size="sm" variant="danger">Cancel</IconButton>
       </div>
     </div>
 
@@ -277,18 +280,18 @@ onUnmounted(() => {
 
 .learn-btn {
   background-color: #f1f700 !important;
+  border-color: #d4da00 !important;
   color: black;
   font-weight: bold;
-  border: 1px solid black;
-  padding: 4px 8px;
   width: 100%;
 }
 
 .learn-btn:hover {
   background-color: #fff700 !important;
+  border-color: #e6ec00 !important;
 }
 
-.btn-info {
+.learn-btn.has-learned {
   background-color: #4ecdc4 !important;
 }
 

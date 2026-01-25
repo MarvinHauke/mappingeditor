@@ -11,13 +11,13 @@ import { ref } from 'vue'
 export interface ToastMessage {
   id: number
   message: string
-  type: 'info' | 'warning' | 'error'
+  type: 'success' | 'info' | 'warning' | 'error'
 }
 
 const toasts = ref<ToastMessage[]>([])
 let idCounter = 0
 
-function show(message: string, type: 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
+function show(message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
   const toast: ToastMessage = {
     id: ++idCounter,
     message,
@@ -53,6 +53,7 @@ defineExpose({
       :key="toast.id"
       class="toast show"
       :class="{
+        'bg-success text-white': toast.type === 'success',
         'bg-info text-white': toast.type === 'info',
         'bg-warning text-dark': toast.type === 'warning',
         'bg-danger text-white': toast.type === 'error'
@@ -83,6 +84,11 @@ defineExpose({
   font-size: 0.75rem;
   padding: 2px 6px;
   border-radius: 2px;
+}
+
+.toast-type-success {
+  background: #28a745;
+  color: #fff;
 }
 
 .toast-type-info {

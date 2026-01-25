@@ -53,8 +53,48 @@ const MAX_ENTRIES = 100;
 let instance: UseWarningLogReturn | null = null;
 
 /**
- * Warning Log composable - provides a centralized log for all warnings
- * Uses singleton pattern so all components share the same log
+ * Composable for centralized warning and message logging.
+ *
+ * Uses **singleton pattern** - all components share the same log instance.
+ * Automatically prunes entries to keep only the most recent 100.
+ *
+ * **Log Entry Types:**
+ * - `info` - Informational messages (e.g., "File loaded successfully")
+ * - `warning` - Potential issues (e.g., "Variable read before write")
+ * - `error` - Critical errors (e.g., "Failed to save file")
+ *
+ * **Log Entry Sources:**
+ * - `analyzer` - Static analysis warnings
+ * - `reference` - Row reference tracking (Skip/Dual destination updates)
+ * - `system` - General system messages (file I/O, cache operations)
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   addWarning,
+ *   addError,
+ *   filteredEntries,
+ *   warningCount,
+ *   filterByType
+ * } = useWarningLog();
+ *
+ * // Add a warning for row 5
+ * addWarning('analyzer', 'Variable A read before write', 5);
+ *
+ * // Add a system error
+ * addError('system', 'Failed to load file', undefined, 'FileNotFoundError');
+ *
+ * // Filter to show only warnings
+ * filterByType.value = new Set(['warning']);
+ *
+ * // Display filtered entries
+ * console.log('Warnings:', warningCount.value);
+ * filteredEntries.value.forEach(entry => {
+ *   console.log(`[${entry.type}] ${entry.message}`);
+ * });
+ * ```
+ *
+ * @returns Warning log API with add/clear/filter operations
  */
 export function useWarningLog(): UseWarningLogReturn {
   // Return existing instance if already created

@@ -284,7 +284,48 @@ function getSkipCount(row: RowLike): number {
 }
 
 /**
- * Static Logic Analyzer composable
+ * Composable for static analysis of mapping logic.
+ *
+ * Automatically analyzes mapping rows to detect potential issues:
+ * - **Variable Read Before Write**: Variable used before being set
+ * - **Unused Variables**: Variable set but never read
+ * - **Destination Conflicts**: Multiple rows writing to the same destination
+ * - **Skip Always True/False**: Skip conditions that never change
+ * - **Unreachable Rows**: Rows after unconditional skips
+ *
+ * Analysis is performed on-demand via `analyzeDocument()` and results
+ * are cached until the next analysis run.
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   warnings,
+ *   warningCount,
+ *   analyzeDocument,
+ *   getRowWarnings,
+ *   rowHasWarnings
+ * } = useStaticAnalyzer(mappingDocument);
+ *
+ * // Run analysis
+ * analyzeDocument();
+ *
+ * // Check results
+ * console.log('Total warnings:', warningCount.value);
+ *
+ * // Get warnings for specific row
+ * const row5Warnings = getRowWarnings(5);
+ * row5Warnings.forEach(w => {
+ *   console.log(`[${w.severity}] ${w.message}`);
+ * });
+ *
+ * // Check if row has warnings (for UI badges)
+ * if (rowHasWarnings(5)) {
+ *   // Show warning indicator
+ * }
+ * ```
+ *
+ * @param mappingDocument - Ref to the mapping document to analyze
+ * @returns Static analyzer API with warnings state and analysis methods
  */
 export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
   const warnings = ref<RowWarningsMap>(new Map());

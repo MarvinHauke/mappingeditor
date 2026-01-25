@@ -44,6 +44,64 @@ const nrpnBuffers: NrpnBuffer[] = Array(16).fill(null).map(() => ({
 
 const MAX_HISTORY = 50
 
+/**
+ * Composable for Web MIDI API integration.
+ *
+ * Provides MIDI device detection, message parsing, and learn mode functionality.
+ * Uses **singleton pattern** - all components share the same MIDI state.
+ *
+ * **Supported Message Types:**
+ * - **Note On/Off**: MIDI notes with velocity
+ * - **Control Change (CC)**: Standard MIDI CC messages
+ * - **NRPN**: Non-Registered Parameter Numbers (assembled from CC 98/99/6/38)
+ * - **Pitch Bend**: Pitch wheel data
+ * - **Aftertouch**: Channel pressure
+ *
+ * **Learn Mode:**
+ * - 10-second timeout to capture next MIDI message
+ * - Automatically stops after timeout or successful capture
+ * - Used for mapping MIDI controls without manual parameter entry
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   isSupported,
+ *   isEnabled,
+ *   lastMessage,
+ *   messageHistory,
+ *   enableMidi,
+ *   startLearning
+ * } = useMidi();
+ *
+ * // Check browser support
+ * if (!isSupported.value) {
+ *   console.warn('Web MIDI not supported');
+ * }
+ *
+ * // Enable MIDI
+ * await enableMidi();
+ *
+ * // Start learn mode
+ * startLearning((msg) => {
+ *   console.log('Learned:', msg);
+ *   console.log('Channel:', msg.channel);
+ *   if (msg.type === 'cc') {
+ *     console.log('CC#', msg.cc, 'Value:', msg.value);
+ *   } else if (msg.type === 'nrpn') {
+ *     console.log('NRPN:', msg.nrpn, 'Value:', msg.nrpnValue);
+ *   }
+ * });
+ *
+ * // Monitor incoming messages
+ * watch(lastMessage, (msg) => {
+ *   if (msg) {
+ *     console.log('MIDI In:', msg.type, msg.channel);
+ *   }
+ * });
+ * ```
+ *
+ * @returns MIDI API with device management, message parsing, and learn mode
+ */
 export function useMidi() {
 
   // Parse MIDI message data

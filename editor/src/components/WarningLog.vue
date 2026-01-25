@@ -118,13 +118,15 @@ const panelTitle = computed(() => {
     :title="panelTitle"
     storage-key="warning-log-expanded"
     :right-position="rightPosition"
-    minimized-width="100px"
+    minimized-width="140px"
     expanded-width="350px"
     @expanded-change="onExpandedChange"
   >
     <template #header-extra>
-      <span v-if="warningCount > 0" class="count-badge warning-badge">{{ warningCount }}</span>
-      <span v-if="errorCount > 0" class="count-badge error-badge">{{ errorCount }}</span>
+      <div class="badge-container">
+        <span v-if="warningCount > 0" class="count-badge warning-badge">{{ warningCount }}</span>
+        <span v-if="errorCount > 0" class="count-badge error-badge">{{ errorCount }}</span>
+      </div>
     </template>
 
     <div class="log-content">
@@ -396,12 +398,18 @@ const panelTitle = computed(() => {
   line-height: 1.4;
 }
 
+.badge-container {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .count-badge {
   font-size: 9px;
   font-weight: bold;
   padding: 0 4px;
   border-radius: 6px;
-  margin-left: 2px;
+  white-space: nowrap;
 }
 
 .warning-badge {

@@ -25,11 +25,20 @@ const emit = defineEmits<{
   (e: 'cancel'): void;
 }>();
 
-// Panel title based on selection count
+// Track expanded state - initialize from localStorage to match BasePanel's initial state
+const storageKey = 'selection-toolbar-expanded';
+const initialExpanded = localStorage.getItem(storageKey) === 'true';
+const isExpanded = ref(initialExpanded);
+
+// Panel title based on selection count and expanded state
 const panelTitle = computed(() => {
+  // When minimized (folded), always show "Selection"
+  if (!isExpanded.value) return 'Selection';
+
+  // When expanded, show count
   if (props.selectedCount === 0) return 'Selection';
-  if (props.selectedCount === 1) return '1 row';
-  return `${props.selectedCount} rows`;
+  if (props.selectedCount === 1) return '1 row selected';
+  return `${props.selectedCount} rows selected`;
 });
 
 // Whether we have any selection
@@ -54,6 +63,7 @@ function handleColorSelect(colorName: string | null): void {
 }
 
 function onExpandedChange(expanded: boolean): void {
+  isExpanded.value = expanded;
   emit('expandedChange', expanded);
 }
 </script>
@@ -67,9 +77,6 @@ function onExpandedChange(expanded: boolean): void {
     expanded-width="260px"
     @expanded-change="onExpandedChange"
   >
-    <template #header-extra>
-      <span v-if="selectedCount > 0" class="selection-badge">{{ selectedCount }}</span>
-    </template>
 
     <div class="toolbar-content">
       <!-- No selection state -->
@@ -207,16 +214,6 @@ function onExpandedChange(expanded: boolean): void {
 .hint {
   color: rgba(52, 204, 153, 0.6);
   font-size: 10px;
-}
-
-.selection-badge {
-  background: #000;
-  color: #34cc99;
-  padding: 0 6px;
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: bold;
-  margin-left: 4px;
 }
 
 .selection-actions {

@@ -32,6 +32,7 @@ import SelectionToolbar from './SelectionToolbar.vue';
 import SettingsPanel from './SettingsPanel.vue';
 import WarningLog from './WarningLog.vue';
 import MenuButton from './MenuButton.vue';
+import IconButton from './IconButton.vue';
 import ToastNotifications from './ToastNotifications.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
@@ -580,6 +581,7 @@ function readFile() {
           mappingDocument.value = MappingDocumentParser.parse(fileData);
           init();
           console.log('.map file loaded successfully');
+          showToast(`Loaded ${file.name} successfully`, 'success', 3000);
         } catch (error) {
           console.error('Error parsing .map file:', error);
           alert(`Error loading .map file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes\n\nCheck console for details.`);
@@ -724,6 +726,7 @@ function readFile() {
           mappingDocument.value = mappingDoc;
           init();
           console.log('.json file loaded successfully');
+          showToast(`Loaded ${file.name} successfully`, 'success', 3000);
         } catch (error) {
           console.error('Error parsing .json file:', error);
           if (error instanceof SyntaxError) {
@@ -776,6 +779,11 @@ function init() {
   }
   // Run static analysis after loading
   analyzeDocument();
+
+  // Show toast if warnings found
+  if (warningCount.value > 0) {
+    showToast(`Analysis found ${warningCount.value} warning${warningCount.value !== 1 ? 's' : ''}`, 'warning', 4000);
+  }
 }
 
 function sourceTypeSelectionChanged(event: Event, rowIndex: number) {
@@ -919,12 +927,14 @@ function downloadHtml() {
   const output = formatters.toHtml(mappingDocument.value as MappingDocument);
   const blob = new Blob([output], { type: "text/html" });
   downloadFile(blob, `${mappingDocument.value.header.fileName}.html`);
+  showToast('Exported to HTML successfully', 'success', 3000);
 }
 
 function downloadMarkdown(useAbbrs: boolean = false) {
   const output = formatters.toMarkdown(mappingDocument.value as MappingDocument, useAbbrs);
   const blob = new Blob([output], { type: "text/markdown" });
   downloadFile(blob, `${mappingDocument.value.header.fileName}.md`);
+  showToast('Exported to Markdown successfully', 'success', 3000);
 }
 
 function downloadJson() {
@@ -947,11 +957,13 @@ function downloadJson() {
   const output = formatters.toJson(mappingDocument.value as MappingDocument, metadata);
   const blob = new Blob([output], { type: "application/json" });
   downloadFile(blob, `${mappingDocument.value.header.fileName}.json`);
+  showToast('Exported to JSON successfully', 'success', 3000);
 }
 
 function downloadMap() {
   const blob = formatters.toBlob(mappingDocument.value as MappingDocument);
   downloadFile(blob, `${mappingDocument.value.header.fileName}.map`);
+  showToast('Downloaded MAP file successfully', 'success', 3000);
 }
 
 </script>
@@ -1422,16 +1434,18 @@ function downloadMap() {
 
         <!-- Clear button at grid position 10 -->
         <div class="endCap">
-          <button
+          <IconButton
             v-if="row.source.type.key !== EMPTY_KEY || row.destination.type.key !== EMPTY_KEY"
-            class="btn btn-sm clear-btn-fixed"
+            class="clear-btn-fixed"
             :class="{ 'btn-locked': isCurrentLocked }"
+            size="sm"
+            variant="clear"
             :disabled="isCurrentLocked"
             @click="clearRow(row.index)"
             title="Clear this row"
           >
             X
-          </button>
+          </IconButton>
         </div>
 
         <!-- Comment section (unfolds only when single row is selected) -->
@@ -1607,24 +1621,10 @@ h2 {
 
 .clear-btn-fixed {
   font-size: var(--button-font-size);
-  padding: var(--button-padding);
   margin: 0;
-  background-color: var(--color-primary);
-  border: none;
   height: 100%;
   width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: var(--form-border-radius-right);
-  transition: background-color var(--transition-standard),
-              box-shadow var(--transition-standard);
-}
-
-.clear-btn-fixed:hover {
-  background-color: var(--color-hover);
-  color: var(--color-text-primary);
-  box-shadow: var(--shadow-hover);
 }
 
 /* A/B Cache Toggle Group with Filename */

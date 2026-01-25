@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 import BasePanel from './BasePanel.vue'
+import IconButton from './IconButton.vue'
 
 const props = defineProps<{
   settingsPanelExpanded: boolean
@@ -119,13 +120,15 @@ onMounted(async () => {
       </div>
     </div>
 
-    <button
+    <IconButton
       v-if="recentMessages.length > 0"
       @click.stop="clearHistory"
-      class="btn btn-sm clear-btn"
+      variant="clear"
+      size="sm"
+      class="clear-btn-custom"
     >
       Clear
-    </button>
+    </IconButton>
   </BasePanel>
 </template>
 
@@ -189,17 +192,16 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.clear-btn {
+.clear-btn-custom {
   margin-top: 4px;
   width: 100%;
   background-color: #cc8534 !important;
-  color: black;
-  border: 1px solid #000;
-  padding: 2px 6px;
+  border-color: #cc8534 !important;
   font-size: 11px;
 }
 
-.clear-btn:hover {
+.clear-btn-custom:hover {
   background-color: #b87429 !important;
+  border-color: #b87429 !important;
 }
 </style>

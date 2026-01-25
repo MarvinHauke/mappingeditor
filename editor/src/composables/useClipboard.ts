@@ -43,7 +43,11 @@ export type DestinationLike = {
   extra: { keyOrValue: number; abbr: string; description: string };
 };
 
-// Factory functions for creating empty Source/Destination
+/**
+ * Creates an empty Source instance with all fields set to EMPTY_KEY.
+ *
+ * @returns A new Source with empty type, function, and extra
+ */
 export function createEmptySource(): Source {
   return new Source(
     new SourceType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
@@ -52,6 +56,11 @@ export function createEmptySource(): Source {
   );
 }
 
+/**
+ * Creates an empty Destination instance with all fields set to EMPTY_KEY.
+ *
+ * @returns A new Destination with empty type, function, and extra
+ */
 export function createEmptyDestination(): Destination {
   return new Destination(
     new DestinationType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION),
@@ -124,7 +133,10 @@ export interface MoveRowsResult {
 // Re-export types for convenience
 export type { ReferenceWarning, ReferenceUpdateResult };
 
-// Return interface for the composable
+/**
+ * Return type for the useClipboard composable.
+ * Provides clipboard operations for rows, sources, and destinations.
+ */
 export interface UseClipboardReturn {
   // State (computed booleans for UI)
   hasCopiedRow: Ref<boolean>;
@@ -159,6 +171,51 @@ export interface UseClipboardReturn {
   clearAllClipboards: () => void;
 }
 
+/**
+ * Composable for clipboard operations on mapping rows, sources, and destinations.
+ *
+ * Provides copy/paste/cut/clear/move operations at three levels:
+ * - **Row level**: Complete mapping (source + destination)
+ * - **Source level**: Only source parameters
+ * - **Destination level**: Only destination parameters
+ *
+ * All operations create deep clones to avoid reference sharing.
+ * Move operations automatically update row references (Skip/Dual types).
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   copyRow,
+ *   pasteRow,
+ *   moveRowsUp,
+ *   hasCopiedRow
+ * } = useClipboard({
+ *   mappingDocument,
+ *   currentlySelectedSourceTypes,
+ *   currentlySelectedDestinationTypes
+ * });
+ *
+ * // Copy row 5
+ * copyRow(5);
+ *
+ * // Paste to row 10
+ * if (hasCopiedRow.value) {
+ *   pasteRow(10);
+ * }
+ *
+ * // Move rows 2, 3, 4 up (returns new indices and reference warnings)
+ * const { newIndices, referenceUpdateResult } = moveRowsUp([2, 3, 4]);
+ * console.log('Moved to:', newIndices); // [1, 2, 3]
+ * console.log('Updated references:', referenceUpdateResult.updatedCount);
+ * ```
+ *
+ * @param options - Configuration options
+ * @param options.mappingDocument - Ref to the mapping document containing rows
+ * @param options.currentlySelectedSourceTypes - Ref to source type selection state
+ * @param options.currentlySelectedDestinationTypes - Ref to destination type selection state
+ *
+ * @returns Clipboard API with copy/paste/cut/clear/move operations
+ */
 export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   const { mappingDocument, currentlySelectedSourceTypes, currentlySelectedDestinationTypes } = options;
 

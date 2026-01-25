@@ -25,7 +25,20 @@ cd tests && node validate-test-files.js  # Manual test validation
 
 ## Architecture
 
+### Directory Structure
+
+```
+editor/src/
+├── components/          # Vue components
+├── composables/         # Vue 3 Composition API composables
+├── modules/             # Core data models and utilities
+├── services/            # Business logic services
+├── constants/           # Shared constants (colors, MIDI)
+└── assets/              # Static assets (styles, images, fonts)
+```
+
 ### Core Data Flow
+
 ```
 .MAP/.JSON file → Parsers → MappingDocument → Vue UI → Formatters → Export
 ```
@@ -42,11 +55,54 @@ cd tests && node validate-test-files.js  # Manual test validation
 
 ### UI Components (`editor/src/components/`)
 
-- **EditorApp.vue**: Main component (~1000 lines) with file I/O, 70-row mapping table, copy/paste/clear functionality, MIDI learn integration.
+#### Main Application
 
-- **\*SourceExtra.vue / \*DestinationExtra.vue**: Type-specific parameter editors for each source/destination type (NRPN, MIDI CC, Variables, CalcSkip, etc.).
+- **EditorApp.vue**: Main component (~1100 lines) with file I/O, 70-row mapping table, row management, and panel coordination.
 
-- **useMidi.ts** (composables): Web MIDI API integration with NRPN assembly (CC 99/98/6/38 buffering), learn mode (10s timeout), message history.
+#### Panel Components (BasePanel-based)
+
+- **BasePanel.vue**: Unified foldable panel container with consistent styling and animations.
+- **SettingsPanel.vue**: Settings and info display.
+- **MidiMonitor.vue**: MIDI message monitoring and live trace.
+- **VariableMonitor.vue**: Variable A-P display with values.
+- **WarningLog.vue**: Centralized warning and validation message display.
+
+#### UI Components
+
+- **MenuButton.vue**: Unified button component with variants (primary, secondary, download).
+- **ToastNotifications.vue**: Transient notification system for user feedback.
+- **SelectionToolbar.vue**: Multi-row operations toolbar (copy, paste, clear, move, color).
+- **RowCommentSection.vue**: Expanded row details, warnings, and comments.
+- **RowActionButtons.vue**: Per-row copy/paste/clear buttons.
+
+#### Source/Destination Extra Components
+
+- **CalcSkipSourceExtra.vue**: Calc/Skip source parameters.
+- **NrpnSourceExtra.vue**: NRPN source parameters.
+- **VariableSourceExtra.vue**: Variable source parameters.
+- **MidiLearnExtra.vue**: MIDI learn mode UI.
+- **DualDestinationExtra.vue**: Dual destination parameters.
+- **MidiCcDestinationExtra.vue**: MIDI CC destination parameters.
+- **SkipDestinationExtra.vue**: Skip destination parameters.
+- **VariableDestinationExtra.vue**: Variable destination parameters.
+- **VisuDestinationExtra.vue**: Visualization destination parameters.
+
+### Composables (`editor/src/composables/`)
+
+- **useClipboard.ts**: Row/source/destination copy-paste operations.
+- **useMappingCache.ts**: A/B slot caching with IndexedDB persistence and lock state.
+- **useMidi.ts**: Web MIDI API integration, NRPN assembly, learn mode (10s timeout).
+- **useStaticAnalyzer.ts**: Logic validation and warning generation (unused vars, read-before-write, conflicts).
+- **useWarningLog.ts**: Centralized warning log management.
+
+### Services (`editor/src/services/`)
+
+- **rowReferenceService.ts**: Handles row reference tracking and analysis.
+
+### Constants (`editor/src/constants/`)
+
+- **colors.ts**: Row background color definitions.
+- **midi.ts**: MIDI-related constants (interfaces, channels, learn mode).
 
 ### Binary Format Reference
 
@@ -54,10 +110,40 @@ See `/docs/mapping_file_definition.txt` for complete .MAP file format specificat
 
 ## Important Constants
 
-- **EMPTY_KEY**: `0xFFFF` (65535) - represents unused/empty field values
-- **Row count**: 70 mapping rows
-- **Variables**: 16 named variables (A-P), each 16-bit unsigned (0-4095)
-- **MIDI interfaces**: TRS (channels 0-15), USB Host (16-31), USB Device (32-47), Learn (48)
+- **EMPTY_KEY**: `0xFFFF` (65535) - represents unused/empty field values.
+- **Row count**: 70 mapping rows.
+- **Variables**: 16 named variables (A-P), each 16-bit unsigned (0-4095).
+- **MIDI interfaces**: TRS (channels 0-15), USB Host (16-31), USB Device (32-47), Learn (48).
+
+## Key Features
+
+### A/B Caching System
+
+- Two independent mapping slots (A/B) with IndexedDB persistence.
+- Lock function per slot to prevent accidental modifications.
+- Auto-restore on page load.
+- See `useMappingCache.ts`.
+
+### Static Logic Analyzer
+
+- Automated analysis on load/save.
+- Warning types: Variable Read Before Write, Destination Conflicts, Unused Variables.
+- Warning count badge in header toolbar.
+- See `useStaticAnalyzer.ts` and `useWarningLog.ts`.
+
+### Multi-Selection & Row Operations
+
+- **Shift+Click**: Range selection.
+- **Ctrl/Cmd+Click**: Toggle individual rows.
+- **SelectionToolbar**: Batch operations (copy, paste, clear, move up/down, color assignment).
+- **Row Colors**: 8 background color options for visual grouping.
+
+### Copy/Paste System
+
+- Row-level: Copy entire mapping (source + destination).
+- Source-level: Copy only source parameters.
+- Destination-level: Copy only destination parameters.
+- See `useClipboard.ts` for implementation details.
 
 ## Tech Stack
 
@@ -66,3 +152,19 @@ See `/docs/mapping_file_definition.txt` for complete .MAP file format specificat
 - Vite 5.0
 - Bootstrap 5.3 (Bootswatch Lux dark theme)
 - AJV for JSON schema validation
+- IndexedDB for client-side persistence
+
+## Planning Documents
+
+- **FEATURE_PLAN.md**: Debugger & monitoring system roadmap with completed/planned features.
+- **REFACTORING_PLAN.md**: Recent implementations, architectural observations, and improvement opportunities.
+
+## Custom Claude Code Agents
+
+This project has custom agents configured for specialized tasks:
+
+- **map-export-guardian**: Protects .MAP binary export functionality from breaking changes.
+- **vue-refactoring-architect**: Assists with Vue component refactoring and clean architecture.
+- **feature-research**: Explores and evaluates new feature ideas.
+
+See Serena memory "custom-agents" for detailed usage guidance.
