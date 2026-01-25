@@ -5,7 +5,8 @@ import { type MappingTuple, EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION } from '../
 
 const props = defineProps<{
   modelValue: DestinationExtra,
-  dualExtras: MappingTuple[]
+  dualExtras: MappingTuple[],
+  isLocked?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -30,7 +31,8 @@ const keyOrValue = computed({
 
 <template>
   <select v-model.number="keyOrValue" :title="props.modelValue.abbr" class="form-select border-dark pt-1"
-    :class="{ 'select-empty': props.modelValue.keyOrValue === EMPTY_KEY }">
+    :class="{ 'select-empty': props.modelValue.keyOrValue === EMPTY_KEY, 'select-locked': isLocked }"
+    :disabled="isLocked">
     <option v-for="extra in props.dualExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
       {{ extra.description }}
     </option>

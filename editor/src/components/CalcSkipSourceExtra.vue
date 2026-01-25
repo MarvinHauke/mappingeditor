@@ -69,13 +69,15 @@ function updateModel() {
 </script>
 
 <template>
-    <div class="extras-container">
+    <div class="extras-container" :class="{ 'container-locked': isLocked }">
         <select v-model="extraVal1" class="extra-select es1 form-select border-dark pt-1" :title="extras?.[extraVal1 + 1]?.abbr"
-            :class="{ 'select-empty': extraVal1 === EMPTY_KEY_SHORT }">
+            :class="{ 'select-empty': extraVal1 === EMPTY_KEY_SHORT, 'select-locked': isLocked }"
+            :disabled="isLocked">
             <option v-for="ex in extras" :key="ex.key" :value="ex.key" :title="ex.abbr">{{ ex.description }}</option>
         </select>
         <select v-model="extraVal2" class="extra-select es2 form-select border-dark pt-1" :title="extras?.[extraVal2 + 1]?.abbr"
-            :class="{ 'select-empty': extraVal2 === EMPTY_KEY_SHORT }">
+            :class="{ 'select-empty': extraVal2 === EMPTY_KEY_SHORT, 'select-locked': isLocked }"
+            :disabled="isLocked">
             <option v-for="ex in extras" :key="ex.key" :value="ex.key" :title="ex.abbr">{{ ex.description }}</option>
         </select>
     </div>
@@ -91,6 +93,7 @@ function updateModel() {
 .extra-select {
   width: calc(50% - 1px);
   background-color: var(--color-primary);
+  color: var(--color-text-primary);
 }
 </style>
 

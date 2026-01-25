@@ -13,6 +13,7 @@ import {
 const props = defineProps<{
   mode: 'source' | 'destination'
   sourceType?: number // Required when mode='source': 5=MIDI, 6=MIDI CC, 7=MIDI NRPN
+  isLocked?: boolean
 }>()
 
 // Generic model that works with both SourceExtra and DestinationExtra
@@ -194,11 +195,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="learn-container">
+  <div class="learn-container" :class="{ 'container-locked': isLocked }">
     <!-- Interface Selection -->
-    <div class="interface-select">
-      <label>Interface:</label>
-      <select v-model="selectedInterface" class="form-select form-select-sm">
+    <div class="interface-select" :class="{ 'section-locked': isLocked }">
+      <label :class="{ 'label-locked': isLocked }">Interface:</label>
+      <select v-model="selectedInterface" class="form-select form-select-sm" :disabled="isLocked" :class="{ 'select-locked': isLocked }">
         <option v-for="iface in interfaces" :key="iface.value" :value="iface.value">
           {{ iface.label }}
         </option>
@@ -211,7 +212,8 @@ onUnmounted(() => {
         v-if="!isLocalLearning"
         @click="handleStartLearning"
         class="btn btn-sm learn-btn"
-        :class="{ 'btn-success': !hasLearnedValue, 'btn-info': hasLearnedValue }"
+        :class="{ 'btn-success': !hasLearnedValue, 'btn-info': hasLearnedValue, 'btn-locked': isLocked }"
+        :disabled="isLocked"
       >
         {{ hasLearnedValue ? 'Re-Learn' : 'Start Learning' }}
       </button>

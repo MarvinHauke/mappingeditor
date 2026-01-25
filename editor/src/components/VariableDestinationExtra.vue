@@ -3,6 +3,10 @@ import { computed } from 'vue';
 import { EMPTY_ABBR, EMPTY_DESCRIPTION, EMPTY_KEY } from '../modules/dataModel';
 import { DestinationExtra } from '../modules/documentModel';
 
+const props = defineProps<{
+  isLocked?: boolean
+}>();
+
 const model = defineModel<DestinationExtra>({ required: true });
 
 const options = [
@@ -27,7 +31,8 @@ const selectedKey = computed({
 
 <template>
     <select v-model.number="selectedKey" :title="model.abbr" class="form-select border-dark pt-1"
-        :class="{ 'select-empty': model.keyOrValue === EMPTY_KEY }">
+        :class="{ 'select-empty': model.keyOrValue === EMPTY_KEY, 'select-locked': isLocked }"
+        :disabled="isLocked">
         <option v-for="option in options" :key="option.key" :value="option.key" :title="option.abbr">
             {{ option.description }}
         </option>

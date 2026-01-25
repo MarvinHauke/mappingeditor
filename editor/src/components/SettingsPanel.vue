@@ -7,6 +7,10 @@ const props = defineProps<{
   showMidiMonitor: boolean
   showVariableMonitor: boolean
   showWarningLog: boolean
+  // Info section props
+  headerText: string
+  firmwareMajor: number
+  firmwareMinor: number
 }>()
 
 const emit = defineEmits<{
@@ -111,6 +115,20 @@ function onExpandedChange(expanded: boolean): void {
         <span>Warning Log</span>
       </label>
     </div>
+
+    <div class="setting-divider">
+      <span class="divider-label">Info</span>
+    </div>
+
+    <div class="info-item">
+      <span class="info-label">Header:</span>
+      <span class="info-value">{{ headerText }}</span>
+    </div>
+
+    <div class="info-item">
+      <span class="info-label">Firmware:</span>
+      <span class="info-value">{{ firmwareMajor }}.{{ firmwareMinor }}</span>
+    </div>
   </BasePanel>
 </template>
 
@@ -185,5 +203,26 @@ function onExpandedChange(expanded: boolean): void {
 
 .checkbox-label input[type="checkbox"]:checked + span {
   color: #34cc99;
+}
+
+/* Info section styles */
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+}
+
+.info-label {
+  color: #888;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.info-value {
+  color: #F1F700;
+  font-size: 11px;
+  font-weight: 500;
+  word-break: break-all;
 }
 </style>

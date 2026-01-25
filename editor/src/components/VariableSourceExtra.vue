@@ -3,6 +3,10 @@ import { defineModel, onMounted, ref } from 'vue';
 import { EMPTY_ABBR, EMPTY_DESCRIPTION, EMPTY_KEY, genNrpnSourceExtraDnA, genVarSourceExtraDnA } from '../modules/dataModel';
 import { SourceExtra } from '../modules/documentModel';
 
+const props = defineProps<{
+  isLocked?: boolean
+}>();
+
 const MAX_VALUE = 4095;
 const model = defineModel<SourceExtra>({ required: true });
 const varInput = ref<HTMLInputElement>();
@@ -54,16 +58,16 @@ defineEmits(['update:modelValue']);
 </script>
 
 <template>
-    <div class="extras-container">
-        <div class="first" :class="{ 'input-disabled': !disableNum }" :title="model.abbr">
+    <div class="extras-container" :class="{ 'container-locked': isLocked }">
+        <div class="first" :class="{ 'input-disabled': !disableNum, 'section-locked': isLocked }" :title="model.abbr">
             <label for="varCheck">From Row/Var:</label>
             <div>
-                <input type="checkbox" class="form-check-input" id="varCheck" ref="varCheck" @change="checkChanged" />
+                <input type="checkbox" class="form-check-input" id="varCheck" ref="varCheck" @change="checkChanged" :disabled="isLocked" />
             </div>
         </div>
-        <div class="second" :class="{ 'input-disabled': disableNum }">
-            <input :disabled="disableNum" type="number" class="form-control" id="varInput" ref="varInput"
-                v-model="varValue" @change="numChanged" :max="MAX_VALUE" :min="0" :title="model.description" />
+        <div class="second" :class="{ 'input-disabled': disableNum, 'section-locked': isLocked }">
+            <input :disabled="disableNum || isLocked" type="number" class="form-control" id="varInput" ref="varInput"
+                v-model="varValue" @change="numChanged" :max="MAX_VALUE" :min="0" :title="model.description" :class="{ 'input-locked': isLocked }" />
         </div>
     </div>
 </template>
@@ -113,6 +117,7 @@ defineEmits(['update:modelValue']);
     padding: var(--form-padding-vertical) var(--form-padding-horizontal);
     display: flex;
     align-items: center;
+    color: var(--color-text-primary);
 }
 
 .second>input:disabled {

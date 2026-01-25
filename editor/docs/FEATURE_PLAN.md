@@ -6,68 +6,54 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 ---
 
-## Phase 0.1 change the multi-selection toolbar to selection toolbar
+## ✅ Completed Features
 
-- make a basepanel component out of it
-- make it always visible, also for single selections.
-- doc it initaliy to the top row, next to the variables view.
+The following features have been implemented:
 
-### Advanced planning required:
+### Phase 0.2 - A/B Caching System ✅
+- **A/B slot caching** with IndexedDB persistence (`useMappingCache.ts`)
+- **Lock function per slot** - prevents accidental modifications
+- Clear indicator showing which slot (A/B) is active
 
-- give all basepanels a handle "::" on the left side to move them across the display.
-- add docking functionality to fix the current position on the display, while the background keeps scrolling.
-  - like Minimeters
+### Phase 1.1 - Static Logic Analyzer ✅
+- Automated analysis on load/save (`useStaticAnalyzer.ts`)
+- Warning types: Variable Read Before Write, Destination Conflicts, Unused Variables
+- Warning count badge in header toolbar
 
-## Phase 0.2 Cache currently build or imported mapping
+### Phase 1.2 - Warning Annotations ✅
+- Warnings displayed in RowCommentSection when row selected
+- Yellow/orange warning badges
+- Warning Log panel (`useWarningLog.ts`)
 
-Add a local folder (path) for fast importing mappings.
+### Phase 4.1-4.3 - Multi-Selection & Row Colors ✅
+- **Shift+Click** range selection
+- **Ctrl/Cmd+Click** individual toggle
+- **Multi-Selection Toolbar** (`SelectionToolbar.vue`)
+- **Background color options** for visual grouping (8 colors)
+- Row move with conflict detection
 
-- save the current mapping in the browser (cache?)
-- implement a A/B button for fast toggeling between two mappings.
-  - give clear indicator which mapping is selected
-- Add a locking function which disables modifications to the current mapping. Give A and B a seperate lock for better referencing
+### Infrastructure Improvements ✅
+- **BasePanel component** - unified foldable panel styling
+- **MenuButton component** - consistent button styling
+- **ToastNotifications** - transient notification system
+- **Variable Monitor** - basic variable display panel
 
-## Phase 1: Foundation (MVP)
+---
 
-### 1.1 Static Logic Analyzer
+## Phase 0.1 Selection Toolbar Enhancement
 
-Automated analysis that scans all 70 rows on load/save and flags potential issues:
+- Convert multi-selection toolbar to BasePanel-based component
+- Make visible for single selections too
+- Dock initially next to Variables view
 
-| Warning Type               | Description                                    | Example                                                    |
-| -------------------------- | ---------------------------------------------- | ---------------------------------------------------------- |
-| Variable Read Before Write | Variable used as source before any row sets it | "Variable B used in Row 12 but never set"                  |
-| Skip Always True/False     | Conditional logic that never changes           | "Skip condition `1 == 1` always evaluates to TRUE"         |
-| Unreachable Rows           | Rows after unconditional Skip                  | "Row 15-20 unreachable after unconditional Skip in Row 14" |
-| Unused Variables           | Variables set but never read                   | "Variable C set in Row 5 but never used"                   |
-| Destination Conflicts      | Multiple rows writing to same output           | "CV Out 3 written by Row 8 and Row 22"                     |
-| Out-of-Range Values        | Offset + maxValue exceeds limits               | "Row 7: offset 2000 + maxValue 3000 exceeds 4095"          |
+### Advanced (Future):
 
-**Implementation:**
+- Draggable panels with "::" handle
+- Docking functionality (like Minimeters)
 
-- Run analysis on document load, save, and on-demand via toolbar button
-- Store warnings in reactive state per row
-- Display warning count badge in header toolbar
+---
 
-### 1.2 Warning Annotations in Comment Section
-
-Display warnings prominently in RowCommentSection when a row is selected:
-
-```
-Row 12 - MIDI CC Source
-----------------------------
-Source: MIDI CC 7 (Volume)
-Destination: CV Out 3
-
-[!] Variable B used but never set in previous rows
-[!] Destination CV Out 3 also written by Row 22
-```
-
-**UI Treatment:**
-
-- Yellow/orange badges for warnings
-- Red badges for errors (critical issues)
-- "Dismiss" option per warning (stored in JSON metadata)
-- "Learn More" link explaining the warning
+## Phase 1: Foundation (Remaining)
 
 ### 1.3 Row Value Display in Comment Section
 
@@ -359,48 +345,7 @@ Extend the existing VariableMonitor component:
 
 ## Phase 4: Multi-Selection & Row Management
 
-### 4.1 Multi-Selection with Shift+Click
-
-Enable selecting multiple rows for batch operations:
-
-**Selection Behavior:**
-
-- Shift+Click: Select range from last selected to clicked row
-- Ctrl/Cmd+Click: Toggle individual row selection
-- Selected rows get distinct background color
-- **Prevent selected rows from unfolding/expanding**
-
-### 4.2 Multi-Selection Toolbar
-
-Show floating toolbar above multi-selection:
-
-```
-┌────────────────────────────────────────────────┐
-│  [✂ Cut]  [📋 Copy]  [⬆ Move Up]  [⬇ Move Down]  │
-│  [🗑 Clear]  [🎨 Color]  [Cancel]                │
-└────────────────────────────────────────────────┘
-│  Row 5  │████████████████████████████████████│
-│  Row 6  │████████████████████████████████████│
-│  Row 7  │████████████████████████████████████│
-└─────────────────────────────────────────────────
-```
-
-**Operations:**
-
-- **Cut**: Remove selected rows, store in clipboard
-- **Copy**: Copy selected rows to clipboard
-- **Move Up/Down**: Reorder selected rows within the mapping
-- **Clear**: Reset selected rows to empty state
-- **Color**: Set background color for visual grouping
-
-### 4.3 Background Color Options
-
-Allow users to set background colors for rows/groups:
-
-- Color picker with preset palette (matching NerdSEQ colors)
-- Helps visually organize complex mappings
-- Stored in JSON metadata
-- Colors: None, Red, Orange, Yellow, Green, Blue, Purple, Gray
+> **Note:** Phases 4.1-4.3 are implemented. See "Completed Features" section above.
 
 ### 4.4 Drag-and-Drop Row Reordering (Single Row)
 
@@ -554,16 +499,16 @@ From manual (nerdseq_manual_3_00.pdf):
 
 ```
 Phase 1 (Foundation)           Phase 2 (Simulation)
-├── Static Analyzer            ├── Virtual Engine
-├── Warning Annotations        ├── Running Light
+├── ✅ Static Analyzer         ├── Virtual Engine
+├── ✅ Warning Annotations     ├── Running Light
 ├── Row Value Display          ├── Transport Controls
 └── Global Documentation       └── Speed Slider + BPM
         │                               │
         ▼                               ▼
 Phase 3 (Debugging)            Phase 4 (Selection)
-├── Breakpoint Column          ├── Shift+Click Selection
-├── Breakpoint Types           ├── Selection Toolbar
-├── Row Value Monitor          └── Background Colors
+├── Breakpoint Column          ├── ✅ Shift+Click Selection
+├── Breakpoint Types           ├── ✅ Selection Toolbar
+├── Row Value Monitor          └── ✅ Background Colors
 └── Variable Monitor Enhancements
         │                               │
         ▼                               ▼
@@ -573,17 +518,17 @@ Phase 5 (MIDI)                 Phase 6 (Advanced)
 └── Test Injection             └── Performance Profiler
 ```
 
-### Priority Order
+### Priority Order (Updated)
 
-1. **Static Logic Analyzer** - Catches errors before hardware upload
-2. **Warning Annotations** - Surfaces analyzer results in UI
+1. ~~**Static Logic Analyzer**~~ ✅ Implemented
+2. ~~**Warning Annotations**~~ ✅ Implemented
 3. **Row Value Display** - Hex/decimal/binary like NerdSEQ menu
 4. **Global Documentation** - Quick win for community sharing
 5. **Virtual Execution Engine** - Foundation for all debugging features
 6. **Transport Controls + Speed Slider** - Enables debugging workflow
 7. **Running Light** - Visual feedback (no comment expansion)
 8. **Breakpoint Column & System** - Step-through debugging
-9. **Multi-Selection** - Batch operations
+9. ~~**Multi-Selection**~~ ✅ Implemented
 10. **Virtual MIDI Ports** - DAW integration
 
 ---

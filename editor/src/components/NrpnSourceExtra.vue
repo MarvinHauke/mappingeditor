@@ -3,6 +3,10 @@ import { defineModel, onMounted, ref } from 'vue';
 import { EMPTY_KEY, genNrpnSourceExtraDnA } from '../modules/dataModel';
 import { SourceExtra } from '../modules/documentModel';
 
+const props = defineProps<{
+  isLocked?: boolean
+}>();
+
 const LABEL_TEXT = "NRPN Controller #";
 const MAX_VALUE = 9999;
 const model = defineModel<SourceExtra>({ required: true });
@@ -24,10 +28,10 @@ defineEmits(['update:modelValue']);
 </script>
 
 <template>
-    <div class="extras-container">
-        <label class="form-label" for="nrpn">{{ LABEL_TEXT }}</label>
+    <div class="extras-container" :class="{ 'container-locked': isLocked }">
+        <label class="form-label" for="nrpn" :class="{ 'label-locked': isLocked }">{{ LABEL_TEXT }}</label>
         <input type="number" class="form-control" id="nrpn" ref="nrpnInput" v-model="model.keyOrValue" @change="numChanged(model.keyOrValue)"
-            :max="MAX_VALUE" :min="0" />
+            :max="MAX_VALUE" :min="0" :disabled="isLocked" :class="{ 'input-locked': isLocked }" />
     </div>
 </template>
 
@@ -47,7 +51,7 @@ defineEmits(['update:modelValue']);
     width: 80px;
     background-color: var(--color-primary);
     border: none;
-    color: var(--color-text-primary);
+    color: black;
 }
 
 .extras-container label {

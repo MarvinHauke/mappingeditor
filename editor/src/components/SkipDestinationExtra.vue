@@ -5,6 +5,7 @@ import { DestinationExtra } from '../modules/documentModel';
 
 const props = defineProps<{
   modelValue: DestinationExtra
+  isLocked?: boolean
 }>();
 
 const emit = defineEmits<{
@@ -24,8 +25,9 @@ const keyOrValue = computed({
 </script>
 
 <template>
-  <input type="number" v-model.number="keyOrValue" :title="props.modelValue.abbr" class="form-control border-dark pt-1" 
-    :class="{ 'select-empty': props.modelValue.keyOrValue === 65535 }" 
+  <input type="number" v-model.number="keyOrValue" :title="props.modelValue.abbr" class="form-control border-dark pt-1"
+    :class="{ 'select-empty': props.modelValue.keyOrValue === 65535, 'input-locked': isLocked }"
+    :disabled="isLocked"
     min="0" max="65535" />
 </template>
 

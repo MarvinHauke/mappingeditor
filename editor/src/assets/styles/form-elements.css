@@ -83,6 +83,51 @@
   background-color: var(--color-disabled) !important;
 }
 
+/**
+ * Locked state for select and input elements
+ * Applied when the current slot (A/B) is locked
+ */
+.select-locked,
+.select-locked:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  background-color: var(--color-disabled) !important;
+}
+
+.input-locked,
+.input-locked:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  background-color: var(--color-disabled) !important;
+}
+
+/* Locked state for checkboxes */
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Locked state for buttons */
+.btn-locked,
+.btn-locked:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Locked state for containers and sections */
+.container-locked {
+  opacity: 0.5 !important;
+}
+
+.section-locked {
+  opacity: 0.5 !important;
+  background-color: var(--color-disabled) !important;
+}
+
+.label-locked {
+  opacity: 0.5 !important;
+}
+
 /* ========== Extra Component Containers ========== */
 
 /**

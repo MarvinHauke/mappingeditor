@@ -31,6 +31,8 @@ import RowCommentSection from './RowCommentSection.vue';
 import SelectionToolbar from './SelectionToolbar.vue';
 import SettingsPanel from './SettingsPanel.vue';
 import WarningLog from './WarningLog.vue';
+import MenuButton from './MenuButton.vue';
+import ToastNotifications from './ToastNotifications.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
@@ -62,18 +64,12 @@ const rowComments = ref<Record<number, string>>({});
 // Row colors storage (keyed by row index)
 const rowColors = ref<Map<number, string>>(new Map());
 
-// Toast notification state for transient messages
-interface ToastMessage {
-  message: string;
-  type: 'info' | 'warning' | 'error';
-  timeout?: number;
-}
-const toastMessages = ref<ToastMessage[]>([]);
-let toastIdCounter = 0;
+// Toast notifications component ref
+const toastNotifications = ref<InstanceType<typeof ToastNotifications> | null>(null);
 
 function showToast(message: string, type: 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
-  const toast: ToastMessage = { message, type };
-  toastMessages.value.push(toast);
+  // Show toast notification
+  toastNotifications.value?.show(message, type, duration);
 
   // Also log to warning log
   if (type === 'info') {
@@ -83,19 +79,6 @@ function showToast(message: string, type: 'info' | 'warning' | 'error' = 'info',
   } else {
     logError('system', message);
   }
-
-  if (duration > 0) {
-    setTimeout(() => {
-      const index = toastMessages.value.indexOf(toast);
-      if (index > -1) {
-        toastMessages.value.splice(index, 1);
-      }
-    }, duration);
-  }
-}
-
-function dismissToast(index: number): void {
-  toastMessages.value.splice(index, 1);
 }
 
 
@@ -365,15 +348,15 @@ async function handleSlotSwitch(slot: 'A' | 'B'): Promise<void> {
     const cached = await loadFromSlot(slot);
     if (cached) {
       deserializeToDocument(cached);
-      showToast(`Loaded mapping from slot ${slot}`, 'info');
+      logInfo('system', `Loaded mapping from slot ${slot}`);
     } else {
       // No data in slot, reset to empty
       reset();
-      showToast(`Slot ${slot} is empty`, 'info');
+      logInfo('system', `Slot ${slot} is empty`);
     }
   } catch (error) {
     console.error('Failed to load from slot:', error);
-    showToast('Failed to load cached mapping', 'error');
+    logError('system', 'Failed to load cached mapping');
   }
 }
 
@@ -974,33 +957,7 @@ function downloadMap() {
 </script>
 <template>
   <!-- Toast Notifications -->
-  <div class="toast-container position-fixed bottom-0 start-0 p-3" style="z-index: 1100;">
-    <div
-      v-for="(toast, index) in toastMessages"
-      :key="index"
-      class="toast show"
-      :class="{
-        'bg-info text-white': toast.type === 'info',
-        'bg-warning text-dark': toast.type === 'warning',
-        'bg-danger text-white': toast.type === 'error'
-      }"
-      role="alert"
-      aria-live="assertive"
-      aria-atomic="true"
-    >
-      <div class="toast-header">
-        <strong class="me-auto">
-          <span class="toast-type-label" :class="'toast-type-' + toast.type">
-            {{ toast.type.toUpperCase() }}
-          </span>
-        </strong>
-        <button type="button" class="btn-close" @click="dismissToast(index)" aria-label="Close"></button>
-      </div>
-      <div class="toast-body">
-        {{ toast.message }}
-      </div>
-    </div>
-  </div>
+  <ToastNotifications ref="toastNotifications" />
 
   <header>
     <div class="pt-5">
@@ -1016,6 +973,9 @@ function downloadMap() {
     v-model:show-midi-monitor="showMidiMonitor"
     v-model:show-variable-monitor="showVariableMonitor"
     v-model:show-warning-log="showWarningLog"
+    :header-text="mappingDocument.header.headerText"
+    :firmware-major="mappingDocument.header.majorVersion"
+    :firmware-minor="mappingDocument.header.minorVersion"
     @expanded-change="settingsPanelExpanded = $event"
   />
 
@@ -1076,80 +1036,92 @@ function downloadMap() {
 
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
-      <label id="fileInputLabel" for="fileInput" class="btn btn-info border-dark"
-        title="Open a .MAP or .JSON file.">Open
-        Mapping File</label>
+      <label id="fileInputLabel" for="fileInput">
+        <MenuButton variant="primary" border-radius="left" title="Open a .MAP or .JSON file.">
+          Open Mapping File
+        </MenuButton>
+      </label>
       <input id="fileInput" class="d-none" type="file" accept=".map, .json" ref="fileInput" @change="readFile" />
-      <button id="buttonReset" type="button" class="btn btn-info border-dark" @click="reset">Reset</button>
-      <button
-        id="buttonAnalyze"
-        type="button"
-        class="btn border-dark position-relative"
-        :class="warningCount > 0 ? 'btn-warning' : 'btn-info'"
+      <MenuButton
+        variant="primary"
+        border-radius="right"
+        data-variant="reset"
+        @click="reset"
+      >
+        Reset
+      </MenuButton>
+      <MenuButton
+        variant="primary"
+        border-radius="all"
+        class="position-relative analyze-btn"
+        :class="{ 'analyze-warning': warningCount > 0 }"
         @click="analyzeDocument"
-        title="Run static analysis to detect potential issues">
+        title="Run static analysis to detect potential issues"
+      >
         Analyze
         <span
           v-if="warningCount > 0"
           class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
-          :class="errorCount > 0 ? 'bg-danger' : 'bg-warning text-dark'">
+          :class="errorCount > 0 ? 'bg-danger' : 'bg-warning text-dark'"
+        >
           {{ warningCount }}
           <span class="visually-hidden">warnings</span>
         </span>
-      </button>
+      </MenuButton>
 
-      <!-- A/B Cache Toggle -->
-      <div class="slot-toggle-group">
-        <button
-          class="slot-btn"
-          :class="{ active: activeSlot === 'A', 'has-data': hasDataA, locked: activeSlot === 'A' && isLockedA }"
+      <!-- A/B Cache Toggle and Filename -->
+      <div class="slot-filename-group">
+        <MenuButton
+          variant="slot"
+          :active="activeSlot === 'A'"
+          :locked="activeSlot === 'A' && isLockedA"
+          :has-data="hasDataA"
           @click="handleSlotSwitch('A')"
           :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock' : 'Click to lock') : 'Switch to slot A'"
         >
           A
-        </button>
-        <button
-          class="slot-btn"
-          :class="{ active: activeSlot === 'B', 'has-data': hasDataB, locked: activeSlot === 'B' && isLockedB }"
+        </MenuButton>
+        <MenuButton
+          variant="slot"
+          :active="activeSlot === 'B'"
+          :locked="activeSlot === 'B' && isLockedB"
+          :has-data="hasDataB"
           @click="handleSlotSwitch('B')"
           :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock' : 'Click to lock') : 'Switch to slot B'"
         >
           B
-        </button>
+        </MenuButton>
+        <input
+          type="text"
+          class="filename-input"
+          v-model="mappingDocument.header.fileName"
+          :disabled="isCurrentLocked"
+          :class="{ 'input-locked': isCurrentLocked }"
+          title="File name for exports"
+        />
       </div>
     </div>
     <div id="downloadActionsContainer" class="pt-3">
-      <div class="header-label">Save as:</div>
-      <div>
-        <button id="buttonDownloadHtml" type="button" @click="downloadHtml" class="btn btn-info border-dark">
-          HTML</button>
-        <button id="buttonDownloadMd" type="button" @click="downloadMarkdown(false)"
-          class="btn btn-info border-dark">Markdown</button>
-        <button id="buttonDownloadMd" type="button" @click="downloadMarkdown(true)" class="btn btn-info border-dark">NS
-          Screens (MD)</button>
-        <button id="buttonDownloadJson" type="button" @click="downloadJson" class="btn btn-info border-dark">
-          JSON</button>
-        <button id="buttonDownloadMap" type="button" @click="downloadMap" class="btn btn-info border-dark">
-          MAP</button>
+      <div class="download-label">Save as:</div>
+      <div class="download-buttons">
+        <MenuButton variant="download" border-radius="left" @click="downloadHtml">
+          HTML
+        </MenuButton>
+        <MenuButton variant="download" border-radius="none" @click="downloadMarkdown(false)">
+          Markdown
+        </MenuButton>
+        <MenuButton variant="download" border-radius="none" @click="downloadMarkdown(true)">
+          NS Screens (MD)
+        </MenuButton>
+        <MenuButton variant="download" border-radius="none" @click="downloadJson">
+          JSON
+        </MenuButton>
+        <MenuButton variant="download" border-radius="right" @click="downloadMap">
+          MAP
+        </MenuButton>
       </div>
     </div>
     <div id="docEditor" class="pt-3">
-      <div class="pt-2">
-        <div class="header-label">Header Text:</div>
-        <div class="header-val">{{ mappingDocument.header.headerText }}</div>
-      </div>
-      <div class="pt-2">
-        <div class="header-label">Firmware Major Version:</div>
-        <div class="header-val">{{ mappingDocument.header.majorVersion }}</div>
-      </div>
-      <div class="pt-2">
-        <div class="header-label">Firmware Minor Version:</div>
-        <div class="header-val">{{ mappingDocument.header.minorVersion }}</div>
-      </div>
-      <div class="pt-2">
-        <div class="header-label">File Name:</div>
-        <div class="header-val"><input type="text" id="input" v-model="mappingDocument.header.fileName" :disabled="isCurrentLocked" :class="{ 'input-locked': isCurrentLocked }" /></div>
-      </div>
       <div id="rowsGridContainerHeader" class="pt-3">
         <div>Row</div>
         <div>Source Type</div>
@@ -1218,6 +1190,7 @@ function downloadMap() {
             v-model="row.source.extra as SourceExtra"
             mode="source"
             :source-type="row.source.type.key"
+            :is-locked="isCurrentLocked"
             @function-update="(functionKey: number) => {
               const sourceFunc = currentlySelectedSourceTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
               if (sourceFunc) {
@@ -1229,15 +1202,18 @@ function downloadMap() {
           <!-- Calc or Skip Source Type -->
           <CalcSkipSourceExtra v-model="row.source.extra as SourceExtra"
             v-else-if="row.source.type.key === CALC_SOURCE_TYPE_KEY || row.source.type.key === SKIP_SOURCE_TYPE_KEY"
-            :display-row-index-as-hex="displayRowIndexAsHex" />
+            :display-row-index-as-hex="displayRowIndexAsHex"
+            :is-locked="isCurrentLocked" />
 
           <!-- NRPN Source Type -->
           <NrpnSourceExtra v-model="row.source.extra as SourceExtra"
-            v-else-if="row.source.type.key === MIDI_NRPN_SOURCE_TYPE_KEY" />
+            v-else-if="row.source.type.key === MIDI_NRPN_SOURCE_TYPE_KEY"
+            :is-locked="isCurrentLocked" />
 
           <!-- Variable Source Type -->
           <VariableSourceExtra v-model="row.source.extra as SourceExtra"
-            v-else-if="row.source.type.key === VAR_SOURCE_TYPE_KEY" />
+            v-else-if="row.source.type.key === VAR_SOURCE_TYPE_KEY"
+            :is-locked="isCurrentLocked" />
 
           <!-- External Source Type, Keyboard Function -->
           <select
@@ -1332,6 +1308,7 @@ function downloadMap() {
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key === MIDI_LEARN_FUNCTION_KEY"
             v-model="row.destination.extra as DestinationExtra"
             mode="destination"
+            :is-locked="isCurrentLocked"
             @function-update="(functionKey: number) => {
               const destFunc = currentlySelectedDestinationTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
               if (destFunc) {
@@ -1343,45 +1320,54 @@ function downloadMap() {
           <!-- Midi CC Destination Type -->
           <MidiCcDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key !== MIDI_LEARN_FUNCTION_KEY"
-            :midi-cc-extras="currentlySelectedDestinationTypes[row.index]?.extras" />
+            :midi-cc-extras="currentlySelectedDestinationTypes[row.index]?.extras"
+            :is-locked="isCurrentLocked" />
 
           <!-- Skip Destination Type -->
           <SkipDestinationExtra v-model="row.destination.extra as DestinationExtra"
-            v-else-if="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY" />
+            v-else-if="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY"
+            :is-locked="isCurrentLocked" />
 
           <!-- Variable Destination Type -->
           <VariableDestinationExtra v-model="row.destination.extra as DestinationExtra"
-            v-else-if="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY" />
+            v-else-if="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY"
+            :is-locked="isCurrentLocked" />
 
           <!-- DUAL Destination Type -->
           <DualDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === DUAL_DESTINATION_TYPE_KEY"
-            :dual-extras="currentlySelectedDestinationTypes[row.index]?.extras" />
+            :dual-extras="currentlySelectedDestinationTypes[row.index]?.extras"
+            :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Shader Select -->
           <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_SELECT_FUNCTION_KEY"
-            :visu-extras="visuShaderSelectExtras" />
+            :visu-extras="visuShaderSelectExtras"
+            :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Shader Functions -->
           <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_FUNCTIONS_FUNCTION_KEY"
-            :visu-extras="visuShaderFunctionsExtras" />
+            :visu-extras="visuShaderFunctionsExtras"
+            :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Modulators -->
           <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_MODULATORS_FUNCTION_KEY"
-            :visu-extras="visuModulatorsExtras" />
+            :visu-extras="visuModulatorsExtras"
+            :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Envelopes -->
           <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_ENVELOPES_FUNCTION_KEY"
-            :visu-extras="visuEnvelopesExtras" />
+            :visu-extras="visuEnvelopesExtras"
+            :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - LFOs -->
           <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_LFOS_FUNCTION_KEY"
-            :visu-extras="visuLfosExtras" />
+            :visu-extras="visuLfosExtras"
+            :is-locked="isCurrentLocked" />
 
           <!-- Global Buttons Destination Type -->
           <select
@@ -1476,36 +1462,31 @@ h2 {
   color: var(--color-text-yellow);
 }
 
-button,
-label:not(.label-empty) {
-  background-color: var(--color-primary) !important;
-}
-
-#buttonDownloadHtml,
+/* File input label wrapping MenuButton */
 #fileInputLabel {
-  border-radius: var(--form-border-radius-left);
+  display: inline-block;
+  cursor: pointer;
 }
 
-#buttonDownloadMap,
-#buttonReset {
-  border-radius: var(--form-border-radius-right);
+#fileInputLabel :deep(.menu-btn) {
+  pointer-events: none;
 }
 
-.header-label {
-  display: inline-flex;
-  width: 13em;
+/* Download container styles */
+.download-label {
+  display: block;
   font-weight: bold;
+  margin-bottom: 8px;
 }
 
-.header-val {
+.download-buttons {
   display: inline-flex;
-  color: var(--color-text-yellow) !important;
 }
 
-.header-val input[type="text"] {
-  background-color: var(--color-primary);
-  border-radius: 5px !important;
-  padding-left: 0.4em;
+/* Analyze button warning state */
+.analyze-btn.analyze-warning {
+  background-color: #ffc107 !important;
+  color: #000 !important;
 }
 
 #rowsGridContainer,
@@ -1646,76 +1627,36 @@ label:not(.label-empty) {
   box-shadow: var(--shadow-hover);
 }
 
-/* Toast type labels */
-.toast-type-label {
-  font-weight: bold;
-  text-transform: uppercase;
-  font-size: 0.75rem;
-  padding: 2px 6px;
-  border-radius: 2px;
-}
-
-.toast-type-info {
-  background: #34cc99;
-  color: #000;
-}
-
-.toast-type-warning {
-  background: #ffc107;
-  color: #000;
-}
-
-.toast-type-error {
-  background: #dc3545;
-  color: #fff;
-}
-
-/* A/B Cache Toggle Buttons */
-.slot-toggle-group {
+/* A/B Cache Toggle Group with Filename */
+.slot-filename-group {
   display: inline-flex;
   gap: 4px;
   margin-left: 20px;
   align-items: center;
 }
 
-.slot-btn {
-  width: var(--form-height);
+.filename-input {
   height: var(--form-height);
-  border: 2px solid var(--color-primary);
-  background-color: var(--color-dark-bg);
-  color: #fff;
-  font-weight: bold;
+  background-color: var(--color-primary);
+  border: 1px solid var(--color-dark-bg);
+  border-radius: var(--form-border-radius);
+  color: #F1F700;
   font-size: var(--form-font-size);
-  cursor: pointer;
-  transition: background-color var(--transition-standard);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  font-weight: bold;
+  padding: 0 10px;
+  min-width: 150px;
 }
 
-.slot-btn:hover:not(:disabled) {
+.filename-input:focus {
+  outline: none;
+  border-color: var(--color-hover);
   background-color: rgba(52, 204, 153, 0.3);
 }
 
-.slot-btn.active {
-  background-color: #F1F700;
-  color: #000;
-  border-color: #F1F700;
-  cursor: pointer;
-}
-
-.slot-btn.has-data:not(.active) {
-  border-style: solid;
-}
-
-.slot-btn:not(.has-data):not(.active) {
-  border-style: dashed;
-  opacity: 0.7;
-}
-
-.slot-btn.active.locked {
-  box-shadow: 0 0 8px 2px #dc3545, inset 0 0 4px rgba(220, 53, 69, 0.3);
-  border-color: #dc3545;
+.filename-input.input-locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--color-disabled);
 }
 
 /* Locked state overlay for editor */

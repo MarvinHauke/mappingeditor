@@ -5,7 +5,10 @@ import { DestinationExtra } from '../modules/documentModel';
 
 const MAX_VALUE = 4095;
 const model = defineModel<DestinationExtra>({ required: true });
-const props = defineProps({ midiCcExtras: { type: Array<MappingTuple>, required: true } });
+const props = defineProps<{
+  midiCcExtras: MappingTuple[]
+  isLocked?: boolean
+}>();
 const nrpnInput = ref<HTMLInputElement>();
 const nrpnSelect = ref<HTMLSelectElement>();
 const nrpnCheck = ref<HTMLInputElement>();
@@ -38,21 +41,22 @@ defineEmits(['update:modelValue']);
 </script>
 
 <template>
-    <div class="extras-container">
-        <div class="first" :class="{ 'input-disabled': !showNrpn }" :title="model.abbr">
+    <div class="extras-container" :class="{ 'container-locked': isLocked }">
+        <div class="first" :class="{ 'input-disabled': !showNrpn, 'section-locked': isLocked }" :title="model.abbr">
             <label for="nrpnCheck">NRPN:</label>
             <div>
-                <input type="checkbox" class="form-check-input" id="nrpnCheck" ref="nrpnCheck" @change="checkChanged" />
+                <input type="checkbox" class="form-check-input" id="nrpnCheck" ref="nrpnCheck" @change="checkChanged" :disabled="isLocked" />
             </div>
         </div>
-        <div class="second">
+        <div class="second" :class="{ 'section-locked': isLocked }">
             <select v-if="!showNrpn" :value="model.keyOrValue" :title="model.abbr" class="form-select border-dark pt-1" id="nrpnSelect" ref="nrpnSelect" @change="selectChanged"
-                :class="{ 'select-empty': model.keyOrValue === EMPTY_KEY }">
+                :class="{ 'select-empty': model.keyOrValue === EMPTY_KEY, 'select-locked': isLocked }"
+                :disabled="isLocked">
                 <option v-for="extra in props.midiCcExtras" :key="extra.key" :value="extra.key" :title="extra.abbr">
                     {{ extra.description }}</option>
             </select>
             <input v-else type="number" class="form-control" id="nrpnInput" ref="nrpnInput" v-model="nrpnValue"
-                @change="numChanged()" :max="MAX_VALUE" :min="0" :title="model.description" />
+                @change="numChanged()" :max="MAX_VALUE" :min="0" :title="model.description" :disabled="isLocked" :class="{ 'input-locked': isLocked }" />
         </div>
     </div>
 </template>
@@ -96,6 +100,7 @@ defineEmits(['update:modelValue']);
 
 .second>input {
     background-color: var(--color-primary);
+    color: black;
 }
 
 .second>select {
