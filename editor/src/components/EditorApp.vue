@@ -30,7 +30,8 @@ import MidiLearnExtra from './MidiLearnExtra.vue';
 import RowCommentSection from './RowCommentSection.vue';
 import SelectionToolbar from './SelectionToolbar.vue';
 import SettingsPanel from './SettingsPanel.vue';
-import WarningLog from './WarningLog.vue';
+import LogMonitor from './LogMonitor.vue';
+import GlobalDocumentationPanel from './GlobalDocumentationPanel.vue';
 import MenuButton from './MenuButton.vue';
 import IconButton from './IconButton.vue';
 import ToastNotifications from './ToastNotifications.vue';
@@ -68,12 +69,12 @@ const rowColors = ref<Map<number, string>>(new Map());
 // Toast notifications component ref
 const toastNotifications = ref<InstanceType<typeof ToastNotifications> | null>(null);
 
-function showToast(message: string, type: 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
+function showToast(message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info', duration = 5000): void {
   // Show toast notification
   toastNotifications.value?.show(message, type, duration);
 
-  // Also log to warning log
-  if (type === 'info') {
+  // Also log to warning log (success messages go to info log)
+  if (type === 'info' || type === 'success') {
     logInfo('system', message);
   } else if (type === 'warning') {
     logWarning('system', message);
@@ -95,19 +96,33 @@ const variableMonitorExpanded = ref(false);
 // Selection Toolbar expanded state
 const selectionToolbarExpanded = ref(false);
 
-// Warning Log expanded state
-const warningLogExpanded = ref(false);
+// Log Monitor expanded state
+const logMonitorExpanded = ref(false);
+
+// Global Documentation Panel expanded state
+const getInitialGlobalDocExpanded = (): boolean => {
+  const stored = localStorage.getItem('global-doc-panel-expanded');
+  return stored ? JSON.parse(stored) : false;
+};
+const globalDocPanelExpanded = ref(getInitialGlobalDocExpanded());
+
+// Persist expanded state changes
+watch(globalDocPanelExpanded, (newValue) => {
+  localStorage.setItem('global-doc-panel-expanded', JSON.stringify(newValue));
+});
 
 // Panel visibility state (controlled from Settings Panel)
 const SELECTION_TOOLBAR_VISIBLE_KEY = 'nerdseq-show-selection-toolbar';
 const MIDI_MONITOR_VISIBLE_KEY = 'nerdseq-show-midi-monitor';
 const VARIABLE_MONITOR_VISIBLE_KEY = 'nerdseq-show-variable-monitor';
-const WARNING_LOG_VISIBLE_KEY = 'nerdseq-show-warning-log';
+const LOG_MONITOR_VISIBLE_KEY = 'nerdseq-show-log-monitor';
+const DESCRIPTION_VISIBLE_KEY = 'nerdseq-show-description';
 // Selection Toolbar defaults to true (enabled by default)
 const showSelectionToolbar = ref(localStorage.getItem(SELECTION_TOOLBAR_VISIBLE_KEY) !== 'false');
 const showMidiMonitor = ref(localStorage.getItem(MIDI_MONITOR_VISIBLE_KEY) === 'true');
 const showVariableMonitor = ref(localStorage.getItem(VARIABLE_MONITOR_VISIBLE_KEY) === 'true');
-const showWarningLog = ref(localStorage.getItem(WARNING_LOG_VISIBLE_KEY) === 'true');
+const showLogMonitor = ref(localStorage.getItem(LOG_MONITOR_VISIBLE_KEY) === 'true');
+const showDescription = ref(localStorage.getItem(DESCRIPTION_VISIBLE_KEY) === 'true');
 
 // Watch and persist panel visibility
 watch(showSelectionToolbar, (val) => {
@@ -122,9 +137,13 @@ watch(showVariableMonitor, (val) => {
   localStorage.setItem(VARIABLE_MONITOR_VISIBLE_KEY, val.toString());
   if (!val) variableMonitorExpanded.value = false;
 });
-watch(showWarningLog, (val) => {
-  localStorage.setItem(WARNING_LOG_VISIBLE_KEY, val.toString());
-  if (!val) warningLogExpanded.value = false;
+watch(showLogMonitor, (val) => {
+  localStorage.setItem(LOG_MONITOR_VISIBLE_KEY, val.toString());
+  if (!val) logMonitorExpanded.value = false;
+});
+watch(showDescription, (val) => {
+  localStorage.setItem(DESCRIPTION_VISIBLE_KEY, val.toString());
+  if (!val) globalDocPanelExpanded.value = false;
 });
 
 // Row index display format (hex/decimal)
@@ -220,6 +239,7 @@ function serializeDocument(): CachedMapping {
     },
     rowColors: Object.fromEntries(rowColors.value),
     rowComments: { ...rowComments.value },
+    globalComment: doc.globalComment,
     timestamp: Date.now()
   };
 }
@@ -290,10 +310,15 @@ function deserializeToDocument(cached: CachedMapping): void {
   
   // Restore comments
   rowComments.value = { ...cached.rowComments };
-  
+
+  // Restore global comment
+  if (cached.globalComment) {
+    doc.globalComment = cached.globalComment;
+  }
+
   // Clear selection
   clearRowSelection();
-  
+
   // Run analysis
   analyzeDocument();
 }
@@ -401,6 +426,14 @@ function clearRowSelection(): void {
 
 function isRowSelected(rowIndex: number): boolean {
   return selectedRowIndices.value.has(rowIndex);
+}
+
+// Variable slider handler
+function updateVariableValue(variableIndex: number, value: number): void {
+  if (variableIndex >= 0 && variableIndex < mappingDocument.value.variables.length) {
+    mappingDocument.value.variables[variableIndex].value = value;
+    scheduleCacheSave();
+  }
 }
 
 function formatRowIndex(index: number): string {
@@ -702,7 +735,7 @@ function readFile() {
             }
           }
 
-          // Load editor metadata (row colors and comments)
+          // Load editor metadata (row colors, comments, and global documentation)
           if (jsonObj.editorMetadata) {
             const metadata = jsonObj.editorMetadata;
 
@@ -720,6 +753,11 @@ function readFile() {
             // Load row comments
             if (metadata.rowComments && typeof metadata.rowComments === 'object') {
               rowComments.value = metadata.rowComments as Record<number, string>;
+            }
+
+            // Load global documentation field
+            if (metadata.globalComment && typeof metadata.globalComment === 'string') {
+              mappingDoc.globalComment = metadata.globalComment;
             }
           }
 
@@ -984,7 +1022,8 @@ function downloadMap() {
     v-model:show-selection-toolbar="showSelectionToolbar"
     v-model:show-midi-monitor="showMidiMonitor"
     v-model:show-variable-monitor="showVariableMonitor"
-    v-model:show-warning-log="showWarningLog"
+    v-model:show-log-monitor="showLogMonitor"
+    v-model:show-description="showDescription"
     :header-text="mappingDocument.header.headerText"
     :firmware-major="mappingDocument.header.majorVersion"
     :firmware-minor="mappingDocument.header.minorVersion"
@@ -1033,9 +1072,9 @@ function downloadMap() {
     @expanded-change="variableMonitorExpanded = $event"
   />
 
-  <!-- Warning Log (docked to left of Variable Monitor) -->
-  <WarningLog
-    v-if="showWarningLog"
+  <!-- Log Monitor (docked to left of Variable Monitor) -->
+  <LogMonitor
+    v-if="showLogMonitor"
     :settings-panel-expanded="settingsPanelExpanded"
     :show-selection-toolbar="showSelectionToolbar"
     :selection-toolbar-expanded="selectionToolbarExpanded"
@@ -1043,28 +1082,32 @@ function downloadMap() {
     :midi-monitor-expanded="midiMonitorExpanded"
     :show-variable-monitor="showVariableMonitor"
     :variable-monitor-expanded="variableMonitorExpanded"
-    @expanded-change="warningLogExpanded = $event"
+    @expanded-change="logMonitorExpanded = $event"
   />
 
   <main>
     <div id="mappingFileSelectContainer" class="pt-3">
-      <label id="fileInputLabel" for="fileInput">
-        <MenuButton variant="primary" border-radius="left" title="Open a .MAP or .JSON file.">
-          Open Mapping File
-        </MenuButton>
-      </label>
+      <MenuButton
+        variant="primary"
+        border-radius="left"
+        title="Open a .MAP or .JSON file."
+        @click="fileInput?.click()"
+      >
+        Open Mapping File
+      </MenuButton>
       <input id="fileInput" class="d-none" type="file" accept=".map, .json" ref="fileInput" @change="readFile" />
       <MenuButton
         variant="primary"
-        border-radius="right"
+        border-radius="none"
         data-variant="reset"
         @click="reset"
+        title="Reset the current mapping file"
       >
         Reset
       </MenuButton>
       <MenuButton
         variant="primary"
-        border-radius="all"
+        border-radius="none"
         class="position-relative analyze-btn"
         :class="{ 'analyze-warning': warningCount > 0 }"
         @click="analyzeDocument"
@@ -1082,36 +1125,42 @@ function downloadMap() {
       </MenuButton>
 
       <!-- A/B Cache Toggle and Filename -->
-      <div class="slot-filename-group">
-        <MenuButton
-          variant="slot"
-          :active="activeSlot === 'A'"
-          :locked="activeSlot === 'A' && isLockedA"
-          :has-data="hasDataA"
-          @click="handleSlotSwitch('A')"
-          :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock' : 'Click to lock') : 'Switch to slot A'"
-        >
-          A
-        </MenuButton>
-        <MenuButton
-          variant="slot"
-          :active="activeSlot === 'B'"
-          :locked="activeSlot === 'B' && isLockedB"
-          :has-data="hasDataB"
-          @click="handleSlotSwitch('B')"
-          :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock' : 'Click to lock') : 'Switch to slot B'"
-        >
-          B
-        </MenuButton>
-        <input
-          type="text"
-          class="filename-input"
-          v-model="mappingDocument.header.fileName"
-          :disabled="isCurrentLocked"
-          :class="{ 'input-locked': isCurrentLocked }"
-          title="File name for exports"
-        />
-      </div>
+      <MenuButton
+        variant="slot"
+        :active="activeSlot === 'A'"
+        :locked="activeSlot === 'A' && isLockedA"
+        :has-data="hasDataA"
+        @click="handleSlotSwitch('A')"
+        :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock' : 'Click to lock') : 'Switch to slot A'"
+      >
+        A
+      </MenuButton>
+      <MenuButton
+        variant="slot"
+        :active="activeSlot === 'B'"
+        :locked="activeSlot === 'B' && isLockedB"
+        :has-data="hasDataB"
+        @click="handleSlotSwitch('B')"
+        :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock' : 'Click to lock') : 'Switch to slot B'"
+      >
+        B
+      </MenuButton>
+      <input
+        type="text"
+        class="filename-input"
+        v-model="mappingDocument.header.fileName"
+        :disabled="isCurrentLocked"
+        :class="{ 'input-locked': isCurrentLocked }"
+        title="File name for exports"
+      />
+
+      <!-- Global Description Panel -->
+      <GlobalDocumentationPanel
+        v-if="showDescription"
+        v-model:global-comment="mappingDocument.globalComment"
+        :expanded="globalDocPanelExpanded"
+        @toggle="globalDocPanelExpanded = !globalDocPanelExpanded"
+      />
     </div>
     <div id="downloadActionsContainer" class="pt-3">
       <div class="download-label">Save as:</div>
@@ -1133,6 +1182,7 @@ function downloadMap() {
         </MenuButton>
       </div>
     </div>
+
     <div id="docEditor" class="pt-3">
       <div id="rowsGridContainerHeader" class="pt-3">
         <div>Row</div>
@@ -1457,12 +1507,19 @@ function downloadMap() {
           :has-copied-source="hasCopiedSource"
           :has-copied-destination="hasCopiedDestination"
           :warnings="getRowWarnings(row.index)"
+          :source-value="row.source.type.key === VAR_SOURCE_TYPE_KEY && row.source.extra.keyOrValue === 0 && row.source.function.key >= 0 && row.source.function.key < 16 ? mappingDocument.variables[row.source.function.key].value : row.source.extra.keyOrValue"
+          :destination-value="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY && row.destination.extra.keyOrValue === 0 && row.destination.function.key >= 0 && row.destination.function.key < 16 ? mappingDocument.variables[row.destination.function.key].value : row.destination.extra.keyOrValue"
+          :is-source-variable="row.source.type.key === VAR_SOURCE_TYPE_KEY && row.source.extra.keyOrValue === 0 && row.source.function.key >= 0 && row.source.function.key < 16"
+          :source-variable-index="row.source.function.key"
+          :is-destination-variable="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY && row.destination.extra.keyOrValue === 0 && row.destination.function.key >= 0 && row.destination.function.key < 16"
+          :destination-variable-index="row.destination.function.key"
           v-model="rowComments[row.index]"
           @copy-source="copySource"
           @paste-source="pasteSource"
           @clear-source="clearSource"
           @copy-destination="copyDestination"
           @paste-destination="pasteDestination"
+          @update-variable="updateVariableValue"
           @clear-destination="clearDestination"
         />
       </div>
@@ -1482,8 +1539,9 @@ h2 {
   cursor: pointer;
 }
 
-#fileInputLabel :deep(.menu-btn) {
-  pointer-events: none;
+#fileInputLabel :deep(.menu-btn):hover {
+  background-color: var(--color-hover) !important;
+  color: var(--color-text-primary) !important;
 }
 
 /* Download container styles */
@@ -1595,13 +1653,6 @@ h2 {
 
 /* Note: .select-empty and .label-empty are now in global form-elements.css */
 
-.debugValue {
-  color: red;
-  display: inline-flex;
-  width: 100px;
-  font-size: xx-small;
-}
-
 #buttonReset {
   background-color: var(--color-reset) !important;
 }
@@ -1627,14 +1678,28 @@ h2 {
   border-radius: var(--form-border-radius-right);
 }
 
-/* A/B Cache Toggle Group with Filename */
-.slot-filename-group {
-  display: inline-flex;
-  gap: 4px;
-  margin-left: 20px;
-  align-items: center;
+/* Consistent spacing for all controls */
+#mappingFileSelectContainer > *:not(.d-none) {
+  margin-right: 4px;
 }
 
+#mappingFileSelectContainer > *:last-child {
+  margin-right: 0;
+}
+
+/* Remove border-radius gap between grouped buttons */
+#mappingFileSelectContainer :deep(.menu-btn--radius-left),
+#mappingFileSelectContainer :deep(.menu-btn--radius-none) {
+  margin-right: 0;
+}
+
+/* Add spacing after last button in a group */
+#mappingFileSelectContainer :deep(.menu-btn--radius-right),
+#mappingFileSelectContainer :deep(.menu-btn--radius-all) {
+  margin-right: 4px;
+}
+
+/* Filename input inline with buttons */
 .filename-input {
   height: var(--form-height);
   background-color: var(--color-primary);
@@ -1644,7 +1709,9 @@ h2 {
   font-size: var(--form-font-size);
   font-weight: bold;
   padding: 0 10px;
-  min-width: 150px;
+  width: 200px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .filename-input:focus {
@@ -1657,6 +1724,13 @@ h2 {
   opacity: 0.5;
   cursor: not-allowed;
   background-color: var(--color-disabled);
+}
+
+/* Global description panel inline */
+#mappingFileSelectContainer .global-doc-panel {
+  display: inline-block;
+  margin-bottom: 0;
+  vertical-align: middle;
 }
 
 /* Locked state overlay for editor */

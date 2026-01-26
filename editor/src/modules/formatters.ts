@@ -61,6 +61,7 @@ export function toMarkdown(document: MappingDocument, useAbbrivations: boolean =
 export interface EditorMetadata {
     rowColors?: Record<number, string>;
     rowComments?: Record<number, string>;
+    globalComment?: string;
 }
 
 export function toJson(document: MappingDocument, metadata?: EditorMetadata): string {
@@ -85,9 +86,19 @@ export function toJson(document: MappingDocument, metadata?: EditorMetadata): st
         variables: document.variables.map(variable => variable.value)
     };
 
-    // Add editor metadata if provided
-    if (metadata && (Object.keys(metadata.rowColors || {}).length > 0 || Object.keys(metadata.rowComments || {}).length > 0)) {
-        jsonData.editorMetadata = metadata;
+    // Add editor metadata if provided (rowColors, rowComments, etc.)
+    // Also include global documentation field from the document
+    const hasMetadata = metadata && (
+        Object.keys(metadata.rowColors || {}).length > 0 ||
+        Object.keys(metadata.rowComments || {}).length > 0
+    );
+    const hasGlobalComment = document.globalComment;
+
+    if (hasMetadata || hasGlobalComment) {
+        jsonData.editorMetadata = {
+            ...(metadata || {}),
+            globalComment: document.globalComment
+        };
     }
 
     return JSON.stringify(jsonData, null, 2);

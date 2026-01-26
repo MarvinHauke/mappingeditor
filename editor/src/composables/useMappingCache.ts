@@ -41,6 +41,7 @@ export interface CachedMapping {
   document: SerializedDocument;
   rowColors: Record<number, string>;
   rowComments: Record<number, string>;
+  globalComment?: string;
   timestamp: number;
 }
 

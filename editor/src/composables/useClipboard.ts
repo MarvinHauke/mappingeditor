@@ -216,6 +216,59 @@ export interface UseClipboardReturn {
  *
  * @returns Clipboard API with copy/paste/cut/clear/move operations
  */
+/**
+ * Composable for clipboard operations on mapping rows, sources, and destinations.
+ *
+ * Provides copy/paste/cut/clear functionality for:
+ * - Individual rows (both source and destination)
+ * - Multiple rows (with row reference tracking)
+ * - Source parameters only
+ * - Destination parameters only
+ *
+ * **Multi-Row Operations:**
+ * - Copy/Cut/Paste maintain row order and indices
+ * - Move operations (up/down) update row references automatically
+ * - Row reference warnings track potential issues when rows change positions
+ *
+ * **Row Reference Tracking:**
+ * When moving rows, the composable uses rowReferenceService to:
+ * 1. Build position mappings (old index → new index)
+ * 2. Update references in Variable, Calc, and Skip source types
+ * 3. Generate warnings for any problematic reference updates
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   hasCopiedRow,
+ *   copyRow,
+ *   pasteRow,
+ *   clearRow,
+ *   moveRowsUp,
+ *   moveRowsDown
+ * } = useClipboard({
+ *   mappingDocument,
+ *   currentlySelectedSourceTypes,
+ *   currentlySelectedDestinationTypes
+ * });
+ *
+ * // Copy row 5 to clipboard
+ * copyRow(5);
+ *
+ * // Paste to row 10
+ * if (hasCopiedRow.value) {
+ *   pasteRow(10);
+ * }
+ *
+ * // Move multiple rows with reference tracking
+ * const result = moveRowsUp([10, 11, 12]);
+ * if (result.referenceUpdateResult.warnings.length > 0) {
+ *   console.warn('Row references updated:', result.referenceUpdateResult.warnings);
+ * }
+ * ```
+ *
+ * @param options - Configuration object with document refs and type selections
+ * @returns Clipboard operations API
+ */
 export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   const { mappingDocument, currentlySelectedSourceTypes, currentlySelectedDestinationTypes } = options;
 

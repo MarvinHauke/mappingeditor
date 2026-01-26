@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue'
 import BasePanel from './BasePanel.vue'
-import IconButton from './IconButton.vue'
 
 const props = defineProps<{
   displayRowIndexAsHex: boolean
   showSelectionToolbar: boolean
   showMidiMonitor: boolean
   showVariableMonitor: boolean
-  showWarningLog: boolean
+  showLogMonitor: boolean
+  showDescription: boolean
   // Info section props
   headerText: string
   firmwareMajor: number
@@ -20,8 +21,21 @@ const emit = defineEmits<{
   'update:showSelectionToolbar': [value: boolean]
   'update:showMidiMonitor': [value: boolean]
   'update:showVariableMonitor': [value: boolean]
-  'update:showWarningLog': [value: boolean]
+  'update:showLogMonitor': [value: boolean]
+  'update:showDescription': [value: boolean]
 }>()
+
+// Sub-section expanded states
+const panelsSectionExpanded = ref(localStorage.getItem('settings-panels-expanded') !== 'false')
+const infoSectionExpanded = ref(localStorage.getItem('settings-info-expanded') !== 'false')
+
+watch(panelsSectionExpanded, (val) => {
+  localStorage.setItem('settings-panels-expanded', val.toString())
+})
+
+watch(infoSectionExpanded, (val) => {
+  localStorage.setItem('settings-info-expanded', val.toString())
+})
 
 function toggleHexDisplay(): void {
   emit('update:displayRowIndexAsHex', !props.displayRowIndexAsHex)
@@ -39,8 +53,12 @@ function toggleVariableMonitor(): void {
   emit('update:showVariableMonitor', !props.showVariableMonitor)
 }
 
-function toggleWarningLog(): void {
-  emit('update:showWarningLog', !props.showWarningLog)
+function toggleLogMonitor(): void {
+  emit('update:showLogMonitor', !props.showLogMonitor)
+}
+
+function toggleDescription(): void {
+  emit('update:showDescription', !props.showDescription)
 }
 
 function onExpandedChange(expanded: boolean): void {
@@ -59,78 +77,93 @@ function onExpandedChange(expanded: boolean): void {
   >
     <div class="setting-item">
       <span class="setting-label">Row Index Format</span>
-      <IconButton
+      <button
         class="toggle-btn"
         :class="{ active: displayRowIndexAsHex }"
-        size="sm"
-        variant="secondary"
         @click="toggleHexDisplay"
         :title="displayRowIndexAsHex ? 'Switch to decimal (0-69)' : 'Switch to hexadecimal (00-45)'"
       >
         {{ displayRowIndexAsHex ? 'HEX' : 'DEC' }}
-      </IconButton>
+      </button>
     </div>
-    
-    <div class="setting-divider">
+
+    <div class="setting-divider" @click="panelsSectionExpanded = !panelsSectionExpanded">
       <span class="divider-label">Panels</span>
+      <span class="collapse-icon" :class="{ expanded: panelsSectionExpanded }">▸</span>
     </div>
 
-    <div class="setting-item">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="showSelectionToolbar"
-          @change="toggleSelectionToolbar"
-        />
-        <span>Selection Toolbar</span>
-      </label>
+    <div v-if="panelsSectionExpanded" class="collapsible-section">
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="showSelectionToolbar"
+            @change="toggleSelectionToolbar"
+          />
+          <span>Selection Toolbar</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="showMidiMonitor"
+            @change="toggleMidiMonitor"
+          />
+          <span>MIDI Monitor</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="showVariableMonitor"
+            @change="toggleVariableMonitor"
+          />
+          <span>Variable Monitor</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="showLogMonitor"
+            @change="toggleLogMonitor"
+          />
+          <span>Log Monitor</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="showDescription"
+            @change="toggleDescription"
+          />
+          <span>Description</span>
+        </label>
+      </div>
     </div>
 
-    <div class="setting-item">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="showMidiMonitor"
-          @change="toggleMidiMonitor"
-        />
-        <span>MIDI Monitor</span>
-      </label>
-    </div>
-    
-    <div class="setting-item">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="showVariableMonitor"
-          @change="toggleVariableMonitor"
-        />
-        <span>Variable Monitor</span>
-      </label>
-    </div>
-
-    <div class="setting-item">
-      <label class="checkbox-label">
-        <input
-          type="checkbox"
-          :checked="showWarningLog"
-          @change="toggleWarningLog"
-        />
-        <span>Warning Log</span>
-      </label>
-    </div>
-
-    <div class="setting-divider">
+    <div class="setting-divider" @click="infoSectionExpanded = !infoSectionExpanded">
       <span class="divider-label">Info</span>
+      <span class="collapse-icon" :class="{ expanded: infoSectionExpanded }">▸</span>
     </div>
 
-    <div class="info-item">
-      <span class="info-label">Header:</span>
-      <span class="info-value">{{ headerText }}</span>
-    </div>
+    <div v-if="infoSectionExpanded" class="collapsible-section">
+      <div class="info-item">
+        <span class="info-label">Header:</span>
+        <span class="info-value">{{ headerText }}</span>
+      </div>
 
-    <div class="info-item">
-      <span class="info-label">Firmware:</span>
-      <span class="info-value">{{ firmwareMajor }}.{{ firmwareMinor }}</span>
+      <div class="info-item">
+        <span class="info-label">Firmware:</span>
+        <span class="info-value">{{ firmwareMajor }}.{{ firmwareMinor }}</span>
+      </div>
     </div>
   </BasePanel>
 </template>
@@ -151,27 +184,44 @@ function onExpandedChange(expanded: boolean): void {
 
 .toggle-btn {
   width: 100%;
-  font-size: 11px;
-  background-color: rgba(52, 204, 153, 0.2) !important;
-  border-color: #34cc99 !important;
+  font-size: 10px;
+  padding: 4px 6px;
+  background-color: rgba(52, 204, 153, 0.2);
+  border: 1px solid #34cc99;
+  /* border-radius: 3px; */
   color: #34cc99;
   font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .toggle-btn:hover {
-  background-color: rgba(52, 204, 153, 0.4) !important;
+  background-color: rgba(52, 204, 153, 0.4);
 }
 
 .toggle-btn.active {
-  background-color: #F1F700 !important;
+  background-color: #F1F700;
   color: #000;
-  border-color: #F1F700 !important;
+  border-color: #F1F700;
 }
 
 .setting-divider {
   border-top: 1px solid rgba(52, 204, 153, 0.3);
   margin: 8px 0;
   padding-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.setting-divider:hover .divider-label {
+  color: #F1F700;
+}
+
+.setting-divider:hover .collapse-icon {
+  color: #F1F700;
 }
 
 .divider-label {
@@ -180,6 +230,32 @@ function onExpandedChange(expanded: boolean): void {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.collapse-icon {
+  color: #34cc99;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.collapse-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.collapsible-section {
+  animation: slideIn 0.2s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .checkbox-label {

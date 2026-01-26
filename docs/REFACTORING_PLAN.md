@@ -121,29 +121,694 @@ See the **Detailed Implementation Plan** section below for the comprehensive pha
 
 ---
 
+## Completion Status
+
+### ✅ Completed Phases
+
+- **Phase 1:** Short-term wins (ToastNotifications, Buttons, TypeDoc) - COMPLETE
+- **Phase 3:** Global Documentation Panel - COMPLETE
+
+### ⏳ Current Phase
+
+**Phase 3.5:** Action Logging System (NEW) - Preparing for undo/redo
+- Foundation for future undo/redo functionality
+- Non-invasive logging of all document mutations
+- See detailed plan below
+
+### 🔜 Remaining Phases
+
+- **Phase 4:** useFileIO refactoring (integrate with action log)
+- **Phase 5:** usePanelLayout refactoring
+- **Phase 6:** SelectionToolbar Enhancement
+- **Future:** Undo/Redo UI (builds on action log)
+
+---
+
 ## Detailed Implementation Plan
 
 ### Overview
 
-This plan combines short-term refactoring wins with strategic feature implementation to minimize rework and make future large refactorings easier.
+This plan combines strategic refactoring with forward-looking infrastructure. The new **Phase 3.5 (Action Logging System)** prepares the foundation for undo/redo functionality without implementing the full feature yet.
 
 ### Strategic Sequencing
 
-**Key Insight:** Phase 3 (Global Documentation) adds file I/O logic, so it should be implemented BEFORE the useFileIO refactoring. This way, when we extract useFileIO, it will include the complete file I/O logic rather than requiring a second refactoring pass.
+**Updated Sequence:**
 
-### Recommended Implementation Sequence
-
-1. **Phase 1:** Short-term wins (low effort, immediate impact)
-2. **Phase 2:** Row Value Display (small feature, no conflicts)
-3. **Phase 3:** Global Documentation (adds to file I/O before refactoring)
-4. **Phase 4:** useFileIO refactoring (extracts complete file I/O including global docs)
-5. **Phase 5:** usePanelLayout refactoring (architectural improvement)
-6. **Phase 6:** SelectionToolbar Enhancement (benefits from usePanelLayout)
-7. **Future:** Simulation Engine (big features on clean architecture)
+1. ~~**Phase 1:** Short-term wins~~ ✅ COMPLETE
+2. ~~**Phase 3:** Global Documentation~~ ✅ COMPLETE
+3. **Phase 3.5:** Action Logging System (NEW) - Foundation for undo/redo
+4. **Phase 4:** useFileIO refactoring (integrate with action log)
+5. **Phase 5:** usePanelLayout refactoring
+6. **Phase 6:** SelectionToolbar Enhancement
+7. **Future:** Undo/Redo UI implementation Simulation Engine (big features on clean architecture)
 
 ---
 
-### Phase 1: Short-Term Wins
+## Phase 3.5: Action Logging System (NEW)
+
+### Goal
+
+Create a comprehensive action logging system that records all document mutations. This system will serve as the foundation for future undo/redo functionality while remaining non-invasive to existing code.
+
+### Architecture Overview
+
+```typescript
+// Command Pattern - Each action is reversible
+interface Action {
+  type: string;
+  timestamp: number;
+  execute(): void;
+  undo(): void;
+  metadata?: Record<string, unknown>;
+}
+
+// Action Log - Central history
+interface ActionLog {
+  actions: Action[];
+  currentIndex: number;
+  maxSize: number;
+}
+```
+
+### Implementation Steps
+
+#### Step 1: Create Core Action Log Composable
+
+**File:** `editor/src/composables/useActionLog.ts` (NEW)
+
+**Purpose:** Central action logging system with command pattern support.
+
+**API Design:**
+```typescript
+export interface ActionDefinition {
+  type: string;
+  description: string;
+  execute: () => void;
+  undo: () => void;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ActionLogEntry {
+  id: string;
+  type: string;
+  description: string;
+  timestamp: number;
+  metadata?: Record<string, unknown>;
+  // Internal: execute/undo functions stored for future undo/redo
+  _execute?: () => void;
+  _undo?: () => void;
+}
+
+export interface UseActionLogReturn {
+  // State
+  readonly actions: Readonly<Ref<ActionLogEntry[]>>;
+  readonly currentIndex: Ref<number>;
+  readonly canUndo: ComputedRef<boolean>;
+  readonly canRedo: ComputedRef<boolean>;
+  
+  // Logging
+  logAction: (action: ActionDefinition) => void;
+  logSimple: (type: string, description: string, metadata?: Record<string, unknown>) => void;
+  
+  // Future undo/redo (stubbed for now)
+  undo: () => void;
+  redo: () => void;
+  
+  // Management
+  clearLog: () => void;
+  getRecentActions: (count?: number) => ActionLogEntry[];
+  exportLog: () => string;
+}
+
+export function useActionLog(options?: {
+  maxSize?: number;
+  enablePersistence?: boolean;
+}): UseActionLogReturn {
+  const maxSize = options?.maxSize ?? 100;
+  const enablePersistence = options?.enablePersistence ?? false;
+  
+  const actions = ref<ActionLogEntry[]>([]);
+  const currentIndex = ref(-1);
+  
+  const canUndo = computed(() => currentIndex.value >= 0);
+  const canRedo = computed(() => currentIndex.value < actions.value.length - 1);
+  
+  /**
+   * Log an action with full command pattern support
+   */
+  function logAction(action: ActionDefinition): void {
+    const entry: ActionLogEntry = {
+      id: crypto.randomUUID(),
+      type: action.type,
+      description: action.description,
+      timestamp: Date.now(),
+      metadata: action.metadata,
+      _execute: action.execute,
+      _undo: action.undo,
+    };
+    
+    // Clear any redo history when new action is logged
+    if (currentIndex.value < actions.value.length - 1) {
+      actions.value = actions.value.slice(0, currentIndex.value + 1);
+    }
+    
+    actions.value.push(entry);
+    currentIndex.value = actions.value.length - 1;
+    
+    // Enforce max size
+    if (actions.value.length > maxSize) {
+      actions.value = actions.value.slice(-maxSize);
+      currentIndex.value = actions.value.length - 1;
+    }
+    
+    if (enablePersistence) {
+      persistLog();
+    }
+  }
+  
+  /**
+   * Log a simple action without undo support (for analytics/debugging)
+   */
+  function logSimple(type: string, description: string, metadata?: Record<string, unknown>): void {
+    const entry: ActionLogEntry = {
+      id: crypto.randomUUID(),
+      type,
+      description,
+      timestamp: Date.now(),
+      metadata,
+    };
+    
+    actions.value.push(entry);
+    
+    if (actions.value.length > maxSize) {
+      actions.value = actions.value.slice(-maxSize);
+    }
+    
+    if (enablePersistence) {
+      persistLog();
+    }
+  }
+  
+  /**
+   * Undo the last action (stub for now)
+   */
+  function undo(): void {
+    if (!canUndo.value) return;
+    
+    const action = actions.value[currentIndex.value];
+    if (action._undo) {
+      action._undo();
+      currentIndex.value--;
+    } else {
+      console.warn('Cannot undo action without undo function:', action.type);
+    }
+  }
+  
+  /**
+   * Redo the next action (stub for now)
+   */
+  function redo(): void {
+    if (!canRedo.value) return;
+    
+    const action = actions.value[currentIndex.value + 1];
+    if (action._execute) {
+      action._execute();
+      currentIndex.value++;
+    } else {
+      console.warn('Cannot redo action without execute function:', action.type);
+    }
+  }
+  
+  function clearLog(): void {
+    actions.value = [];
+    currentIndex.value = -1;
+    if (enablePersistence) {
+      localStorage.removeItem('actionLog');
+    }
+  }
+  
+  function getRecentActions(count: number = 10): ActionLogEntry[] {
+    return actions.value.slice(-count);
+  }
+  
+  function exportLog(): string {
+    const exportData = actions.value.map(({ id, type, description, timestamp, metadata }) => ({
+      id,
+      type,
+      description,
+      timestamp: new Date(timestamp).toISOString(),
+      metadata,
+    }));
+    return JSON.stringify(exportData, null, 2);
+  }
+  
+  function persistLog(): void {
+    const persistData = actions.value.map(({ id, type, description, timestamp, metadata }) => ({
+      id,
+      type,
+      description,
+      timestamp,
+      metadata,
+    }));
+    localStorage.setItem('actionLog', JSON.stringify(persistData));
+  }
+  
+  // Restore from localStorage on init
+  if (enablePersistence) {
+    const stored = localStorage.getItem('actionLog');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        actions.value = parsed;
+        currentIndex.value = parsed.length - 1;
+      } catch (e) {
+        console.warn('Failed to restore action log:', e);
+      }
+    }
+  }
+  
+  return {
+    actions: readonly(actions),
+    currentIndex,
+    canUndo,
+    canRedo,
+    logAction,
+    logSimple,
+    undo,
+    redo,
+    clearLog,
+    getRecentActions,
+    exportLog,
+  };
+}
+```
+
+**Effort:** 3-4 hours
+
+---
+
+#### Step 2: Define Action Types
+
+**File:** `editor/src/types/actions.ts` (NEW)
+
+**Purpose:** Type definitions for all loggable actions.
+
+```typescript
+/**
+ * Action types for the NerdSEQ Mapping Editor
+ */
+export enum ActionType {
+  // Row operations
+  ROW_EDIT = 'row.edit',
+  ROW_COPY = 'row.copy',
+  ROW_PASTE = 'row.paste',
+  ROW_CLEAR = 'row.clear',
+  ROW_MOVE_UP = 'row.moveUp',
+  ROW_MOVE_DOWN = 'row.moveDown',
+  ROW_COLOR_SET = 'row.color.set',
+  ROW_COMMENT_SET = 'row.comment.set',
+  
+  // Source operations
+  SOURCE_TYPE_SET = 'source.type.set',
+  SOURCE_FUNCTION_SET = 'source.function.set',
+  SOURCE_EXTRA_SET = 'source.extra.set',
+  
+  // Destination operations
+  DEST_TYPE_SET = 'dest.type.set',
+  DEST_FUNCTION_SET = 'dest.function.set',
+  DEST_EXTRA_SET = 'dest.extra.set',
+  
+  // Variable operations
+  VARIABLE_VALUE_SET = 'variable.value.set',
+  VARIABLE_NAME_SET = 'variable.name.set',
+  
+  // Document operations
+  DOC_IMPORT = 'document.import',
+  DOC_EXPORT = 'document.export',
+  DOC_RESET = 'document.reset',
+  DOC_GLOBAL_COMMENT_SET = 'document.globalComment.set',
+  
+  // Multi-row operations
+  MULTI_ROW_COPY = 'multi.row.copy',
+  MULTI_ROW_PASTE = 'multi.row.paste',
+  MULTI_ROW_CLEAR = 'multi.row.clear',
+  MULTI_ROW_COLOR = 'multi.row.color',
+  
+  // Cache operations
+  CACHE_SLOT_SWITCH = 'cache.slot.switch',
+  CACHE_SLOT_LOCK = 'cache.slot.lock',
+  
+  // MIDI operations
+  MIDI_LEARN_START = 'midi.learn.start',
+  MIDI_LEARN_COMPLETE = 'midi.learn.complete',
+  MIDI_LEARN_CANCEL = 'midi.learn.cancel',
+}
+
+/**
+ * Metadata structures for specific action types
+ */
+export interface RowEditMetadata {
+  rowIndex: number;
+  field: 'sourceType' | 'sourceFunction' | 'sourceExtra' | 'destType' | 'destFunction' | 'destExtra';
+  oldValue: number;
+  newValue: number;
+}
+
+export interface RowColorMetadata {
+  rowIndex: number;
+  oldColor?: string;
+  newColor: string;
+}
+
+export interface MultiRowMetadata {
+  rowIndices: number[];
+  operation: string;
+}
+
+export interface DocumentImportMetadata {
+  fileName: string;
+  format: 'map' | 'json';
+  rowCount: number;
+}
+```
+
+**Effort:** 1-2 hours
+
+---
+
+#### Step 3: Integrate Action Logging into EditorApp
+
+**File:** `editor/src/components/EditorApp.vue`
+
+**What to add:**
+
+```typescript
+import { useActionLog } from '@/composables/useActionLog';
+import { ActionType } from '@/types/actions';
+
+// In setup()
+const {
+  logAction,
+  logSimple,
+  actions: actionLog,
+  canUndo,
+  canRedo,
+  exportLog,
+} = useActionLog({
+  maxSize: 100,
+  enablePersistence: false, // Start with false, enable later
+});
+```
+
+**Integration points:**
+
+1. **Row editing** - Log when source/dest type/function/extra changes:
+```typescript
+function updateRowSource(rowIndex: number, field: string, value: number) {
+  const row = mappingDocument.value.rows[rowIndex];
+  const oldValue = row.source[field];
+  
+  logAction({
+    type: ActionType.SOURCE_TYPE_SET,
+    description: `Changed row ${rowIndex} source ${field}`,
+    execute: () => {
+      row.source[field] = value;
+    },
+    undo: () => {
+      row.source[field] = oldValue;
+    },
+    metadata: { rowIndex, field, oldValue, newValue: value },
+  });
+}
+```
+
+2. **Row operations** - Log copy/paste/clear/move:
+```typescript
+function clearRow(rowIndex: number) {
+  const oldRow = { ...mappingDocument.value.rows[rowIndex] };
+  
+  logAction({
+    type: ActionType.ROW_CLEAR,
+    description: `Cleared row ${rowIndex}`,
+    execute: () => {
+      mappingDocument.value.rows[rowIndex].clear();
+    },
+    undo: () => {
+      Object.assign(mappingDocument.value.rows[rowIndex], oldRow);
+    },
+    metadata: { rowIndex },
+  });
+}
+```
+
+3. **File imports** - Log simple (no undo):
+```typescript
+async function readFile(file: File) {
+  // ... existing logic ...
+  
+  logSimple(
+    ActionType.DOC_IMPORT,
+    `Imported ${file.name}`,
+    { fileName: file.name, format: 'map', rowCount: 70 }
+  );
+}
+```
+
+4. **Color/comment changes** - Log with undo:
+```typescript
+function setRowColor(rowIndex: number, color: string) {
+  const oldColor = rowColors.value[rowIndex];
+  
+  logAction({
+    type: ActionType.ROW_COLOR_SET,
+    description: `Set row ${rowIndex} color to ${color}`,
+    execute: () => {
+      rowColors.value[rowIndex] = color;
+    },
+    undo: () => {
+      if (oldColor) {
+        rowColors.value[rowIndex] = oldColor;
+      } else {
+        delete rowColors.value[rowIndex];
+      }
+    },
+    metadata: { rowIndex, oldColor, newColor: color },
+  });
+}
+```
+
+**Effort:** 4-5 hours
+
+---
+
+#### Step 4: Create Action Log Viewer Component (Optional)
+
+**File:** `editor/src/components/ActionLogPanel.vue` (NEW)
+
+**Purpose:** Debug panel to view action history (for development only initially).
+
+```vue
+<template>
+  <BasePanel
+    title="Action Log"
+    :expanded="expanded"
+    @toggle="$emit('toggle')"
+  >
+    <div class="action-log">
+      <div class="log-header">
+        <button @click="exportToFile" class="btn btn-sm">Export Log</button>
+        <button @click="clearLog" class="btn btn-sm btn-danger">Clear</button>
+        <span class="log-count">{{ actions.length }} actions</span>
+      </div>
+      
+      <div class="log-entries">
+        <div
+          v-for="(action, index) in recentActions"
+          :key="action.id"
+          class="log-entry"
+          :class="{ active: index === currentIndex }"
+        >
+          <span class="timestamp">{{ formatTime(action.timestamp) }}</span>
+          <span class="type">{{ action.type }}</span>
+          <span class="description">{{ action.description }}</span>
+        </div>
+      </div>
+    </div>
+  </BasePanel>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { ActionLogEntry } from '@/composables/useActionLog';
+
+const props = defineProps<{
+  expanded: boolean;
+  actions: readonly ActionLogEntry[];
+  currentIndex: number;
+}>();
+
+const emit = defineEmits<{
+  toggle: [];
+  export: [];
+  clear: [];
+}>();
+
+const recentActions = computed(() => {
+  return props.actions.slice(-50).reverse();
+});
+
+function formatTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+function exportToFile() {
+  emit('export');
+}
+
+function clearLog() {
+  if (confirm('Clear action log?')) {
+    emit('clear');
+  }
+}
+</script>
+
+<style scoped>
+.action-log {
+  padding: 0.5rem;
+}
+
+.log-header {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.log-count {
+  margin-left: auto;
+  font-size: 0.875rem;
+  opacity: 0.7;
+}
+
+.log-entries {
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: 80px 150px 1fr;
+  gap: 0.5rem;
+  padding: 0.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-entry.active {
+  background: rgba(0, 123, 255, 0.2);
+}
+
+.timestamp {
+  opacity: 0.6;
+}
+
+.type {
+  color: #61dafb;
+}
+
+.description {
+  opacity: 0.9;
+}
+</style>
+```
+
+**Effort:** 2-3 hours
+
+---
+
+### Integration Strategy
+
+#### Phase A: Logging Without Undo (Week 1)
+
+1. Implement `useActionLog.ts` with basic logging
+2. Define `ActionType` enum and metadata types
+3. Add `logSimple()` calls to key operations:
+   - File import/export
+   - Row clear/copy/paste
+   - Color/comment changes
+4. Add ActionLogPanel for debugging (dev only)
+
+**Benefits:**
+- Visibility into user actions
+- Debugging aid
+- Analytics foundation
+
+#### Phase B: Add Command Pattern (Week 2)
+
+1. Refactor `logSimple()` calls to `logAction()` with execute/undo
+2. Start with simple operations (color, comment)
+3. Add undo/redo for row clear
+4. Gradually expand to all row operations
+
+**Benefits:**
+- Undo foundation in place
+- Can test undo logic incrementally
+
+#### Phase C: Undo/Redo UI (Future)
+
+1. Add undo/redo buttons to toolbar
+2. Keyboard shortcuts (Ctrl+Z, Ctrl+Y)
+3. Visual feedback for undo/redo state
+4. Enable persistence
+
+---
+
+### Benefits of This Approach
+
+1. **Non-invasive:** Logging is additive, doesn't break existing code
+2. **Incremental:** Can add logging to one operation at a time
+3. **Testable:** Command pattern makes undo logic testable
+4. **Future-proof:** Foundation for full undo/redo feature
+5. **Debugging:** Action log helps diagnose user issues
+6. **Analytics:** Track which features are used most
+
+---
+
+### Testing Strategy
+
+1. **Manual Testing:**
+   - Perform action → check log entry appears
+   - Verify metadata is correct
+   - Export log → verify JSON format
+
+2. **Automated Testing (Future):**
+   - Unit tests for `useActionLog` composable
+   - Test execute/undo symmetry
+   - Test log size limits
+
+---
+
+### Phase 3.5 Effort Estimate
+
+| Task | Effort |
+|------|--------|
+| Step 1: useActionLog composable | 3-4 hours |
+| Step 2: Action type definitions | 1-2 hours |
+| Step 3: Integrate into EditorApp | 4-5 hours |
+| Step 4: ActionLogPanel component | 2-3 hours |
+| **Total** | **10-14 hours (~2 days)** |
+
+---
+
+## Phase 1: Short-Term Wins
 
 #### 1.1 Expand ToastNotifications Usage
 
@@ -470,7 +1135,11 @@ Add panel to header and wire up v-model bindings.
 
 ---
 
-### Phase 4: Extract useFileIO Composable
+---
+
+## Phase 4: Extract useFileIO Composable
+
+**Status:** NEXT - Ready to implement after Phase 3.5
 
 **Goal:** Extract 200+ lines of file I/O logic from EditorApp.vue into a composable.
 
@@ -714,26 +1383,40 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 
 ## Timeline Estimate
 
-| Phase | Effort | Duration |
-|-------|--------|----------|
-| 1. Short-term wins | 7-10 hours | 1-2 days |
-| 2. Row Value Display | 2-3 hours | 0.5 days |
-| 3. Global Documentation | 4-5 hours | 1 day |
-| 4. useFileIO Refactoring | 8-10 hours | 2 days |
-| 5. usePanelLayout Refactoring | 6-8 hours | 1-2 days |
-| 6. SelectionToolbar Enhancement | 3-4 hours | 0.5 days |
-| **Total** | **30-40 hours** | **5-7 days** |
+| Phase | Effort | Duration | Status |
+|-------|--------|----------|--------|
+| ~~1. Short-term wins~~ | ~~7-10 hours~~ | ~~1-2 days~~ | ✅ DONE |
+| ~~2. Row Value Display~~ | ~~2-3 hours~~ | ~~0.5 days~~ | ⏭️ SKIPPED |
+| ~~3. Global Documentation~~ | ~~4-5 hours~~ | ~~1 day~~ | ✅ DONE |
+| **3.5. Action Logging System** | **10-14 hours** | **2 days** | ⏳ **CURRENT** |
+| 4. useFileIO Refactoring | 8-10 hours | 2 days | 🔜 NEXT |
+| 5. usePanelLayout Refactoring | 6-8 hours | 1-2 days | 📋 PLANNED |
+| 6. SelectionToolbar Enhancement | 3-4 hours | 0.5 days | 📋 PLANNED |
+| **Total** | **37-49 hours** | **6-8 days** | |
+| **Remaining** | **27-36 hours** | **5-6 days** | |
 
 ---
 
 ## Success Criteria
 
-- [ ] EditorApp.vue reduced from ~1700 lines to ~1000-1200 lines
+**Phase 1-3 (Completed):**
+- [x] Toast notifications integrated
+- [x] Most buttons migrated to MenuButton/IconButton
+- [x] TypeDoc comments added to composables
+- [x] Global documentation panel implemented
+
+**Phase 3.5 (Current - Action Logging):**
+- [ ] useActionLog composable created and tested
+- [ ] Action types defined for all operations
+- [ ] Logging integrated into EditorApp
+- [ ] ActionLogPanel component for debugging
+- [ ] Foundation for undo/redo in place
+
+**Phase 4-6 (Upcoming):**
+- [ ] EditorApp.vue reduced from ~1100 lines to ~900 lines
 - [ ] All file I/O logic in composable (testable independently)
 - [ ] No prop drilling for panel positioning
-- [ ] Toast notifications improve UX feedback
-- [ ] Consistent button styling across app
-- [ ] Global documentation enhances mapping sharing
+- [ ] SelectionToolbar converted to BasePanel
 - [ ] All existing functionality preserved
 - [ ] No breaking changes to .MAP binary format
 
@@ -742,9 +1425,18 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 ## Next Steps After Implementation
 
 Once these refactorings are complete, the codebase will be in excellent shape for:
+
+**Immediate Next Features:**
+- **Undo/Redo UI** (builds on Phase 3.5 action logging foundation)
+  - Add undo/redo buttons to toolbar
+  - Keyboard shortcuts (Ctrl+Z, Ctrl+Shift+Z)
+  - Visual history timeline
+  - Persist undo history across sessions
+
+**Future Major Features:**
 - **Simulation Engine** (clean architecture for complex feature)
 - **Breakpoints & Debugging** (benefits from clean separation)
-- **Future: Draggable/Dockable Panels** (usePanelLayout makes this easier)
+- **Draggable/Dockable Panels** (usePanelLayout makes this easier)
 
 ---
 
@@ -778,6 +1470,6 @@ EditorApp.vue
 
 ## Last Updated
 
-2026-01-25 - Integrated comprehensive implementation plan with phased approach
+2026-01-26 - Added Phase 3.5 (Action Logging System) as foundation for undo/redo, updated completion status
 
 ---

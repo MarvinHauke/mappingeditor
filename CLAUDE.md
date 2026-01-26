@@ -65,7 +65,7 @@ editor/src/
 - **SettingsPanel.vue**: Settings and info display.
 - **MidiMonitor.vue**: MIDI message monitoring and live trace.
 - **VariableMonitor.vue**: Variable A-P display with values.
-- **WarningLog.vue**: Centralized warning and validation message display.
+- **LogMonitor.vue**: Centralized log and validation message display.
 
 #### UI Components
 

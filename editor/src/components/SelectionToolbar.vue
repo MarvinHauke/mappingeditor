@@ -240,9 +240,7 @@ function onExpandedChange(expanded: boolean): void {
 }
 
 .action-btn:hover:not(:disabled) {
-  background-color: #F1F700;
-  color: #000;
-  border-color: #F1F700;
+  background-color: rgba(52, 204, 153, 0.4);
 }
 
 .action-btn:disabled {

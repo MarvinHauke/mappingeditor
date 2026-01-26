@@ -14,6 +14,9 @@ export class MappingDocument {
     public get variables(): Variable[] { return this._variables; }
     public set variables(value: Variable[]) { this._variables = value; }
 
+    // Global documentation field (JSON-only, not in binary .MAP format)
+    public globalComment?: string;
+
     // TODO: Ensure that the length of rows is equal to ROW_COUNT on construction and in the setter.    8
 
     private _header: Header;

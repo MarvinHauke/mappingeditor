@@ -108,8 +108,8 @@ function onExpandedChange(expanded: boolean): void {
 
 // Panel title with entry count
 const panelTitle = computed(() => {
-  if (entryCount.value === 0) return 'Log';
-  return `Log (${entryCount.value})`;
+  if (entryCount.value === 0) return 'Log Monitor';
+  return `Logs (${entryCount.value})`;
 });
 </script>
 

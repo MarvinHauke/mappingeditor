@@ -93,7 +93,7 @@ withDefaults(defineProps<MenuButtonProps>(), {
 .menu-btn--slot.menu-btn--active {
   background-color: #F1F700;
   color: #000;
-  border-color: #F1F700;
+  /* border-color: #F1F700; */
 }
 
 .menu-btn--slot.menu-btn--has-data:not(.menu-btn--active) {

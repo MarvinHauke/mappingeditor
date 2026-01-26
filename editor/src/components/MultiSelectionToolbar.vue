@@ -65,13 +65,13 @@ function handleColorSelect(colorName: string | null): void {
         Down
       </button>
       <div class="separator"></div>
-      <button @click="$emit('clear')" class="btn-danger" title="Clear (Delete)">
+      <button @click="$emit('clear')" class="danger-btn" title="Clear (Delete)">
         Clear
       </button>
       <button @click="showColorPicker = !showColorPicker" title="Set Color" class="color-btn">
         Color
       </button>
-      <button @click="$emit('cancel')" title="Cancel (Escape)" class="btn-cancel">
+      <button @click="$emit('cancel')" title="Cancel (Escape)" class="cancel-btn">
         X
       </button>
     </div>
@@ -151,23 +151,23 @@ function handleColorSelect(colorName: string | null): void {
   cursor: not-allowed;
 }
 
-.toolbar-buttons .btn-danger {
+.toolbar-buttons .danger-btn {
   background-color: #cc8534;
   color: #000;
 }
 
-.toolbar-buttons .btn-danger:hover:not(:disabled) {
+.toolbar-buttons .danger-btn:hover:not(:disabled) {
   background-color: #F1F700;
   color: #000;
 }
 
-.toolbar-buttons .btn-cancel {
+.toolbar-buttons .cancel-btn {
   background-color: #000;
   color: #34cc99;
   padding: 2px 6px;
 }
 
-.toolbar-buttons .btn-cancel:hover {
+.toolbar-buttons .cancel-btn:hover {
   background-color: #F1F700;
   color: #000;
 }
