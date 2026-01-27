@@ -40,6 +40,8 @@ import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
 import { useWarningLog } from '../composables/useWarningLog';
 import { useMappingCache, type CachedMapping } from '../composables/useMappingCache';
+import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
+import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
@@ -212,6 +214,37 @@ const {
   loadFromSlot
 } = useMappingCache();
 
+// Action History (Undo/Redo) with per-slot support
+const actionHistoryContext: DeserializationContext = {
+  rowColors: rowColors.value,
+  rowComments: rowComments.value
+};
+
+const {
+  canUndo,
+  canRedo,
+  undoDescription,
+  redoDescription,
+  executeCommand,
+  undo,
+  redo,
+  clearCurrentHistory
+} = useActionHistory({
+  activeSlot,
+  isLockedA,
+  isLockedB,
+  context: actionHistoryContext,
+  onExecute: (cmd, slot) => {
+    logInfo('system', `[Slot ${slot}] ${cmd.getDescription()}`);
+  },
+  onUndo: (cmd, slot) => {
+    logInfo('system', `[Slot ${slot}] Undid: ${cmd.getDescription()}`);
+  },
+  onRedo: (cmd, slot) => {
+    logInfo('system', `[Slot ${slot}] Redid: ${cmd.getDescription()}`);
+  }
+});
+
 // Serialize current document for caching
 function serializeDocument(): CachedMapping {
   const doc = mappingDocument.value;
@@ -305,8 +338,11 @@ function deserializeToDocument(cached: CachedMapping): void {
   // Apply to reactive state
   mappingDocument.value = doc;
   
-  // Restore colors
-  rowColors.value = new Map(Object.entries(cached.rowColors).map(([k, v]) => [parseInt(k), v]));
+  // Restore colors (preserve Map reference for undo commands)
+  rowColors.value.clear();
+  for (const [k, v] of Object.entries(cached.rowColors)) {
+    rowColors.value.set(parseInt(k), v);
+  }
   
   // Restore comments
   rowComments.value = { ...cached.rowComments };
@@ -486,18 +522,42 @@ function handleMultiMoveDown(): void {
   handleMoveWarnings(result.referenceUpdateResult);
 }
 
-function handleMoveWarnings(result: { updatedCount: number; warnings: Array<{ message: string; type: string }> }): void {
-  // Show notification about updated references (logging handled by showToast)
-  if (result.updatedCount > 0) {
-    const msg = `Updated ${result.updatedCount} row reference${result.updatedCount > 1 ? 's' : ''}.`;
-    showToast(msg, 'info');
-  }
+// Track accumulated reference updates for toast deduplication
+let accumulatedReferenceCount = 0;
+let accumulatedWarnings: Array<{ message: string; type: string }> = [];
+let toastDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Show any definition order warnings (logging handled by showToast)
+function handleMoveWarnings(result: { updatedCount: number; warnings: Array<{ message: string; type: string }> }): void {
+  // Accumulate reference count
+  accumulatedReferenceCount += result.updatedCount;
+  
+  // Accumulate unique warnings
   const definitionOrderWarnings = result.warnings.filter(w => w.type === 'definition_order');
   for (const warning of definitionOrderWarnings) {
-    showToast(warning.message, 'warning', 8000);
+    if (!accumulatedWarnings.some(w => w.message === warning.message)) {
+      accumulatedWarnings.push(warning);
+    }
   }
+
+  // Clear existing timer
+  if (toastDebounceTimer) {
+    clearTimeout(toastDebounceTimer);
+  }
+
+  // Debounce: show toast after 1 second of no moves
+  toastDebounceTimer = setTimeout(() => {
+    if (accumulatedReferenceCount > 0) {
+      const msg = `Updated ${accumulatedReferenceCount} row reference${accumulatedReferenceCount > 1 ? 's' : ''}.`;
+      showToast(msg, 'info');
+      accumulatedReferenceCount = 0;
+    }
+
+    // Show accumulated warnings
+    for (const warning of accumulatedWarnings) {
+      showToast(warning.message, 'warning', 8000);
+    }
+    accumulatedWarnings = [];
+  }, 1000);
 }
 
 function handleMultiClear(): void {
@@ -506,14 +566,11 @@ function handleMultiClear(): void {
 
 function setRowColor(color: string | null): void {
   for (const idx of selectedRowIndices.value) {
-    if (color && COLOR_PALETTE[color]) {
-      rowColors.value.set(idx, COLOR_PALETTE[color]);
-    } else {
-      rowColors.value.delete(idx);
-    }
+    const colorValue = color && COLOR_PALETTE[color] ? COLOR_PALETTE[color] : null;
+    const cmd = new SetRowColorCommand(idx, colorValue, rowColors.value);
+    executeCommand(cmd);
   }
-  // Force reactivity
-  rowColors.value = new Map(rowColors.value);
+  // Note: Vue 3 tracks Map operations, no need to create new Map
 }
 
 function getRowBackgroundColor(rowIndex: number): string | undefined {
@@ -522,13 +579,25 @@ function getRowBackgroundColor(rowIndex: number): string | undefined {
 
 // Keyboard shortcuts for multi-selection
 function handleKeyDown(event: KeyboardEvent): void {
-  if (selectedRowIndices.value.size === 0) return;
-
   // Don't handle shortcuts if user is typing in an input
   const target = event.target as HTMLElement;
   if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
     return;
   }
+
+  // Undo/Redo shortcuts (work globally, not just for selections)
+  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
+    undo();
+    event.preventDefault();
+    return;
+  } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
+    redo();
+    event.preventDefault();
+    return;
+  }
+
+  // Rest of shortcuts require row selection
+  if (selectedRowIndices.value.size === 0) return;
 
   const indices = sortedSelectedIndices.value;
 
@@ -588,6 +657,13 @@ watch(
 watch(rowColors, () => scheduleCacheSave(), { deep: true });
 watch(rowComments, () => scheduleCacheSave(), { deep: true });
 
+// Watch for slot switching (history automatically switches with activeSlot)
+watch(activeSlot, (newSlot, oldSlot) => {
+  if (newSlot !== oldSlot) {
+    logInfo('system', `Switched to Slot ${newSlot} (undo history preserved)`);
+  }
+});
+
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown);
 });
@@ -613,6 +689,7 @@ function readFile() {
           console.log(`Loading .map file: ${file.name}, size: ${fileData.length} bytes`);
           mappingDocument.value = MappingDocumentParser.parse(fileData);
           init();
+          clearCurrentHistory(); // Clear undo history after loading new file
           console.log('.map file loaded successfully');
           showToast(`Loaded ${file.name} successfully`, 'success', 3000);
         } catch (error) {
@@ -739,9 +816,9 @@ function readFile() {
           if (jsonObj.editorMetadata) {
             const metadata = jsonObj.editorMetadata;
 
-            // Load row colors
+            // Load row colors (preserve Map reference for undo commands)
             if (metadata.rowColors && typeof metadata.rowColors === 'object') {
-              rowColors.value = new Map();
+              rowColors.value.clear();
               for (const [indexStr, color] of Object.entries(metadata.rowColors)) {
                 const index = parseInt(indexStr, 10);
                 if (!isNaN(index) && typeof color === 'string') {
@@ -763,6 +840,7 @@ function readFile() {
 
           mappingDocument.value = mappingDoc;
           init();
+          clearCurrentHistory(); // Clear undo history after loading new file
           console.log('.json file loaded successfully');
           showToast(`Loaded ${file.name} successfully`, 'success', 3000);
         } catch (error) {
@@ -795,7 +873,8 @@ function reset() {
   currentlySelectedDestinationTypes.value = new Array<MappingType>();
   clearRowSelection();
   rowComments.value = {};
-  rowColors.value = new Map();
+  rowColors.value.clear(); // Clear Map but preserve reference for undo commands
+  clearCurrentHistory(); // Clear undo history when resetting
   // Clear analysis warnings for empty document
   analyzeDocument();
 }
@@ -1122,6 +1201,30 @@ function downloadMap() {
           {{ warningCount }}
           <span class="visually-hidden">warnings</span>
         </span>
+      </MenuButton>
+
+      <!-- Undo/Redo buttons -->
+      <MenuButton
+        variant="primary"
+        border-radius="none"
+        :disabled="!canUndo"
+        @click="undo"
+        :title="undoDescription
+          ? `Undo [Slot ${activeSlot}]: ${undoDescription}`
+          : 'Nothing to undo'"
+      >
+        ↶ Undo
+      </MenuButton>
+      <MenuButton
+        variant="primary"
+        border-radius="none"
+        :disabled="!canRedo"
+        @click="redo"
+        :title="redoDescription
+          ? `Redo [Slot ${activeSlot}]: ${redoDescription}`
+          : 'Nothing to redo'"
+      >
+        ↷ Redo
       </MenuButton>
 
       <!-- A/B Cache Toggle and Filename -->

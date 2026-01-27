@@ -54,11 +54,11 @@ onMounted(() => {
 
 defineEmits(['update:modelValue']);
 
-function updateParams() { 
+function updateParams() {
     const newParam1 = (model.value.keyOrValue >> 8) & 0xFF;
-    if (newParam1) { extraVal1.value = newParam1 };
+    extraVal1.value = newParam1;  // Always update, 0 is a valid constant
     const newParam2 = model.value.keyOrValue & 0xFF;
-    if (newParam2) { extraVal2.value = newParam2 };
+    extraVal2.value = newParam2;  // Always update, 0 is a valid constant
 }
 
 function updateModel() {

@@ -2,21 +2,26 @@
  * Row Reference Service
  *
  * This module handles the detection and updating of row references in the NerdSEQ Mapping Editor.
- * Row references are encoded in the `extra` field of Source and Destination objects for specific types:
- * - Source types: Calc (10), Skip (11)
- * - Destination types: Skip (15)
  *
- * Byte encoding (each byte of the 16-bit extra value):
- * - 255: Empty
- * - 0-9: Constants
- * - 10-25: Variables (A-P)
- * - 26-95: Row references (rows 0-69), where rowIndex = byteValue - 26
+ * Row references can be encoded in two ways:
+ *
+ * 1. EXTRA field (Calc/Skip sources, Skip destinations):
+ *    - Byte encoding (each byte of the 16-bit extra value):
+ *      - 255: Empty
+ *      - 0-9: Constants
+ *      - 10-25: Variables (A-P)
+ *      - 26-95: Row references (rows 0-69), where rowIndex = byteValue - 26
+ *
+ * 2. FUNCTION field (SETV destinations):
+ *    - Function keys 16-85 represent rows 0-69
+ *    - Function key = 16 + rowIndex
  */
 
 import {
   CALC_SOURCE_TYPE_KEY,
   SKIP_SOURCE_TYPE_KEY,
   SKIP_DESTINATION_TYPE_KEY,
+  SETVAR_DESTINATION_TYPE_KEY,
   genCalcSkipSourceExtraDnA,
   EMPTY_KEY,
 } from "../modules/dataModel";
@@ -26,12 +31,17 @@ import {
   Destination,
   SourceExtra,
   DestinationExtra,
+  DestinationFunction,
 } from "../modules/documentModel";
 
-// Constants for row reference byte encoding
+// Constants for row reference byte encoding (used in EXTRA field)
 export const ROW_REF_MIN = 26;
 export const ROW_REF_MAX = 95;
 export const EMPTY_BYTE = 255;
+
+// Constants for row reference function keys (used in FUNCTION field for SETV)
+export const ROW_REF_FUNCTION_MIN = 16;
+export const ROW_REF_FUNCTION_MAX = 85;
 
 /**
  * Check if a byte value represents a row reference
@@ -60,6 +70,36 @@ export function rowIndexToByte(rowIndex: number): number {
     throw new Error(`Row index ${rowIndex} is out of valid range (0-69)`);
   }
   return rowIndex + ROW_REF_MIN;
+}
+
+/**
+ * Check if a function key represents a row reference (16-85)
+ * Used for SETV destination functions
+ */
+export function isRowReferenceFunctionKey(functionKey: number): boolean {
+  return functionKey >= ROW_REF_FUNCTION_MIN && functionKey <= ROW_REF_FUNCTION_MAX;
+}
+
+/**
+ * Convert a function key to a row index (16 -> 0, 85 -> 69)
+ * @throws if the function key is not a row reference
+ */
+export function functionKeyToRowIndex(functionKey: number): number {
+  if (!isRowReferenceFunctionKey(functionKey)) {
+    throw new Error(`Function key ${functionKey} is not a row reference`);
+  }
+  return functionKey - ROW_REF_FUNCTION_MIN;
+}
+
+/**
+ * Convert a row index to a function key (0 -> 16, 69 -> 85)
+ * @throws if the row index is out of valid range (0-69)
+ */
+export function rowIndexToFunctionKey(rowIndex: number): number {
+  if (rowIndex < 0 || rowIndex > 69) {
+    throw new Error(`Row index ${rowIndex} is out of valid range (0-69)`);
+  }
+  return rowIndex + ROW_REF_FUNCTION_MIN;
 }
 
 /**
@@ -273,33 +313,69 @@ export function createUpdatedDestinationExtra(
 
 /**
  * Build a position mapping for a row move operation
- * This tracks where each row ends up after the move
+ * This tracks where each row's CONTENT ends up after the move
+ *
+ * The key insight is that when moving multiple consecutive rows, we perform
+ * a series of swaps. We need to track where the content that was ORIGINALLY
+ * at each position ends up FINALLY.
  *
  * @param rowIndices - The indices of rows being moved
  * @param direction - The direction of the move ('up' or 'down')
- * @returns A map from original position to new position for all affected rows
+ * @returns A map from original position to final position for all affected rows
  */
 export function buildPositionMapping(
   rowIndices: number[],
   direction: "up" | "down"
 ): Map<number, number> {
-  const mapping = new Map<number, number>();
-
-  // Sort indices based on direction
+  // Map: "content originally at position X is now at position Y"
+  const finalPositions = new Map<number, number>();
+  
+  // Sort indices based on direction (same as actual swap order)
   const sorted = [...rowIndices].sort((a, b) =>
     direction === "up" ? a - b : b - a
   );
 
-  // For each row being moved, it will swap with its adjacent row
-  for (const idx of sorted) {
-    const offset = direction === "up" ? -1 : 1;
-    const adjacentIdx = idx + offset;
+  const offset = direction === "up" ? -1 : 1;
 
-    // The row at idx moves to adjacentIdx
-    mapping.set(idx, adjacentIdx);
-    // The row at adjacentIdx moves to idx (unless it's also being moved)
-    if (!rowIndices.includes(adjacentIdx)) {
-      mapping.set(adjacentIdx, idx);
+  // Initialize: all content starts at its original position
+  const allAffectedPositions = new Set<number>();
+  for (const idx of sorted) {
+    const adjacentIdx = idx + offset;
+    allAffectedPositions.add(idx);
+    allAffectedPositions.add(adjacentIdx);
+  }
+  
+  for (const pos of allAffectedPositions) {
+    finalPositions.set(pos, pos);
+  }
+
+  // Simulate each swap in order
+  for (const idx of sorted) {
+    const adjacentIdx = idx + offset;
+    
+    // Before this swap, find which original content is at idx and adjacentIdx
+    let originalAtIdx = -1;
+    let originalAtAdjacent = -1;
+    
+    for (const [original, current] of finalPositions.entries()) {
+      if (current === idx) originalAtIdx = original;
+      if (current === adjacentIdx) originalAtAdjacent = original;
+    }
+    
+    // Swap them: content currently at idx goes to adjacentIdx and vice versa
+    if (originalAtIdx !== -1) {
+      finalPositions.set(originalAtIdx, adjacentIdx);
+    }
+    if (originalAtAdjacent !== -1) {
+      finalPositions.set(originalAtAdjacent, idx);
+    }
+  }
+
+  // Filter out positions that didn't move
+  const mapping = new Map<number, number>();
+  for (const [original, final] of finalPositions.entries()) {
+    if (original !== final) {
+      mapping.set(original, final);
     }
   }
 
@@ -392,6 +468,55 @@ export function updateRowReferencesAfterMove(
       if (newExtra !== row.source.extra) {
         row.source = new Source(row.source.type, row.source.function, newExtra);
         result.updatedCount++;
+      }
+    }
+
+    // Check and update SETV destination FUNCTION row references
+    if (row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY) {
+      const functionKey = row.destination.function.key;
+
+      if (isRowReferenceFunctionKey(functionKey)) {
+        const referencedRowIndex = functionKeyToRowIndex(functionKey);
+
+        // Only process if the referenced row was affected by the move
+        if (positionMapping.has(referencedRowIndex)) {
+          const newRowIndex = positionMapping.get(referencedRowIndex)!;
+          const newFunctionKey = rowIndexToFunctionKey(newRowIndex);
+
+          // Create the new function object for the SETV destination
+          // Format: "Mapping Row {hex} ({decimal})"
+          const countHex = newRowIndex.toString(16).toUpperCase().padStart(2, "0");
+          const newFunction = new DestinationFunction(
+            newFunctionKey,
+            `RW${countHex}`,
+            `Mapping Row ${countHex}h (${newRowIndex})`
+          );
+
+          row.destination = new Destination(
+            row.destination.type,
+            newFunction,
+            row.destination.extra
+          );
+          result.updatedCount++;
+
+          // Check for definition order violation
+          const { violates, newReferencingIndex, newReferencedIndex } =
+            checkDefinitionOrderViolation(
+              rowIndex,
+              referencedRowIndex,
+              positionMapping
+            );
+
+          if (violates) {
+            result.warnings.push({
+              rowIndex: newReferencingIndex,
+              referencedRowIndex,
+              newReferencedRowIndex: newReferencedIndex,
+              type: "definition_order",
+              message: `Row ${newReferencingIndex} references Row ${newReferencedIndex}, but Row ${newReferencedIndex} is now defined after Row ${newReferencingIndex}. Check definition order.`,
+            });
+          }
+        }
       }
     }
 

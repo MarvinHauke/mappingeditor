@@ -10,22 +10,53 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 The following features have been implemented:
 
+### Phase 0.1 - Convinience features for Copy paste
+
+- after a row paste action automatically select the next row, to keep pasting
+- Add fall through option after Midi learn as well.
+  - add a settings checkbox to unselect that option.
+
+### search for references
+
+- include a option to search for references
+
+### Phase 0.11 - Visual additions
+
+- Add middle Row which conatains > or X dependent on, if the row will be executed or not
+  -> later i want this to be part of the debugger. But for now only add visual feedback from static analysis
+- make a comprehensive plan for this first.
+
+### 0.12 Description window Enhancement
+
+- merge description/GlobalComment window with input filename field.
+  -> make a plan for this first.
+
+### 0.13 - Bugfixes
+
+- Check if you switch in source function from variable to row, if the source extra gets updated.
+  --> found a bug, where the source extra was not updated right because it still was set to From Row/Var but it wasnt recognized after exporting to Nerdseq. I think it still was ticked in the Editor which caused it not to update this field.
+
 ### Phase 0.2 - A/B Caching System ✅
+
 - **A/B slot caching** with IndexedDB persistence (`useMappingCache.ts`)
 - **Lock function per slot** - prevents accidental modifications
 - Clear indicator showing which slot (A/B) is active
 
 ### Phase 1.1 - Static Logic Analyzer ✅
+
 - Automated analysis on load/save (`useStaticAnalyzer.ts`)
 - Warning types: Variable Read Before Write, Destination Conflicts, Unused Variables
 - Warning count badge in header toolbar
 
-### Phase 1.2 - Warning Annotations ✅
+### Phase 1.2 - Warning Annotations (partly implemented)
+
 - Warnings displayed in RowCommentSection when row selected
 - Yellow/orange warning badges
 - Warning Log panel (`useWarningLog.ts`)
+- Add subfolding for warnings which contain several references.
 
 ### Phase 4.1-4.3 - Multi-Selection & Row Colors ✅
+
 - **Shift+Click** range selection
 - **Ctrl/Cmd+Click** individual toggle
 - **Multi-Selection Toolbar** (`SelectionToolbar.vue`)
@@ -33,6 +64,7 @@ The following features have been implemented:
 - Row move with conflict detection
 
 ### Infrastructure Improvements ✅
+
 - **BasePanel component** - unified foldable panel styling
 - **MenuButton component** - consistent button styling
 - **ToastNotifications** - transient notification system
@@ -454,28 +486,260 @@ Allow manual MIDI message injection for testing:
 
 ### 6.4 Comprehensive Action Logging & Undo System
 
-**Status:** Planning required
+**Status:** ✅ Designed - Ready for Implementation
 
-A comprehensive logging system to track all user actions for undo/redo functionality and audit trails.
+A comprehensive undo/redo system with **per-slot history** and **IndexedDB persistence**. Each A/B slot maintains independent undo/redo stacks that survive page refresh.
 
-**Key Features:**
-- Action log tracking all document modifications (row edits, adds, deletes, moves)
-- Undo/Redo stack with keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
-- Event log display panel showing recent actions with timestamps
-- Export action log for debugging and documentation
-- Selective undo (undo specific actions, not just last action)
+---
 
-**Benefits:**
-- Reduces need for individual toast notifications (actions visible in log)
-- Enables experimentation with easy rollback
-- Provides audit trail for complex mapping development
-- Supports collaborative workflows (action history export/import)
+#### Architecture: Command Pattern + Per-Slot History
 
-**Implementation Notes:**
-- Use command pattern for undoable actions
-- Persist undo history to IndexedDB (per session)
-- Integrate with A/B slot system (separate undo stacks per slot)
-- Show unobtrusive log indicator in header toolbar
+**Core Design:**
+
+- **Hybrid Command Pattern**: Each operation implements `execute()` and `undo()`
+- **Slot-Aware Singleton**: `useActionHistory` composable manages two independent stacks (Slot A, Slot B)
+- **Automatic Context Switching**: Active undo stack switches when user switches slots
+- **IndexedDB Persistence**: Undo history survives page refresh via command serialization
+- **Lock Protection**: Locked slots preserve history but prevent undo/redo operations
+
+**Mental Model:**
+
+```
+Slot A (Active)                    Slot B (Inactive)
+├─ MappingDocument A               ├─ MappingDocument B
+├─ Undo Stack A [5 actions]        ├─ Undo Stack B [3 actions]
+├─ Redo Stack A [empty]            ├─ Redo Stack B [1 action]
+└─ Lock: Unlocked ✓                └─ Lock: Locked 🔒
+```
+
+When switching to Slot B:
+
+- Active stack switches to Slot B's undo/redo
+- Undo buttons show Slot B's last action
+- Slot A history preserved but inactive
+
+---
+
+#### Key Features
+
+**✅ Per-Slot Independent History**
+
+- Each slot maintains separate undo/redo stacks (max 50 actions each)
+- History preserved when switching between slots
+- No cross-slot contamination
+
+**✅ Persistent Across Page Refresh**
+
+- Undo history saves to IndexedDB automatically (debounced 500ms)
+- Commands serialize to JSON with metadata
+- Reconstruction on page load with proper refs
+
+**✅ Lock-Aware Behavior**
+
+- Locked slots: `canUndo = false`, `canRedo = false`
+- `executeCommand()` returns error: "Slot X is locked"
+- History preserved when locked, restored when unlocked
+
+**✅ Clean File Loads**
+
+- Loading a new file clears that slot's undo history
+- Persists cleared state to IndexedDB
+
+**✅ Incremental Rollout (4 Phases)**
+
+- Phase 1: Logging only (foundation)
+- Phase 2: Simple undo (colors, comments)
+- Phase 3: Complex undo (row operations, moves)
+- Phase 4: Full UI with history viewer
+
+---
+
+#### Implementation Details
+
+**Command Interface:**
+
+```typescript
+interface Command {
+  execute(): void;
+  undo(): void;
+  getDescription(): string;
+  getMetadata(): CommandMetadata;
+  toJSON(): SerializedCommand; // For persistence
+}
+```
+
+**Concrete Commands:**
+
+- `SetRowColorCommand` - Undo color changes
+- `SetRowCommentCommand` - Undo comment edits
+- `PasteRowCommand` - Undo paste with full row snapshots
+- `MoveRowsCommand` - Undo moves with reference tracking
+- `BatchCommand` - Composite for multi-row operations
+- `SetVariableValueCommand` - Undo variable slider changes
+
+**Composable API:**
+
+```typescript
+const {
+  canUndo,    // Reflects active slot + lock state
+  canRedo,
+  executeCommand,  // Operates on active slot
+  undo,
+  redo,
+  clearCurrentHistory
+} = useActionHistory({
+  activeSlot,    // From useMappingCache
+  isLockedA,
+  isLockedB,
+  context: { mappingDocument, rowColors, ... }
+});
+```
+
+**UI Elements:**
+
+- Undo/Redo buttons in toolbar with slot indicators
+- Keyboard shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z (redo)
+- ActionHistoryPanel showing both slots with tab toggle
+- Tooltips: "[Slot A] Set row 5 color to red"
+
+---
+
+#### IndexedDB Persistence
+
+**Storage Schema:**
+
+```typescript
+interface SerializedSlotHistory {
+  slotId: "A" | "B";
+  undoStack: SerializedCommand[];
+  redoStack: SerializedCommand[];
+  lastModified: number;
+}
+```
+
+**Keys:**
+
+- `undo-history-A` → Slot A undo/redo stacks
+- `undo-history-B` → Slot B undo/redo stacks
+
+**Memory Budget:**
+
+- 50 actions × ~300 bytes = ~15KB per slot
+- **Total: ~30KB for both slots** (negligible storage)
+
+**Serialization:**
+
+- Commands implement `toJSON()` for serialization
+- `fromJSON()` static method reconstructs with deserialization context
+- Non-serializable refs (mappingDocument, rowColors) provided on restoration
+
+---
+
+#### Rollout Plan
+
+**Phase 1: Foundation (Week 1)**
+
+- Create `useActionHistory.ts` with slot awareness
+- Implement command serialization interface
+- Add logging mode (no undo yet)
+- Test persistence across page refresh
+
+**Phase 2: Simple Undo (Week 2)**
+
+- Implement color/comment commands with undo
+- Add Undo/Redo buttons (disabled when locked)
+- Add keyboard shortcuts
+- Test slot switching during undo/redo
+
+**Phase 3: Complex Undo (Weeks 3-4)**
+
+- Implement row operation commands
+- Test row moves with reference tracking
+- Batch commands for multi-row operations
+- Refactor useClipboard to use commands
+
+**Phase 4: Full UI (Week 5)**
+
+- ActionHistoryPanel with slot tabs
+- Show lock indicators per slot
+- Jump-to-state feature
+- Performance testing (100 total actions)
+
+---
+
+#### Benefits
+
+**For Users:**
+
+- Experiment freely knowing undo is available
+- Each slot = independent workspace with its own history
+- Locked slots protected from both edits AND accidental undo
+- History survives browser refresh
+
+**For Development:**
+
+- Easily extendable - new commands are ~50 lines of code
+- Testable - command pattern enables unit tests
+- Non-invasive - incrementally wrap existing operations
+- Leverages existing architecture (Vue reactivity, singleton composables)
+
+---
+
+#### Testing Strategy
+
+**Per-Slot Test Cases:**
+
+- Maintain separate undo stacks per slot
+- Prevent undo when slot is locked
+- Preserve redo stack when switching slots
+- Restore history from IndexedDB on page load
+
+**Integration Tests:**
+
+- Undo color change, redo, verify state
+- Undo paste operation, verify row restored
+- Move rows, undo, verify references restored
+- Lock slot, verify undo disabled, unlock, verify restored
+
+---
+
+#### Critical Files
+
+**New Files:**
+
+1. `editor/src/composables/useActionHistory.ts` (~250 lines) - Core composable with slot awareness
+2. `editor/src/commands/Command.ts` (~150 lines) - Base interface + serialization
+3. `editor/src/commands/SetRowColorCommand.ts` (~100 lines) - Example simple command
+4. `editor/src/commands/MoveRowsCommand.ts` (~200 lines) - Example complex command
+5. `editor/src/components/ActionHistoryPanel.vue` (~150 lines) - History viewer UI
+
+**Modified Files:**
+
+1. `editor/src/components/EditorApp.vue` (~120 lines changed) - Integration + UI
+2. `editor/src/composables/useMappingCache.ts` (~10 lines) - Export slot state refs
+
+---
+
+#### Design Decisions (Confirmed)
+
+1. **Persistence**: ✅ IndexedDB (history survives page refresh)
+2. **File Load**: ✅ Clear slot history on file load
+3. **Lock Behavior**: ✅ Preserve history, prevent undo/redo
+4. **Cross-Slot**: ✅ Destination slot logs the action
+
+---
+
+#### Future Enhancements
+
+- Persistent history export/import (JSON format)
+- History diff viewer (compare states)
+- Cross-slot copy operations with undo
+- Action replay/macro recording
+- Visual history timeline
+
+---
+
+**See `/Users/pforsten/.claude/plans/witty-wobbling-boot.md` for complete implementation specification with code examples, serialization details, and full API documentation.**
 
 ---
 
