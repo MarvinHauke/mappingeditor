@@ -763,6 +763,21 @@ function handleKeyDown(event: KeyboardEvent): void {
     return;
   }
 
+  // Slot switching shortcuts (1 = Slot A, 2 = Slot B)
+  if (event.key === '1' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+    if (activeSlot.value !== 'A') {
+      handleSlotSwitch('A');
+    }
+    event.preventDefault();
+    return;
+  } else if (event.key === '2' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+    if (activeSlot.value !== 'B') {
+      handleSlotSwitch('B');
+    }
+    event.preventDefault();
+    return;
+  }
+
   // Undo/Redo shortcuts (work globally, not just for selections)
   if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
     undo();
@@ -878,6 +893,10 @@ function readFile() {
           clearCurrentHistory(); // Clear undo history after loading new file
           console.log('.map file loaded successfully');
           showToast(`Loaded ${file.name} successfully`, 'success', 3000);
+          // Clear file input to allow reloading the same file
+          if (fileInput.value) {
+            fileInput.value.value = '';
+          }
         } catch (error) {
           console.error('Error parsing .map file:', error);
           alert(`Error loading .map file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes\n\nCheck console for details.`);
@@ -1029,6 +1048,10 @@ function readFile() {
           clearCurrentHistory(); // Clear undo history after loading new file
           console.log('.json file loaded successfully');
           showToast(`Loaded ${file.name} successfully`, 'success', 3000);
+          // Clear file input to allow reloading the same file
+          if (fileInput.value) {
+            fileInput.value.value = '';
+          }
         } catch (error) {
           console.error('Error parsing .json file:', error);
           if (error instanceof SyntaxError) {
