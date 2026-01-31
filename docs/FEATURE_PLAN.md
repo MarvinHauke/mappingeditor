@@ -6,35 +6,107 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 ---
 
-## ✅ Completed Features
+## Completed Features are marked with ✅
 
-The following features have been implemented:
+# Bugs and improvements
 
-### Phase 0.1 - Convinience features for Copy paste
+## Fixed Bugs ✅
 
-- after a row paste action automatically select the next row, to keep pasting
-- Add fall through option after Midi learn as well.
+- ✅ **Comments not moving with rows** - Fixed by updating `useClipboard.ts` to swap comments in `swapRowContents()` function. Comments now follow rows when moved up/down.
+
+- ✅ **Destination Skip functions different from source** - Unified encoding to match source (96 functions, same 6 conditions × 16 skip counts). Changed SkipDestinationExtra.vue to two-dropdown pattern.
+
+- ✅ **Destination extra fields ignored Hex/Dec setting** - Fixed. Row index fields in Skip Destination Extra now respect `displayRowIndexAsHex` setting.
+
+- ✅ **Lock function doesn't block all clear operations** - Fixed:
+  - Delete/Backspace keyboard shortcuts now check lock state
+  - Reset button now disabled when locked and checks lock state
+  - RowCommentSection clear buttons now disabled when locked
+
+- ✅ **Analyzer warnings don't adapt to Hex/Dec setting** - Fixed. `useStaticAnalyzer` now accepts `displayRowIndexAsHex` ref and formats all row indices in warning messages accordingly. Analysis re-runs when setting toggles.
+
+## Known Bugs - Needs Investigation
+
+- ⚠️ **Extra field reset when function changes within same type** - DEFERRED
+
+  **Problem**: When changing a function within the same type (e.g., Skip 2 → Skip 3 rows, or Calc Add → Calc Subtract), the extra field is unconditionally reset to EMPTY_KEY, losing user's parameter values.
+
+  **Current behavior**:
+  ```
+  User sets: Skip 2 Rows If Param1 > Param2
+             Extra: Constant 5, Variable A
+
+  User changes to: Skip 3 Rows If Param1 > Param2
+             Extra: (empty) ← LOST!
+
+  Expected: Extra should remain "Constant 5, Variable A"
+  ```
+
+  **Root cause location**: `EditorApp.vue`
+  - Line ~1086: `sourceFunctionSelectionChanged()` unconditionally resets `row.source.extra`
+  - Line ~1138: `destinationFunctionSelectionChanged()` unconditionally resets `row.destination.extra`
+
+  **Why this happens**: The function change handlers always create a new empty `SourceExtra` or `DestinationExtra` object, regardless of whether the new function uses the same extra field structure.
+
+  **Impact**:
+  - Annoying UX: User must re-enter extra parameters when switching functions
+  - NerdSEQ export issue: Hardware expects extras to be preserved across function changes within the same type
+  - Affects: Calc type (all functions share same extra), Skip type (all functions share same extra)
+  - Does NOT affect: Changing between different types (CV → MIDI) - reset is correct in that case
+
+  **Why deferred**:
+  - This feels like a symptom rather than root cause
+  - Need to investigate the broader pattern of how type/function/extra relationships are managed
+  - May indicate architectural issue with how the UI binds to the document model
+  - Quick fix would be preserving extras conditionally, but that doesn't address why the binding breaks
+
+  **Proposed investigation areas**:
+  1. Why does changing the function dropdown trigger a full extra reset?
+  2. Should the extra field be truly independent or derive from function selection?
+  3. Is the v-model binding on extra fields reactive enough?
+  4. Could the extra components manage their own state better?
+  5. Should there be a "preserve on function change" flag in the type definition?
+
+  **Potential approaches** (for future fix):
+  - **Quick fix**: Conditionally preserve extra when changing functions within same type
+  - **Better fix**: Refactor function/extra binding to maintain state unless type changes
+  - **Best fix**: Investigate why function change triggers extra reset in first place - may reveal deeper architectural issue
+
+  **Workaround for users**: Re-enter extra parameters after changing functions. Values are preserved in NerdSEQ after export if set before saving.
+
+### Phase 0.1 - Convinience features for Copy paste and row selection
+
+- Add the option to select a single row without opening the comment section.
+  - The comment section is initally opened. Close the comment section if a row is selected and you click on it again.
+  - If you click a third time the row will be deselected
+  - This state is saved and if you select another row, the comment section is also closed or opened,
+    dependent on the last toggle state.
+- after a row paste action automatically select the next row, to be able keep on pasting. only add this paste fall through if i paste a whole row!
+- Add fall through option after Midi learn as well. Select the next row with
   - add a settings checkbox to unselect that option.
 
 ### search for references
 
-- include a option to search for references
+- include a option to search for references and how often they are used. (maybe a later feature)
 
 ### Phase 0.11 - Visual additions
 
 - Add middle Row which conatains > or X dependent on, if the row will be executed or not
   -> later i want this to be part of the debugger. But for now only add visual feedback from static analysis
-- make a comprehensive plan for this first.
+  - make a comprehensive plan for this first.
+- make columns Source Type, source Function, source Extras resizable, by pulling and pushing on the column borders between source type and source function and between source Function and source Extra. Keep the Row number and ● in place. -> Do the same for the Destination Side, here use ● and the Clear column as fixed.
+  -> This will give the user the capability to see the text of the columns if the text is too long and wraped by the borders. keep the current style of the boxes. I like it, only add the capability to resize to read the text.
 
 ### 0.12 Description window Enhancement
 
 - merge description/GlobalComment window with input filename field.
   -> make a plan for this first.
+- Add a Shortcut for toggeling between windows
 
 ### 0.13 - Bugfixes
 
-- Check if you switch in source function from variable to row, if the source extra gets updated.
-  --> found a bug, where the source extra was not updated right because it still was set to From Row/Var but it wasnt recognized after exporting to Nerdseq. I think it still was ticked in the Editor which caused it not to update this field.
+- Check if you switch source function from variable to row, if the source extra gets updated.
+  --> found a bug, where the source extra was not updated right because it still was set to From Row/Var but it wasnt recognized after exporting to Nerdseq. I think it still was ticked in the Editor which caused it not to update this field. (clarify this is not a propper description)
 
 ### Phase 0.2 - A/B Caching System ✅
 

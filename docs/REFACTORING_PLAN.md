@@ -6,6 +6,41 @@ This document tracks recent implementations, architectural observations, and opp
 
 ---
 
+## Recent Bug Fixes and Improvements (2026-01-31)
+
+### ✅ Critical Data Integrity Fixes
+
+| Bug | Priority | Status | Impact |
+|-----|----------|--------|--------|
+| Row comments not moving with rows | CRITICAL | ✅ FIXED | Comments now swap with rows in `useClipboard.ts` |
+| Lock bypass via Delete/Backspace keys | CRITICAL | ✅ FIXED | Keyboard shortcuts now check lock state |
+| Reset button clears locked mappings | HIGH | ✅ FIXED | Reset button disabled when locked + early return check |
+| Skip Destination encoding mismatch | HIGH | ✅ FIXED | Unified to 96 functions matching Skip Source |
+
+### ✅ UX Consistency Improvements
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Analyzer warnings adapt to Hex/Dec | ✅ FIXED | `useStaticAnalyzer` now formats row indices based on display preference |
+| Skip Destination respects Hex/Dec | ✅ FIXED | Row index fields in SkipDestinationExtra.vue now use setting |
+
+### ✅ Lock State Protection - Complete Coverage
+
+All modification operations now check lock state:
+- **UI Buttons**: Row X, Selection Toolbar Clear, Reset, RowCommentSection clear buttons
+- **Keyboard Shortcuts**: Delete, Backspace
+- **Functions**: `reset()`, `clearRow()`, `clearRows()`
+
+### 📝 Known Issues - Documented
+
+| Issue | Priority | Status | Notes |
+|-------|----------|--------|-------|
+| Extra field reset on function change | MEDIUM | DEFERRED | Documented in FEATURE_PLAN.md with investigation areas |
+
+**See:** `docs/FEATURE_PLAN.md` and Serena memory `bug-fixes-2026-01` for detailed documentation.
+
+---
+
 ## Recently Implemented Components
 
 | Component | Purpose | Potential Improvements |
@@ -17,17 +52,18 @@ This document tracks recent implementations, architectural observations, and opp
 | `SettingsPanel.vue` | Settings & Info display | Consider separating concerns (settings vs. info/stats) |
 | `RowCommentSection.vue` | Row details and warnings display | Well-structured, minimal changes needed |
 | `RowActionButtons.vue` | Copy/paste/clear per-row actions | Could migrate to IconButton pattern |
+| `SkipDestinationExtra.vue` | Skip destination parameters | ✅ Refactored to two-dropdown pattern (matches source encoding) |
 
 ---
 
 ## Recently Implemented Composables
 
-| Composable | Purpose | Potential Improvements |
-|------------|---------|------------------------|
+| Composable | Purpose | Recent Updates |
+|------------|---------|----------------|
 | `useMappingCache.ts` | A/B slot caching with IndexedDB | Add export/import of cached slots |
-| `useStaticAnalyzer.ts` | Logic validation & warning generation | Add more warning rules (out-of-range, unreachable rows) |
+| `useStaticAnalyzer.ts` | Logic validation & warning generation | ✅ 2026-01-31: Now accepts `displayRowIndexAsHex` ref, formats all warning messages accordingly |
 | `useWarningLog.ts` | Centralized warning logging | Add log export, filtering by severity |
-| `useClipboard.ts` | Row/source/dest copy-paste operations | Well-structured, minimal changes needed |
+| `useClipboard.ts` | Row/source/dest copy-paste operations | ✅ 2026-01-31: Now swaps row comments when rows are moved, accepts optional `rowComments` ref |
 | `useMidi.ts` | Web MIDI API integration | Stable, works well |
 | `useMultiSelect.ts` | Multi-row selection state | Consider renaming to `useSelection.ts` |
 
@@ -1469,6 +1505,8 @@ EditorApp.vue
 ---
 
 ## Last Updated
+
+**2026-01-31** - Documented critical bug fixes (row comments, lock bypass, reset button, analyzer hex/dec formatting, Skip Destination encoding). Updated composables section with recent enhancements to `useStaticAnalyzer` and `useClipboard`.
 
 2026-01-26 - Added Phase 3.5 (Action Logging System) as foundation for undo/redo, updated completion status
 
