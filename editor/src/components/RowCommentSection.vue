@@ -15,6 +15,10 @@ defineProps<{
   sourceVariableIndex: number;
   isDestinationVariable: boolean;
   destinationVariableIndex: number;
+  isSourceSkip: boolean;
+  isDestinationSkip: boolean;
+  sourceSkipActive: boolean;
+  destinationSkipActive: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -49,6 +53,16 @@ function toBinary(value: number): string {
 function toPercent(value: number): number {
   return Math.round((value / 4095) * 100);
 }
+
+// Compute boolean value
+// For normal values: true if value > 0
+// For Skip commands: true if skip is active (will skip rows)
+function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): string {
+  if (isSkip) {
+    return skipActive ? 'TRUE' : 'FALSE';
+  }
+  return value > 0 ? 'TRUE' : 'FALSE';
+}
 </script>
 
 <template>
@@ -80,6 +94,9 @@ function toPercent(value: number): number {
           <span class="value-item value-dec">{{ sourceValue }}</span>
           <span class="value-item value-hex">{{ toHex(sourceValue) }}</span>
           <span class="value-item value-bin">{{ toBinary(sourceValue) }}</span>
+          <span class="value-item value-bool" :class="{ 'bool-true': getBoolValue(sourceValue, isSourceSkip, sourceSkipActive) === 'TRUE' }">
+            {{ getBoolValue(sourceValue, isSourceSkip, sourceSkipActive) }}
+          </span>
           <input
             v-if="isSourceVariable"
             type="range"
@@ -125,6 +142,9 @@ function toPercent(value: number): number {
           <span class="value-item value-dec">{{ destinationValue }}</span>
           <span class="value-item value-hex">{{ toHex(destinationValue) }}</span>
           <span class="value-item value-bin">{{ toBinary(destinationValue) }}</span>
+          <span class="value-item value-bool" :class="{ 'bool-true': getBoolValue(destinationValue, isDestinationSkip, destinationSkipActive) === 'TRUE' }">
+            {{ getBoolValue(destinationValue, isDestinationSkip, destinationSkipActive) }}
+          </span>
           <input
             v-if="isDestinationVariable"
             type="range"
@@ -239,7 +259,7 @@ function toPercent(value: number): number {
 .value-display {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex: 1;
   font-family: monospace;
   font-size: 12px;
@@ -264,13 +284,24 @@ function toPercent(value: number): number {
   color: rgba(52, 204, 153, 0.7);
 }
 
+.value-bool {
+  color: #888;
+  font-weight: bold;
+  min-width: 50px;
+}
+
+.value-bool.bool-true {
+  color: #F1F700;
+}
+
 .progress-bar {
   flex: 1;
   height: 8px;
   background-color: #000;
   border: 1px solid #34cc99;
   overflow: hidden;
-  min-width: 60px;
+  min-width: 80px;
+  max-width: 150px;
 }
 
 .progress-fill {
@@ -287,7 +318,8 @@ function toPercent(value: number): number {
   background-color: #000;
   border: 1px solid #34cc99;
   outline: none;
-  min-width: 60px;
+  min-width: 80px;
+  max-width: 150px;
   cursor: pointer;
   position: relative;
 }
@@ -297,7 +329,7 @@ function toPercent(value: number): number {
   -webkit-appearance: none;
   appearance: none;
   width: 12px;
-  height: 20px;
+  height: 16px;
   background: rgba(241, 247, 0, 0.01);
   border: none;
   cursor: ew-resize;
@@ -306,7 +338,7 @@ function toPercent(value: number): number {
 
 .variable-slider::-moz-range-thumb {
   width: 12px;
-  height: 20px;
+  height: 16px;
   background: rgba(241, 247, 0, 0.01);
   border: none;
   cursor: ew-resize;
@@ -316,12 +348,12 @@ function toPercent(value: number): number {
 /* Create progress fill effect using track background */
 .variable-slider::-webkit-slider-runnable-track {
   background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-  height: 6px;
+  height: 4px;
 }
 
 .variable-slider::-moz-range-track {
   background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-  height: 6px;
+  height: 4px;
 }
 
 /* Hover effect - slightly lighter to indicate interactivity */

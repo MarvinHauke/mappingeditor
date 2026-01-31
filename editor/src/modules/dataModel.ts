@@ -1020,36 +1020,24 @@ function genSkipDestinationFunctions() {
     abbr: EMPTY_ABBR,
     description: EMPTY_DESCRIPTION,
   });
-  destinationFunctions.push({
-    key: 0,
-    abbr: `01-16<`,
-    description: "Skip 01-16 Rows If Param1 < Param2",
-  });
-  destinationFunctions.push({
-    key: 1,
-    abbr: `01-16<=`,
-    description: "Skip 01-16 Rows If Param1 <= Param2",
-  });
-  destinationFunctions.push({
-    key: 2,
-    abbr: `01-16>`,
-    description: "Skip 01-16 Rows If Param1 > Param2",
-  });
-  destinationFunctions.push({
-    key: 3,
-    abbr: `01-16>=`,
-    description: "Skip 01-16 Rows If Param1 >= Param2",
-  });
-  destinationFunctions.push({
-    key: 4,
-    abbr: `01-16=`,
-    description: "Skip 01-16 Rows If Param1 = Param2",
-  });
-  destinationFunctions.push({
-    key: 5,
-    abbr: `01-16<>`,
-    description: "Skip 01-16 Rows If Param1 <> Param2",
-  });
+
+  // SKIP DESTINATION function encoding: skip_count (1-16) * 6 + condition (0-5)
+  // Same as SOURCE - generates functions 0-95 (16 skip counts * 6 conditions)
+  const conditions = ["<", "<=", ">", ">=", "=", "<>"];
+  const conditionDescs = ["<", "<=", ">", ">=", "=", "<>"];
+
+  for (let skipCount = 1; skipCount <= 16; skipCount++) {
+    for (let condition = 0; condition < 6; condition++) {
+      const functionKey = (skipCount - 1) * 6 + condition;
+      const skipStr = skipCount.toString().padStart(2, "0");
+      destinationFunctions.push({
+        key: functionKey,
+        abbr: `${skipStr}${conditions[condition]}`,
+        description: `Skip ${skipCount} Rows If Param1 ${conditionDescs[condition]} Param2`,
+      });
+    }
+  }
+
   return destinationFunctions;
 }
 
