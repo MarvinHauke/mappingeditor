@@ -19,6 +19,7 @@ defineProps<{
   isDestinationSkip: boolean;
   sourceSkipActive: boolean;
   destinationSkipActive: boolean;
+  isLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -87,7 +88,7 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
             class="action-btn"
             @click="emit('clearSource', rowIndex)"
             title="Clear Source"
-            :disabled="sourceEmpty"
+            :disabled="sourceEmpty || isLocked"
           >X</button>
         </div>
         <div class="value-display">
@@ -135,7 +136,7 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
             class="action-btn"
             @click="emit('clearDestination', rowIndex)"
             title="Clear Destination"
-            :disabled="destinationEmpty"
+            :disabled="destinationEmpty || isLocked"
           >X</button>
         </div>
         <div class="value-display">

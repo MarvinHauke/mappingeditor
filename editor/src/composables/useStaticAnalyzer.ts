@@ -89,6 +89,16 @@ export type RowWarningsMap = Map<number, AnalyzerWarning[]>;
 const VARIABLE_NAMES = 'ABCDEFGHIJKLMNOP'.split('');
 
 /**
+ * Format row index based on hex/decimal preference
+ */
+function formatRowIndex(index: number, asHex: boolean): string {
+  if (asHex) {
+    return index.toString(16).toUpperCase().padStart(2, '0');
+  }
+  return index.toString();
+}
+
+/**
  * Extract variable index (0-15) from Calc/Skip extra byte
  * Returns -1 if not a variable reference
  */
@@ -325,9 +335,13 @@ function getSkipCount(row: RowLike): number {
  * ```
  *
  * @param mappingDocument - Ref to the mapping document to analyze
+ * @param displayRowIndexAsHex - Ref to hex/decimal display preference
  * @returns Static analyzer API with warnings state and analysis methods
  */
-export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
+export function useStaticAnalyzer(
+  mappingDocument: Ref<MappingDocumentLike>,
+  displayRowIndexAsHex: Ref<boolean>
+) {
   const warnings = ref<RowWarningsMap>(new Map());
   const lastAnalyzedTimestamp = ref<number>(0);
 
@@ -391,12 +405,13 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
       const varsRead = getVariablesReadByRow(row);
       for (const varIdx of varsRead) {
         if (!writtenVariables.has(varIdx)) {
+          const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
           addWarning({
             type: 'variable-read-before-write',
             severity: 'warning',
             rowIndex: row.index,
             message: `Variable ${VARIABLE_NAMES[varIdx]} used but never set in previous rows`,
-            details: `Variable ${VARIABLE_NAMES[varIdx]} is read in Row ${row.index} but no earlier row sets it. The variable will have its initial value (set in the Variables section or 0).`
+            details: `Variable ${VARIABLE_NAMES[varIdx]} is read in Row ${rowLabel} but no earlier row sets it. The variable will have its initial value (set in the Variables section or 0).`
           });
         }
       }
@@ -439,12 +454,13 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
     // Report variables that are written but never read
     for (const [varIdx, rowIndex] of writtenVars) {
       if (!readVars.has(varIdx)) {
+        const rowLabel = formatRowIndex(rowIndex, displayRowIndexAsHex.value);
         addWarning({
           type: 'unused-variable',
           severity: 'info',
           rowIndex: rowIndex,
           message: `Variable ${VARIABLE_NAMES[varIdx]} is set but never read`,
-          details: `Variable ${VARIABLE_NAMES[varIdx]} is written in Row ${rowIndex} but no row reads its value. This may indicate dead code or an incomplete mapping.`
+          details: `Variable ${VARIABLE_NAMES[varIdx]} is written in Row ${rowLabel} but no row reads its value. This may indicate dead code or an incomplete mapping.`
         });
       }
     }
@@ -461,20 +477,22 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
 
       if (alwaysTrue) {
         const skipCount = getSkipCount(row);
+        const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
         addWarning({
           type: 'skip-always-true',
           severity: 'warning',
           rowIndex: row.index,
           message: `Skip condition always evaluates to TRUE`,
-          details: `The Skip condition in Row ${row.index} compares two constants and will always be true. This will always skip ${skipCount} row(s).`
+          details: `The Skip condition in Row ${rowLabel} compares two constants and will always be true. This will always skip ${skipCount} row(s).`
         });
       } else if (alwaysFalse) {
+        const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
         addWarning({
           type: 'skip-always-false',
           severity: 'info',
           rowIndex: row.index,
           message: `Skip condition always evaluates to FALSE`,
-          details: `The Skip condition in Row ${row.index} compares two constants and will always be false. The skip will never occur.`
+          details: `The Skip condition in Row ${rowLabel} compares two constants and will always be false. The skip will never occur.`
         });
       }
     }
@@ -500,12 +518,14 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
         for (let j = startUnreachable; j <= endUnreachable; j++) {
           const unreachableRow = rows.find(r => r.index === j);
           if (unreachableRow && !isEmptyRow(unreachableRow)) {
+            const jLabel = formatRowIndex(j, displayRowIndexAsHex.value);
+            const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
             addWarning({
               type: 'unreachable-rows',
               severity: 'warning',
               rowIndex: j,
-              message: `Row ${j} is unreachable`,
-              details: `This row will always be skipped due to the unconditional Skip in Row ${row.index}.`,
+              message: `Row ${jLabel} is unreachable`,
+              details: `This row will always be skipped due to the unconditional Skip in Row ${rowLabel}.`,
               relatedRows: [row.index]
             });
           }
@@ -541,12 +561,15 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
           const otherRows = rowIndices.filter(idx => idx !== rowIndex);
           const row = rows.find(r => r.index === rowIndex);
 
+          const otherRowsLabels = otherRows.map(idx => formatRowIndex(idx, displayRowIndexAsHex.value)).join(', ');
+          const lastRowLabel = formatRowIndex(rowIndices[rowIndices.length - 1], displayRowIndexAsHex.value);
+
           addWarning({
             type: 'destination-conflict',
             severity: 'info',
             rowIndex: rowIndex,
-            message: `Destination also written by Row ${otherRows.join(', ')}`,
-            details: `Multiple rows write to the same destination: ${row?.destination.type.description || 'Unknown'}. The last write (Row ${rowIndices[rowIndices.length - 1]}) will take effect.`,
+            message: `Destination also written by Row ${otherRowsLabels}`,
+            details: `Multiple rows write to the same destination: ${row?.destination.type.description || 'Unknown'}. The last write (Row ${lastRowLabel}) will take effect.`,
             relatedRows: otherRows
           });
         }
@@ -571,12 +594,13 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
       // Only warn if maxValue is set to something other than default
       if (row.maxValue !== 2047) {
         if (row.offset + row.maxValue > MAX_VALUE) {
+          const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
           addWarning({
             type: 'out-of-range-value',
             severity: 'warning',
             rowIndex: row.index,
             message: `Offset + MaxValue exceeds 4095`,
-            details: `Row ${row.index}: offset (${row.offset}) + maxValue (${row.maxValue}) = ${row.offset + row.maxValue} exceeds the maximum value of ${MAX_VALUE}.`
+            details: `Row ${rowLabel}: offset (${row.offset}) + maxValue (${row.maxValue}) = ${row.offset + row.maxValue} exceeds the maximum value of ${MAX_VALUE}.`
           });
         }
       }
@@ -584,12 +608,13 @@ export function useStaticAnalyzer(mappingDocument: Ref<MappingDocumentLike>) {
       // Check if offset + minValue goes below 0 (only for certain types)
       if (row.minValue !== -2048) {
         if (row.offset + row.minValue < MIN_VALUE) {
+          const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
           addWarning({
             type: 'out-of-range-value',
             severity: 'warning',
             rowIndex: row.index,
             message: `Offset + MinValue below -2048`,
-            details: `Row ${row.index}: offset (${row.offset}) + minValue (${row.minValue}) = ${row.offset + row.minValue} is below the minimum value of ${MIN_VALUE}.`
+            details: `Row ${rowLabel}: offset (${row.offset}) + minValue (${row.minValue}) = ${row.offset + row.minValue} is below the minimum value of ${MIN_VALUE}.`
           });
         }
       }

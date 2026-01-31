@@ -122,6 +122,7 @@ export interface UseClipboardOptions {
   mappingDocument: Ref<MappingDocumentLike>;
   currentlySelectedSourceTypes: Ref<MappingType[]>;
   currentlySelectedDestinationTypes: Ref<MappingType[]>;
+  rowComments?: Ref<Record<number, string>>;  // Optional: for swapping comments with rows
 }
 
 // Result type for move operations including reference warnings
@@ -426,6 +427,13 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
 
     rowB.source = tempSource;
     rowB.destination = tempDest;
+
+    // Also swap row comments if provided
+    if (options.rowComments) {
+      const tempComment = options.rowComments.value[rowA.index] ?? '';
+      options.rowComments.value[rowA.index] = options.rowComments.value[rowB.index] ?? '';
+      options.rowComments.value[rowB.index] = tempComment;
+    }
   }
 
   // Helper: Swap selected types between two indices

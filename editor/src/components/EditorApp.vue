@@ -178,7 +178,8 @@ const {
 } = useClipboard({
   mappingDocument,
   currentlySelectedSourceTypes,
-  currentlySelectedDestinationTypes
+  currentlySelectedDestinationTypes,
+  rowComments  // Pass rowComments so they swap with rows
 });
 
 // Static Logic Analyzer
@@ -189,7 +190,7 @@ const {
   analyzeDocument,
   getRowWarnings,
   rowHasWarnings
-} = useStaticAnalyzer(mappingDocument);
+} = useStaticAnalyzer(mappingDocument, displayRowIndexAsHex);
 
 // Warning Log
 const {
@@ -499,11 +500,26 @@ function getConstantValue(byte: number): number {
   return constantMap[byte] ?? 0;
 }
 
+// Type alias for row-like objects (works with both Row instances and plain objects)
+type RowLike = {
+  index: number;
+  source: {
+    type: { key: number };
+    function: { key: number };
+    extra: { keyOrValue: number }
+  };
+  destination: {
+    type: { key: number };
+    function: { key: number };
+    extra: { keyOrValue: number }
+  }
+};
+
 /**
  * Analyze Skip SOURCE condition to check if it will actually skip
  * Returns: true if skip will execute, false if skip is always false, null if indeterminate
  */
-function analyzeSkipSourceCondition(row: MappingRow): boolean | null {
+function analyzeSkipSourceCondition(row: RowLike): boolean | null {
   if (row.source.type.key !== SKIP_SOURCE_TYPE_KEY) {
     return null;
   }
@@ -547,7 +563,7 @@ function analyzeSkipSourceCondition(row: MappingRow): boolean | null {
  * Analyze Skip DESTINATION condition
  * Now uses the same encoding as SOURCE (function = skip count + condition, extra = params)
  */
-function analyzeSkipDestCondition(row: MappingRow): boolean | null {
+function analyzeSkipDestCondition(row: RowLike): boolean | null {
   if (row.destination.type.key !== SKIP_DESTINATION_TYPE_KEY) {
     return null;
   }
@@ -587,13 +603,13 @@ function analyzeSkipDestCondition(row: MappingRow): boolean | null {
   return result;
 }
 
-function isRowSkipped(row: MappingRow): boolean {
+function isRowSkipped(row: RowLike): boolean {
   // Check if this row will be skipped by a previous row's Skip command
   const currentIndex = row.index;
 
   // Check all previous rows
   for (let i = 0; i < currentIndex; i++) {
-    const prevRow = mappingDocument.value.rows[i];
+    const prevRow = mappingDocument.value.rows[i] as MappingRow;
 
     // Check Skip source
     if (prevRow.source.type.key === SKIP_SOURCE_TYPE_KEY) {
@@ -786,6 +802,12 @@ function handleKeyDown(event: KeyboardEvent): void {
     clearRowSelection();
     event.preventDefault();
   } else if (event.key === 'Delete' || event.key === 'Backspace') {
+    // Check lock state before clearing
+    if (isCurrentLocked.value) {
+      event.preventDefault();
+      return;
+    }
+
     if (selectedRowIndices.value.size > 1) {
       clearRows(indices);
     } else if (indices.length === 1) {
@@ -804,6 +826,8 @@ onMounted(() => {
 // Persist row index display preference
 watch(displayRowIndexAsHex, (val) => {
   localStorage.setItem(ROW_INDEX_DISPLAY_KEY, val.toString());
+  // Re-run analysis to update row indices in warning messages
+  analyzeDocument();
 });
 
 // Auto-save to cache when document changes
@@ -1027,6 +1051,11 @@ function readFile() {
 }
 
 function reset() {
+  // Check lock state before resetting
+  if (isCurrentLocked.value) {
+    return;
+  }
+
   if (fileInput.value) {
     fileInput.value.value = '';
   }
@@ -1341,6 +1370,7 @@ function downloadMap() {
         variant="primary"
         border-radius="none"
         data-variant="reset"
+        :disabled="isCurrentLocked"
         @click="reset"
         title="Reset the current mapping file"
       >
@@ -1660,6 +1690,7 @@ function downloadMap() {
           <!-- Skip Destination Type -->
           <SkipDestinationExtra v-model="row.destination.extra as DestinationExtra"
             v-else-if="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY"
+            :display-row-index-as-hex="displayRowIndexAsHex"
             :is-locked="isCurrentLocked" />
 
           <!-- Variable Destination Type -->
@@ -1789,6 +1820,7 @@ function downloadMap() {
           :is-destination-skip="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY"
           :source-skip-active="row.source.type.key === SKIP_SOURCE_TYPE_KEY && row.source.function.key !== EMPTY_KEY && Math.floor(row.source.function.key / 6) + 1 > 0"
           :destination-skip-active="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY && row.destination.function.key !== EMPTY_KEY && Math.floor(row.destination.function.key / 6) + 1 > 0"
+          :is-locked="isCurrentLocked"
           v-model="rowComments[row.index]"
           @copy-source="copySource"
           @paste-source="pasteSource"
