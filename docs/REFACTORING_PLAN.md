@@ -71,7 +71,7 @@ All modification operations now check lock state:
 
 ## Architecture Observations
 
-### 1. EditorApp.vue is Large (~1100 lines)
+### 1. EditorApp.vue is Large (~2,130 lines total, 1,300 script lines)
 
 The main component handles multiple concerns:
 - File I/O (import/export)
@@ -79,11 +79,17 @@ The main component handles multiple concerns:
 - Row selection state
 - Panel positioning coordination
 - Document state management
+- Skip analysis logic
+- Keyboard shortcuts
+- Row metadata (colors, comments)
 
-**Recommended Extractions:**
-- `useFileIO.ts` composable - file operations
-- `useMappingSerializer.ts` composable - format conversions
-- `EditorToolbar.vue` component - left menu area
+**Solution: Phase 3.6 Modularization**
+
+See `docs/EditorApp_modules.md` for the complete extraction plan:
+- 6 composables to extract (~730 lines)
+- Target: Reduce to ~400 script lines
+- Incremental PR strategy with automated tests
+- Full implementation details and API designs
 
 ### 2. Panel Positioning is Complex
 
@@ -166,17 +172,17 @@ See the **Detailed Implementation Plan** section below for the comprehensive pha
 
 ### ⏳ Current Phase
 
-**Phase 3.5:** Action Logging System (NEW) - Preparing for undo/redo
-- Foundation for future undo/redo functionality
-- Non-invasive logging of all document mutations
-- See detailed plan below
+**Phase 3.6:** EditorApp Modularization - Extract composables from EditorApp.vue
+- Extract 730 lines into 6 new composables
+- Improve testability and maintainability
+- Foundation for debugger features (Phase 0.1, 0.11, 0.13)
+- See `docs/EditorApp_modules.md` for detailed implementation plan
 
 ### 🔜 Remaining Phases
 
-- **Phase 4:** useFileIO refactoring (integrate with action log)
-- **Phase 5:** usePanelLayout refactoring
 - **Phase 6:** SelectionToolbar Enhancement
-- **Future:** Undo/Redo UI (builds on action log)
+- **Future:** Undo/Redo UI (builds on Phase 3.5 action log)
+- **Future:** Debugger & Simulation features (Phase 0.1, 0.11, 0.13 from FEATURE_PLAN.md)
 
 ---
 
@@ -192,15 +198,24 @@ This plan combines strategic refactoring with forward-looking infrastructure. Th
 
 1. ~~**Phase 1:** Short-term wins~~ ✅ COMPLETE
 2. ~~**Phase 3:** Global Documentation~~ ✅ COMPLETE
-3. **Phase 3.5:** Action Logging System (NEW) - Foundation for undo/redo
-4. **Phase 4:** useFileIO refactoring (integrate with action log)
-5. **Phase 5:** usePanelLayout refactoring
-6. **Phase 6:** SelectionToolbar Enhancement
-7. **Future:** Undo/Redo UI implementation Simulation Engine (big features on clean architecture)
+3. ~~**Phase 3.5:** Action Logging System~~ ✅ PARTIALLY COMPLETE (useActionHistory exists)
+4. **Phase 3.6:** EditorApp Modularization (CURRENT) - Extract 6 composables, foundation for debugger
+5. **Phase 6:** SelectionToolbar Enhancement
+6. **Future:** Undo/Redo UI (builds on Phase 3.5)
+7. **Future:** Debugger & Simulation Engine (builds on Phase 3.6 clean architecture)
 
 ---
 
-## Phase 3.5: Action Logging System (NEW)
+## Phase 3.5: Action Logging System - ✅ PARTIALLY COMPLETE
+
+### Status
+
+**IMPLEMENTED:** `useActionHistory.ts` composable exists with full command pattern support, per-slot undo/redo, and IndexedDB persistence.
+
+**NEXT STEPS:** The foundation is in place. Focus shifts to:
+1. Audit existing implementation for coverage gaps
+2. Extend to additional operations as needed
+3. Add UI components (undo/redo buttons, history panel)
 
 ### Goal
 
@@ -1173,6 +1188,105 @@ Add panel to header and wire up v-model bindings.
 
 ---
 
+## Phase 3.6: EditorApp Modularization - NEW
+
+### Overview
+
+Extract 6 composables from EditorApp.vue (2,130 lines total, 1,300 script lines) to improve testability, maintainability, and enable future features. This refactoring reduces EditorApp.vue script from 1,300 lines to ~400 lines while preserving all functionality.
+
+**Target:** Extract 730 lines into 6 new composables
+
+See `docs/EditorApp_modules.md` for complete implementation details.
+
+### Composables to Extract
+
+| Composable | Lines | Priority | Risk | Effort |
+|------------|-------|----------|------|--------|
+| B.1: useSkipAnalysis | ~180 | HIGH | LOW | 4-5h |
+| B.2: useRowSelection | ~100 | HIGH | LOW | 4-5h |
+| B.3: usePanelState | ~120 | MEDIUM | LOW | 3-4h |
+| B.4: useKeyboardShortcuts | ~100 | MEDIUM | LOW | 3-4h |
+| B.5: useSerialization | ~150 | HIGH | MEDIUM | 3-4h |
+| B.6: useFileHandling | ~300 | CRITICAL | HIGH | 4-5h |
+| B.7: useRowMetadata | ~120 | MEDIUM | MEDIUM | 3-4h |
+
+### Sequencing Strategy
+
+**Week 1:** Foundation + Low Risk
+- Days 0-1: Setup export regression tests + B.1 + B.2
+- Days 2-3: B.3 + B.4
+
+**Week 2:** High Risk + Integration
+- Days 4-5: B.5 + B.6 (requires extensive testing)
+- Day 6: B.7 + integration testing
+
+### Integration with Feature Roadmap
+
+This refactoring enables:
+- **Phase 0.1 (Debugger):** Clean architecture for breakpoints and step-through
+- **Phase 0.11 (Skip Visualization):** useSkipAnalysis provides reusable skip logic
+- **Phase 0.13 (Simulation):** Composables are testable units for simulation engine
+
+### Git Strategy
+
+Incremental PRs:
+1. **PR #1:** B.1 + B.2 (Skip + Selection, ~230 lines, LOW risk)
+2. **PR #2:** B.3 + B.4 (Panels + Keyboard, ~130 lines, LOW risk)
+3. **PR #3:** B.5 + B.6 (Serialization + File I/O, ~320 lines, HIGH risk) - **Requires export tests passing**
+4. **PR #4:** B.7 (Metadata, ~100 lines, MEDIUM risk)
+5. **PR #5:** Feature branch → main (full integration)
+
+### Testing Requirements
+
+**CRITICAL:** Automated export regression tests MUST pass before PR #3 merge.
+
+**File:** `tests/export-regression.test.ts` (NEW)
+- Round-trip .MAP → binary → parse → verify
+- Round-trip .JSON → metadata preservation
+- Backward compatibility with old JSON formats
+
+**Manual Regression Checklist:**
+- [ ] Import .MAP file → all fields loaded
+- [ ] Import .JSON (old/new) → backward compatible
+- [ ] Export all formats → correct outputs
+- [ ] Static analyzer → warnings generated
+- [ ] Multi-row operations → work correctly
+- [ ] Slot A/B switching → cache persists
+- [ ] Keyboard shortcuts → all combinations work
+- [ ] MIDI learn → channel/CC capture works
+- [ ] Row colors/comments → persistence works
+
+### Effort Estimate
+
+| Phase | Effort | Timeline |
+|-------|--------|----------|
+| Setup + Export Tests | 2h | Day 0 |
+| B.1-B.2 (Foundation) | 8-10h | Days 1-2 |
+| B.3-B.4 (Panel + KB) | 6-8h | Day 3 |
+| B.5-B.6 (Serialization + I/O) | 7-9h | Days 4-5 |
+| B.7 (Metadata) | 3-4h | Day 6 |
+| Integration Testing | 3-4h | Day 7 |
+| **Total** | **29-37 hours** | **~6-7 days** |
+
+### Success Criteria
+
+- [ ] EditorApp.vue reduced from 1,300 → ~400 script lines
+- [ ] 6 new composables created and tested
+- [ ] All existing functionality preserved
+- [ ] Export regression tests passing
+- [ ] TypeScript strict mode compliant
+- [ ] No breaking changes to .MAP format
+- [ ] All manual regression tests passing
+
+### Benefits
+
+1. **Testability:** Each composable can be unit tested independently
+2. **Reusability:** Skip logic, serialization logic can be reused in debugger/simulation
+3. **Maintainability:** Smaller files, clear separation of concerns
+4. **Feature Enablement:** Clean foundation for Phases 0.1, 0.11, 0.13
+
+---
+
 ## Phase 4: Extract useFileIO Composable
 
 **Status:** NEXT - Ready to implement after Phase 3.5
@@ -1424,12 +1538,13 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 | ~~1. Short-term wins~~ | ~~7-10 hours~~ | ~~1-2 days~~ | ✅ DONE |
 | ~~2. Row Value Display~~ | ~~2-3 hours~~ | ~~0.5 days~~ | ⏭️ SKIPPED |
 | ~~3. Global Documentation~~ | ~~4-5 hours~~ | ~~1 day~~ | ✅ DONE |
-| **3.5. Action Logging System** | **10-14 hours** | **2 days** | ⏳ **CURRENT** |
-| 4. useFileIO Refactoring | 8-10 hours | 2 days | 🔜 NEXT |
-| 5. usePanelLayout Refactoring | 6-8 hours | 1-2 days | 📋 PLANNED |
+| ~~3.5. Action Logging System~~ | ~~10-14 hours~~ | ~~2 days~~ | ✅ PARTIALLY COMPLETE |
+| **3.6. EditorApp Modularization** | **29-37 hours** | **6-7 days** | ⏳ **CURRENT** |
+| 4. useFileIO Refactoring | 8-10 hours | 2 days | 🔀 MERGED INTO 3.6 |
+| 5. usePanelLayout Refactoring | 6-8 hours | 1-2 days | 🔀 MERGED INTO 3.6 |
 | 6. SelectionToolbar Enhancement | 3-4 hours | 0.5 days | 📋 PLANNED |
-| **Total** | **37-49 hours** | **6-8 days** | |
-| **Remaining** | **27-36 hours** | **5-6 days** | |
+| **Total** | **66-86 hours** | **12-15 days** | |
+| **Remaining** | **32-41 hours** | **7-8 days** | |
 
 ---
 
@@ -1441,20 +1556,25 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 - [x] TypeDoc comments added to composables
 - [x] Global documentation panel implemented
 
-**Phase 3.5 (Current - Action Logging):**
-- [ ] useActionLog composable created and tested
-- [ ] Action types defined for all operations
-- [ ] Logging integrated into EditorApp
-- [ ] ActionLogPanel component for debugging
-- [ ] Foundation for undo/redo in place
+**Phase 3.5 (Action Logging - Partially Complete):**
+- [x] useActionHistory composable created with command pattern
+- [x] Per-slot undo/redo with IndexedDB persistence
+- [x] Foundation for undo/redo in place
+- [ ] UI components (undo/redo buttons, history panel)
+- [ ] Complete integration audit
 
-**Phase 4-6 (Upcoming):**
-- [ ] EditorApp.vue reduced from ~1100 lines to ~900 lines
-- [ ] All file I/O logic in composable (testable independently)
-- [ ] No prop drilling for panel positioning
-- [ ] SelectionToolbar converted to BasePanel
+**Phase 3.6 (Current - EditorApp Modularization):**
+- [ ] EditorApp.vue reduced from 1,300 → ~400 script lines
+- [ ] 6 new composables created (Skip, Selection, Panel, Keyboard, Serialization, FileIO, Metadata)
+- [ ] Export regression tests implemented and passing
 - [ ] All existing functionality preserved
 - [ ] No breaking changes to .MAP binary format
+- [ ] TypeScript strict mode compliant
+- [ ] Manual regression checklist complete
+
+**Phase 6 (Upcoming):**
+- [ ] SelectionToolbar converted to BasePanel
+- [ ] Dockable panel system implemented
 
 ---
 
@@ -1505,6 +1625,8 @@ EditorApp.vue
 ---
 
 ## Last Updated
+
+**2026-02-01** - Added Phase 3.6 (EditorApp Modularization) with plan to extract 6 composables from EditorApp.vue. Updated Phase 3.5 status to PARTIALLY COMPLETE (useActionHistory exists). Created `docs/EditorApp_modules.md` with detailed implementation plan.
 
 **2026-01-31** - Documented critical bug fixes (row comments, lock bypass, reset button, analyzer hex/dec formatting, Skip Destination encoding). Updated composables section with recent enhancements to `useStaticAnalyzer` and `useClipboard`.
 
