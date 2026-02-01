@@ -41,6 +41,7 @@ import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
 import { useWarningLog } from '../composables/useWarningLog';
 import { useMappingCache, type CachedMapping } from '../composables/useMappingCache';
 import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
+import { useVariableUsage } from '../composables/useVariableUsage';
 import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
@@ -191,6 +192,9 @@ const {
   getRowWarnings,
   rowHasWarnings
 } = useStaticAnalyzer(mappingDocument, displayRowIndexAsHex);
+
+// Variable Usage tracking
+const { variableUsage } = useVariableUsage(mappingDocument);
 
 // Warning Log
 const {
@@ -1357,6 +1361,8 @@ function downloadMap() {
   <VariableMonitor
     v-if="showVariableMonitor"
     :variables="mappingDocument.variables"
+    :variable-usage="variableUsage"
+    :display-row-index-as-hex="displayRowIndexAsHex"
     :settings-panel-expanded="settingsPanelExpanded"
     :show-selection-toolbar="showSelectionToolbar"
     :selection-toolbar-expanded="selectionToolbarExpanded"

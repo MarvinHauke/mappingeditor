@@ -32,6 +32,7 @@ A simulation and debugging system for the Mapping Editor that allows users to va
   **Problem**: When changing a function within the same type (e.g., Skip 2 → Skip 3 rows, or Calc Add → Calc Subtract), the extra field is unconditionally reset to EMPTY_KEY, losing user's parameter values.
 
   **Current behavior**:
+
   ```
   User sets: Skip 2 Rows If Param1 > Param2
              Extra: Constant 5, Variable A
@@ -431,21 +432,43 @@ Last Update: Cycle 1247 (0.5s ago)  ↑ Rising
 - Last update timestamp with cycle number
 - Value change indicator (↑ rising, ↓ falling, → stable)
 
-### 3.3 Variable Monitor Enhancements
+### 3.3 Variable Monitor Enhancements ✅
 
-Extend the existing VariableMonitor component:
+Extended the existing VariableMonitor component with advanced debugging features:
 
-| Column     | Description                               |
-| ---------- | ----------------------------------------- |
-| Name       | Variable A-P                              |
-| Value      | Current 16-bit value (dec/hex/bin toggle) |
-| Writes     | Count of writes this session              |
-| Reads      | Count of reads this session               |
-| Last Write | Row number that last wrote                |
-| Sparkline  | Mini graph of value over last 100 cycles  |
-| Status     | Warning if never read/written             |
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Unused Variables | Grey out variables not used in mapping | ✅ |
+| Value Format Toggle | Switch between DEC/HEX/BIN/BOOL display | ✅ |
+| Row Writers Display | Show which rows write to each variable | ✅ |
+| Visual Status | Border colors: read (teal), written (brighter) | ✅ |
 
----
+**Implementation:**
+- New composable: `useVariableUsage.ts` - tracks variable reads/writes across all rows
+- Enhanced VariableMonitor with toggle controls and conditional styling
+- LocalStorage persistence for user preferences
+
+**Value Formats:**
+- **Decimal**: `0` to `4095` (default)
+- **Hexadecimal**: `0x000` to `0xFFF`
+- **Binary**: `0b000000000000` to `0b111111111111` (12-bit)
+- **Boolean**: `0` (false) or `1` (true for any non-zero)
+
+**Visual Indicators:**
+- **Greyed out**: Variable not read or written (opacity 0.3)
+- **Teal border**: Variable is read
+- **Brighter background**: Variable is written
+- **Writers list**: Shows row indices (e.g., "5, 12, 34")
+
+**Features (Future):**
+- Reads column: which rows are reading the variable
+- Last Write timestamp: when variable was last updated
+
+## 3.4 Row submonitor
+
+add a Submonitor which has a overview of the row values
+
+- it should be a subcategory in the Variables monitor
 
 ## Phase 4: Multi-Selection & Row Management
 
