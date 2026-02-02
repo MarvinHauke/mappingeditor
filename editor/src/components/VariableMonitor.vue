@@ -139,8 +139,9 @@ const rightPosition = computed(() => {
 
 // Expanded width - consistent sizing to avoid scrollbars
 const expandedWidth = computed(() => {
-  // Use consistent width for all formats, increased to accommodate larger buttons
-  return displayMode.value === 'values' ? '260px' : '300px';
+  // Use consistent 300px width for all formats to ensure proper panel docking
+  // and to accommodate future Rows subsection
+  return '300px';
 })
 
 function onExpandedChange(expanded: boolean): void {

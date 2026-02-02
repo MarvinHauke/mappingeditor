@@ -35,12 +35,12 @@ const expandedEntryId = ref<number | null>(null);
 // Settings: minimized 100px, expanded 180px
 // Selection: minimized 120px, expanded 260px (only if visible)
 // MIDI: minimized 150px, expanded 320px (only if visible)
-// Variable: minimized 110px, expanded 200px (only if visible)
+// Variable: minimized 110px, expanded 300px (only if visible)
 const rightPosition = computed(() => {
   const settingsWidth = props.settingsPanelExpanded ? 180 : 100;
   const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0;
   const midiWidth = props.showMidiMonitor ? (props.midiMonitorExpanded ? 320 : 150) : 0;
-  const varWidth = props.showVariableMonitor ? (props.variableMonitorExpanded ? 200 : 110) : 0;
+  const varWidth = props.showVariableMonitor ? (props.variableMonitorExpanded ? 300 : 110) : 0;
   // Count visible panels for gap calculation: Settings always visible
   const visiblePanelCount = 1 + (props.showSelectionToolbar ? 1 : 0) + (props.showMidiMonitor ? 1 : 0) + (props.showVariableMonitor ? 1 : 0);
   const gaps = visiblePanelCount * 10; // 10px gap between each visible panel
