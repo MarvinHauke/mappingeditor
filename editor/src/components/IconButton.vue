@@ -88,12 +88,12 @@ defineEmits<{
 .icon-btn.clear {
   background: transparent;
   border-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.7);
+  color: #000;
 }
 
 .icon-btn.clear:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  color: #000;
 }
 
 .icon-btn.success {
