@@ -1368,6 +1368,7 @@ function downloadMap() {
     :selection-toolbar-expanded="selectionToolbarExpanded"
     :show-midi-monitor="midiSupported && showMidiMonitor"
     :midi-monitor-expanded="midiMonitorExpanded"
+    :rows="mappingDocument.rows"
     @expanded-change="variableMonitorExpanded = $event"
   />
 

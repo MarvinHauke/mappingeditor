@@ -2,10 +2,25 @@
 import { computed, ref, watch, onMounted } from 'vue'
 import BasePanel from './BasePanel.vue'
 import type { VariableUsageInfo } from '@/composables/useVariableUsage'
+import { buildRowReadersMap } from '@/services/rowReferenceService'
 
 interface VariableLike {
   readonly name: string
   value: number
+}
+
+interface RowLike {
+  readonly index: number
+  source: {
+    type: { key: number; abbr: string }
+    function: { key: number; abbr: string }
+    extra: { keyOrValue: number }
+  }
+  destination: {
+    type: { key: number; abbr: string }
+    function: { key: number; abbr: string }
+    extra: { keyOrValue: number }
+  }
 }
 
 const props = defineProps<{
@@ -17,6 +32,7 @@ const props = defineProps<{
   selectionToolbarExpanded: boolean
   showMidiMonitor: boolean
   midiMonitorExpanded: boolean
+  rows?: RowLike[]
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +49,20 @@ type DisplayMode = 'values' | 'writers' | 'readers';
 const displayMode = ref<DisplayMode>('values');
 const DISPLAY_MODE_KEY = 'variable-display-mode';
 
+// Rows subsection state
+type RowsDisplayMode = 'values' | 'readers';
+const rowsSubsectionExpanded = ref(false);
+const rowsDisplayMode = ref<RowsDisplayMode>('values');
+const ROWS_SUBSECTION_EXPANDED_KEY = 'variable-rows-subsection-expanded';
+const ROWS_DISPLAY_MODE_KEY = 'variable-rows-display-mode';
+
+// Panel height state
+const panelHeight = ref(500);
+const PANEL_HEIGHT_KEY = 'variable-monitor-panel-height';
+const isResizing = ref(false);
+const resizeStartY = ref(0);
+const resizeStartHeight = ref(0);
+
 // Load preferences from localStorage
 onMounted(() => {
   const savedFormat = localStorage.getItem(VALUE_FORMAT_KEY);
@@ -44,6 +74,24 @@ onMounted(() => {
   if (savedMode && ['values', 'writers', 'readers'].includes(savedMode)) {
     displayMode.value = savedMode as DisplayMode;
   }
+
+  const savedRowsExpanded = localStorage.getItem(ROWS_SUBSECTION_EXPANDED_KEY);
+  if (savedRowsExpanded !== null) {
+    rowsSubsectionExpanded.value = savedRowsExpanded === 'true';
+  }
+
+  const savedRowsMode = localStorage.getItem(ROWS_DISPLAY_MODE_KEY);
+  if (savedRowsMode && ['values', 'readers'].includes(savedRowsMode)) {
+    rowsDisplayMode.value = savedRowsMode as RowsDisplayMode;
+  }
+
+  const savedHeight = localStorage.getItem(PANEL_HEIGHT_KEY);
+  if (savedHeight !== null) {
+    const height = parseInt(savedHeight, 10);
+    if (!isNaN(height) && height >= 200 && height <= 1000) {
+      panelHeight.value = height;
+    }
+  }
 });
 
 // Persist preferences
@@ -53,6 +101,18 @@ watch(valueFormat, (val) => {
 
 watch(displayMode, (val) => {
   localStorage.setItem(DISPLAY_MODE_KEY, val);
+});
+
+watch(rowsSubsectionExpanded, (val) => {
+  localStorage.setItem(ROWS_SUBSECTION_EXPANDED_KEY, String(val));
+});
+
+watch(rowsDisplayMode, (val) => {
+  localStorage.setItem(ROWS_DISPLAY_MODE_KEY, val);
+});
+
+watch(panelHeight, (val) => {
+  localStorage.setItem(PANEL_HEIGHT_KEY, String(val));
 });
 
 // Variable labels A-P
@@ -147,6 +207,73 @@ const expandedWidth = computed(() => {
 function onExpandedChange(expanded: boolean): void {
   emit('expandedChange', expanded)
 }
+
+// Toggle rows subsection
+function toggleRowsSubsection(): void {
+  rowsSubsectionExpanded.value = !rowsSubsectionExpanded.value;
+}
+
+// Build row readers map when rows change
+const rowReadersMap = computed(() => {
+  if (!props.rows) return new Map<number, number[]>();
+  // Cast to any to work around type compatibility issues with buildRowReadersMap
+  return buildRowReadersMap(props.rows as any);
+});
+
+// Format row destination info
+function formatRowDestination(row: RowLike): string {
+  const destType = row.destination.type.abbr;
+  const destFunc = row.destination.function.abbr;
+
+  if (destType === '----' || destType === 'EMPTY') {
+    return '[Empty]';
+  }
+
+  if (destFunc === '----' || destFunc === 'EMPTY') {
+    return destType;
+  }
+
+  return `${destType} ${destFunc}`;
+}
+
+// Get row display content based on mode
+function getRowDisplayContent(row: RowLike, rowIndex: number): string {
+  if (rowsDisplayMode.value === 'readers') {
+    const readers = rowReadersMap.value.get(rowIndex) ?? [];
+    return readers.length > 0 ? readers.map(formatRowIndex).join(', ') : '—';
+  } else {
+    // For values mode, we'll show the destination value
+    // For now, just show a placeholder (will be implemented with simulation engine)
+    return '—';
+  }
+}
+
+// Resize handlers
+function startResize(event: MouseEvent): void {
+  isResizing.value = true;
+  resizeStartY.value = event.clientY;
+  resizeStartHeight.value = panelHeight.value;
+
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+  event.preventDefault();
+}
+
+function handleResize(event: MouseEvent): void {
+  if (!isResizing.value) return;
+
+  const deltaY = event.clientY - resizeStartY.value;
+  const newHeight = resizeStartHeight.value + deltaY;
+
+  // Constrain between min and max heights
+  panelHeight.value = Math.max(200, Math.min(1000, newHeight));
+}
+
+function stopResize(): void {
+  isResizing.value = false;
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', stopResize);
+}
 </script>
 
 <template>
@@ -158,7 +285,7 @@ function onExpandedChange(expanded: boolean): void {
     :expanded-width="expandedWidth"
     @expanded-change="onExpandedChange"
   >
-    <div class="variable-monitor-content">
+    <div class="variable-monitor-content" :style="{ minHeight: panelHeight + 'px', maxHeight: panelHeight + 'px' }">
       <!-- Toggle Controls Header (Fixed) -->
       <div class="variable-controls">
       <!-- Format buttons row -->
@@ -276,6 +403,57 @@ function onExpandedChange(expanded: boolean): void {
       </div>
     </div>
     </div>
+
+    <!-- Rows Subsection (Collapsible) -->
+    <div v-if="rows && rows.length > 0" class="rows-subsection">
+      <!-- Collapsible Divider -->
+      <div class="rows-divider" @click="toggleRowsSubsection">
+        <div style="display: flex; align-items: center;">
+          <span class="expand-icon">{{ rowsSubsectionExpanded ? '▼' : '▸' }}</span>
+          <span class="divider-title">Rows</span>
+        </div>
+        <div class="rows-controls">
+          <button
+            class="rows-toggle-btn"
+            :class="{ active: rowsDisplayMode === 'values' }"
+            @click.stop="rowsDisplayMode = 'values'"
+            title="Show row destination values"
+          >
+            Values
+          </button>
+          <button
+            class="rows-toggle-btn"
+            :class="{ active: rowsDisplayMode === 'readers' }"
+            @click.stop="rowsDisplayMode = 'readers'"
+            title="Show rows that reference each row"
+          >
+            Readers
+          </button>
+        </div>
+      </div>
+
+      <!-- Rows List (Scrollable) -->
+      <div v-if="rowsSubsectionExpanded" class="rows-container">
+        <div
+          v-for="(row, idx) in rows"
+          :key="idx"
+          class="row-item"
+        >
+          <span class="row-index">{{ formatRowIndex(idx) }}:</span>
+          <span class="row-destination">{{ formatRowDestination(row) }}</span>
+          <span class="row-value">{{ getRowDisplayContent(row, idx) }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resize Handle -->
+    <div
+      class="resize-handle"
+      @mousedown="startResize"
+      title="Drag to resize panel"
+    >
+      <div class="resize-indicator"></div>
+    </div>
     </div>
   </BasePanel>
 </template>
@@ -283,12 +461,11 @@ function onExpandedChange(expanded: boolean): void {
 <style scoped>
 /* Main content wrapper */
 .variable-monitor-content {
+  position: relative;
   display: flex;
   flex-direction: column;
-  height: 100%;
-  max-height: 350px;
   overflow: hidden;
-  padding: 4px;
+  padding: 4px 4px 0 4px;
 }
 
 /* Controls Header - Fixed at top */
@@ -471,7 +648,179 @@ function onExpandedChange(expanded: boolean): void {
 
 /* Override BasePanel's overflow to let us handle it internally */
 :deep(.panel-body) {
-  overflow: hidden !important;
+  overflow: visible !important;
   padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: auto !important;
+  max-height: none !important;
+}
+
+/* Resize Handle */
+.resize-handle {
+  width: 100%;
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-top: 1px solid rgba(52, 204, 153, 0.3);
+  transition: background-color 0.2s;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.resize-handle:hover {
+  background: rgba(52, 204, 153, 0.2);
+}
+
+.resize-indicator {
+  width: 40px;
+  height: 3px;
+  background: rgba(52, 204, 153, 0.6);
+  border-radius: 2px;
+  transition: background-color 0.2s;
+}
+
+.resize-handle:hover .resize-indicator {
+  background: #34cc99;
+}
+
+/* Rows Subsection */
+.rows-subsection {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+/* Collapsible Divider - minimal style like SettingsPanel */
+.rows-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 4px 6px 4px;
+  border-top: 1px solid rgba(52, 204, 153, 0.3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.rows-divider:hover .expand-icon,
+.rows-divider:hover .divider-title {
+  color: #F1F700;
+}
+
+.expand-icon {
+  font-size: 10px;
+  color: #34cc99;
+  transition: color 0.2s;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.divider-title {
+  font-size: 10px;
+  font-weight: 500;
+  color: #34cc99;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.2s;
+}
+
+.rows-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.rows-toggle-btn {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: rgba(52, 204, 153, 0.1);
+  border: 1px solid rgba(52, 204, 153, 0.3);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rows-toggle-btn:hover {
+  background: rgba(52, 204, 153, 0.2);
+  border-color: rgba(52, 204, 153, 0.5);
+}
+
+.rows-toggle-btn.active {
+  background: rgba(52, 204, 153, 0.4);
+  border-color: #34cc99;
+  color: #34cc99;
+  font-weight: bold;
+}
+
+/* Rows Container - Scrollable */
+.rows-container {
+  max-height: 200px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 2px 0 2px;
+}
+
+/* Custom scrollbar for rows container */
+.rows-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rows-container::-webkit-scrollbar-track {
+  background: rgba(52, 204, 153, 0.1);
+}
+
+.rows-container::-webkit-scrollbar-thumb {
+  background: rgba(52, 204, 153, 0.4);
+  border-radius: 3px;
+}
+
+.rows-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 204, 153, 0.6);
+}
+
+/* Row Item */
+.row-item {
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 4px;
+  background-color: rgba(52, 204, 153, 0.1);
+  border-left: 2px solid #34cc99;
+  transition: background-color 0.2s;
+  margin-bottom: 1px;
+}
+
+.row-item:hover {
+  background-color: rgba(52, 204, 153, 0.15);
+}
+
+.row-index {
+  font-weight: bold;
+  color: #34cc99;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  min-width: 18px;
+}
+
+.row-destination {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-value {
+  color: #F1F700;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: right;
+  min-width: 40px;
 }
 </style>

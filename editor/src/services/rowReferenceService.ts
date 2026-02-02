@@ -591,3 +591,46 @@ export function updateRowReferencesAfterMove(
 
   return result;
 }
+
+/**
+ * Build a reference map showing which rows reference (read from) each row
+ * This is used for the row submonitor's "readers" display mode
+ *
+ * @param rows - The array of rows in the document
+ * @returns A map from row index to array of row indices that reference it
+ */
+export function buildRowReadersMap(rows: Row[]): Map<number, number[]> {
+  const readersMap = new Map<number, number[]>();
+
+  // Initialize map with empty arrays for all rows
+  for (let i = 0; i < rows.length; i++) {
+    readersMap.set(i, []);
+  }
+
+  // For each row, find which rows it references
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    const referencedIndices = getReferencedRowIndices(row);
+
+    // For each row this row references, add this row as a reader
+    for (const referencedIndex of referencedIndices) {
+      const readers = readersMap.get(referencedIndex) ?? [];
+      readers.push(rowIndex);
+      readersMap.set(referencedIndex, readers);
+    }
+  }
+
+  return readersMap;
+}
+
+/**
+ * Get the row indices that read from a specific row
+ *
+ * @param rows - The array of rows in the document
+ * @param targetRowIndex - The row index to find readers for
+ * @returns Array of row indices that reference the target row
+ */
+export function getRowReaders(rows: Row[], targetRowIndex: number): number[] {
+  const readersMap = buildRowReadersMap(rows);
+  return readersMap.get(targetRowIndex) ?? [];
+}
