@@ -464,11 +464,139 @@ Extended the existing VariableMonitor component with advanced debugging features
 - Reads column: which rows are reading the variable
 - Last Write timestamp: when variable was last updated
 
-## 3.4 Row submonitor
+### 3.4 Row Values Submonitor in Variable Monitor
 
-add a Submonitor which has a overview of the row values
+**Status:** 📋 Planned
 
-- it should be a subcategory in the Variables monitor
+Add a collapsible "Rows" section within the Variable Monitor that displays destination output values for all 70 mapping rows.
+
+**Features:**
+- **Always-present collapsible section** below variables (not a display mode button)
+- **Format integration**: Row values respond to DEC/HEX/BIN/BOOL buttons (same as variables)
+- **Independent scrolling**: Variables fixed at top, rows section scrolls separately
+- **Collapsible divider**: Click "Rows" header to expand/collapse (like SettingsPanel pattern)
+- **Destination display**: Shows destination type and function for each row
+- **Row index format**: Respects hex/dec setting from Settings panel
+- **LocalStorage persistence**: Expansion state persists across sessions
+- **Readers display mode**: Optional toggle to show which rows are reading/referencing each row (cross-reference visualization)
+
+**UI Layout:**
+```
+┌─────────────────────────────────────┐
+│ Variables Monitor                   │
+├─────────────────────────────────────┤
+│ [DEC] [HEX] [BIN] [BOOL]           │ ← Format buttons
+│ [Values] [Writers] [Readers]        │ ← Display mode (affects variables only)
+├─────────────────────────────────────┤
+│ A: 128    I: 0                      │ ← Variables section (fixed)
+│ B: 1870   J: 0                      │
+│ ...                                  │
+├─────────────────────────────────────┤
+│ ▸ Rows                              │ ← Collapsible divider
+├─────────────────────────────────────┤
+│ 00: CV Out1      0x0                │ ← Rows section (scrollable)
+│ 01: MIDI CC7     0x7                │
+│ 02: SetVar A     0xA                │
+│ ...                                  │
+│ 69: [Empty]      —                  │
+└─────────────────────────────────────┘
+```
+
+**Value Formatting Examples:**
+- **Decimal**: `00: CV Out1     5`
+- **Hexadecimal**: `00: CV Out1     0x005`
+- **Binary**: `00: CV Out1     0b000000000101`
+- **Boolean**: `00: CV Out1     1`
+
+**Readers Display Mode:**
+
+Add a toggle button `[Readers]` alongside the format buttons to switch between value display and readers display:
+
+```
+┌─────────────────────────────────────┐
+│ Variables Monitor                   │
+├─────────────────────────────────────┤
+│ [DEC] [HEX] [BIN] [BOOL]           │ ← Format buttons
+│ [Values] [Writers] [Readers]        │ ← Display mode
+├─────────────────────────────────────┤
+│ ▼ Rows                              │
+├─────────────────────────────────────┤
+│ 00: CV Out1      ← 12, 35, 47       │ ← Shows row indices that reference row 0
+│ 01: MIDI CC7     —                  │ ← No readers
+│ 02: SetVar A     ← 03               │ ← Row 3 references row 2
+│ 05: Skip         ← 01, 08           │ ← Rows 1 and 8 skip to row 5
+│ ...                                  │
+└─────────────────────────────────────┘
+```
+
+**Cross-Reference Detection:**
+
+The system should detect rows that reference other rows through:
+- **Skip Source/Destination**: Rows that skip to a specific row index
+  - Skip conditions with target row parameters
+  - Skip N rows calculations that land on specific rows
+- **Calc Operations**: Rows using other row values in calculations (if supported)
+- **Variable chains**: Rows that write variables read by other rows (indirect references)
+- **Future**: Any other row-to-row reference mechanisms
+
+**UI Behavior:**
+- **Click on reader index**: Jump to and select that row in main editor
+- **Hover**: Show tooltip with source type and function of the referencing row
+- **Color coding**: Match row colors from main editor for visual consistency
+- **Empty state**: Show "—" or "No readers" when no rows reference this row
+- **Multiple readers**: Show comma-separated list (e.g., "12, 35, 47")
+- **Many readers**: If >5 readers, show count: "← 7 rows" with expandable detail
+
+**Row Index Format:**
+- Respects hex/dec setting from Settings panel
+- Decimal mode: `← 5, 12, 35`
+- Hex mode: `← 0x05, 0x0C, 0x23`
+
+**Implementation Details:**
+- `RowLike` interface for type safety
+- `formatRowDestination()` - formats destination info
+- `getDestinationValue()` - formats values using current `valueFormat`
+- `getRowReaders()` - returns array of row indices that reference a specific row
+- Panel width: 300px (consistent across all modes)
+- Rows subsection state: `rowsSubsectionExpanded` (localStorage: `variable-rows-subsection-expanded`)
+- Display mode state: `rowsDisplayMode: 'values' | 'readers'` (localStorage: `variable-rows-display-mode`)
+
+**New Service Required:**
+- `rowReferenceService.ts` - Analyzes all rows to build reference graph
+  - `buildReferenceMap(rows: Row[]): Map<number, number[]>` - Maps row index → reader row indices
+  - `getReaders(rowIndex: number): number[]` - Returns rows that reference this row
+  - `getReferencedRows(rowIndex: number): number[]` - Returns rows this row references
+  - Detects Skip source/destination row references
+  - Detects Calc operations using row values (if applicable)
+  - Cached and invalidated on row changes
+
+**Files to Modify:**
+1. `editor/src/services/rowReferenceService.ts` (NEW, ~150 lines)
+   - Implement row reference analysis and tracking
+   - Build and maintain reference graph
+   - Provide reader/reference lookup methods
+2. `editor/src/components/VariableMonitor.vue` (~180 lines)
+   - Add rows section state and formatting functions
+   - Add display mode toggle (Values/Readers)
+   - Add rows subsection template with collapsible divider
+   - Integrate rowReferenceService for readers display
+   - Add click handlers for reader navigation
+   - Add rows subsection styles
+3. `editor/src/components/EditorApp.vue` (~5 lines)
+   - Pass `:rows="mappingDocument.rows"` prop
+   - Import and provide rowReferenceService
+   - Add handler for row navigation from readers click
+
+**Future Enhancements:**
+- Computed output values based on source input + min/max/offset scaling
+- Filter to show only rows with active destinations
+- Highlight row dependencies in a graph visualization
+- Export reference map as documentation
+- Show reference chains (row A → row B → row C)
+- Warning indicators for circular references
+- Statistics: most/least referenced rows
+
+**Design Plan:** `/Users/pforsten/.claude/plans/structured-brewing-dragon.md`
 
 ## Phase 4: Multi-Selection & Row Management
 

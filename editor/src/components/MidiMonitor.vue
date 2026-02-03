@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 import BasePanel from './BasePanel.vue'
-import IconButton from './IconButton.vue'
 
 const props = defineProps<{
   settingsPanelExpanded: boolean
@@ -34,8 +33,41 @@ watch(lastMessage, () => {
   setTimeout(() => (showActivity.value = false), 200)
 })
 
-// Display last 5 messages (newest at bottom)
-const recentMessages = computed(() => messageHistory.value.slice(-5))
+// Message type filter
+const filterByType = ref<Set<string>>(new Set(['note', 'cc', 'nrpn', 'pitchbend', 'aftertouch']))
+
+// Toggle message type filter
+function toggleTypeFilter(type: string): void {
+  if (filterByType.value.has(type)) {
+    filterByType.value.delete(type)
+  } else {
+    filterByType.value.add(type)
+  }
+  filterByType.value = new Set(filterByType.value)
+}
+
+// Display all messages (newest at bottom), filtered by type
+const recentMessages = computed(() => {
+  return messageHistory.value.filter(msg => filterByType.value.has(msg.type))
+})
+
+// Dynamic sizing: stop automatic growth after 4 messages
+const MESSAGE_THRESHOLD = 4;
+const shouldLockHeight = computed(() => recentMessages.value.length > MESSAGE_THRESHOLD);
+
+// Messages list style - lock automatic growth when threshold exceeded
+const messagesListStyle = computed(() => {
+  if (shouldLockHeight.value) {
+    return {
+      flex: '1 1 auto',      // Fill available space when resizable
+      overflowY: 'auto'      // Enable scrolling
+    } as const
+  }
+  return {
+    flex: '0 1 auto',        // Grow naturally with content
+    overflow: 'visible'
+  } as const
+});
 
 function formatMessage(msg: ParsedMidiMessage): string {
   switch (msg.type) {
@@ -94,41 +126,85 @@ onMounted(async () => {
     :right-position="rightPosition"
     minimized-width="150px"
     expanded-width="320px"
+    :resizable="shouldLockHeight"
+    :min-height="100"
+    :max-height="600"
+    :default-height="170"
     @expanded-change="onExpandedChange"
   >
     <template #header-extra>
       <span v-if="showActivity" class="activity-dot"></span>
     </template>
 
-    <div v-if="!isSupported" class="message-item error">
-      MIDI not supported in this browser
-    </div>
+    <div class="midi-content">
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <div class="filter-group">
+          <button
+            class="filter-btn"
+            :class="{ active: filterByType.has('note') }"
+            @click="toggleTypeFilter('note')"
+            title="Toggle Note messages"
+          >
+            <span class="type-dot" style="background: #34cc99"></span>
+          </button>
+          <button
+            class="filter-btn"
+            :class="{ active: filterByType.has('cc') }"
+            @click="toggleTypeFilter('cc')"
+            title="Toggle CC messages"
+          >
+            <span class="type-dot" style="background: #F1F700"></span>
+          </button>
+          <button
+            class="filter-btn"
+            :class="{ active: filterByType.has('nrpn') }"
+            @click="toggleTypeFilter('nrpn')"
+            title="Toggle NRPN messages"
+          >
+            <span class="type-dot" style="background: #ff6b6b"></span>
+          </button>
+          <button
+            class="filter-btn"
+            :class="{ active: filterByType.has('pitchbend') }"
+            @click="toggleTypeFilter('pitchbend')"
+            title="Toggle Pitchbend messages"
+          >
+            <span class="type-dot" style="background: #4ecdc4"></span>
+          </button>
+          <button
+            class="filter-btn"
+            :class="{ active: filterByType.has('aftertouch') }"
+            @click="toggleTypeFilter('aftertouch')"
+            title="Toggle Aftertouch messages"
+          >
+            <span class="type-dot" style="background: #95e1d3"></span>
+          </button>
+        </div>
+        <button class="clear-btn" @click="clearHistory" title="Clear all messages">Clear</button>
+      </div>
 
-    <div v-else-if="recentMessages.length === 0" class="message-item empty">
-      No MIDI messages received
-    </div>
+      <!-- Messages -->
+      <div v-if="!isSupported" class="message-item error">
+        MIDI not supported in this browser
+      </div>
 
-    <div v-else class="messages-list">
-      <div
-        v-for="(msg, idx) in recentMessages"
-        :key="`${msg.timestamp}-${idx}`"
-        class="message-item"
-        :style="{ borderLeftColor: getMessageColor(msg.type) }"
-      >
-        <span class="message-bullet">•</span>
-        <span class="message-text">{{ formatMessage(msg) }}</span>
+      <div v-else-if="recentMessages.length === 0" class="message-item empty">
+        No MIDI messages received
+      </div>
+
+      <div v-else class="messages-list panel-scrollable" :style="messagesListStyle">
+        <div
+          v-for="(msg, idx) in recentMessages"
+          :key="`${msg.timestamp}-${idx}`"
+          class="message-item"
+          :style="{ borderLeftColor: getMessageColor(msg.type) }"
+        >
+          <span class="message-bullet">•</span>
+          <span class="message-text">{{ formatMessage(msg) }}</span>
+        </div>
       </div>
     </div>
-
-    <IconButton
-      v-if="recentMessages.length > 0"
-      @click.stop="clearHistory"
-      variant="clear"
-      size="sm"
-      class="clear-btn-custom"
-    >
-      Clear
-    </IconButton>
   </BasePanel>
 </template>
 
@@ -151,10 +227,20 @@ onMounted(async () => {
   }
 }
 
+.midi-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+}
+
 .messages-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-x: hidden;
+  padding: 2px;
 }
 
 .message-item {
@@ -190,18 +276,5 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.clear-btn-custom {
-  margin-top: 4px;
-  width: 100%;
-  background-color: #cc8534 !important;
-  border-color: #cc8534 !important;
-  font-size: 11px;
-}
-
-.clear-btn-custom:hover {
-  background-color: #b87429 !important;
-  border-color: #b87429 !important;
 }
 </style>

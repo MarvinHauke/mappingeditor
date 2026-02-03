@@ -56,9 +56,9 @@ const rowsDisplayMode = ref<RowsDisplayMode>('values');
 const ROWS_SUBSECTION_EXPANDED_KEY = 'variable-rows-subsection-expanded';
 const ROWS_DISPLAY_MODE_KEY = 'variable-rows-display-mode';
 
-// Panel height state
-const panelHeight = ref(500);
-const PANEL_HEIGHT_KEY = 'variable-monitor-panel-height';
+// Rows section height state (not whole panel)
+const rowsHeight = ref(200);
+const ROWS_HEIGHT_KEY = 'variable-monitor-rows-height';
 const isResizing = ref(false);
 const resizeStartY = ref(0);
 const resizeStartHeight = ref(0);
@@ -85,11 +85,11 @@ onMounted(() => {
     rowsDisplayMode.value = savedRowsMode as RowsDisplayMode;
   }
 
-  const savedHeight = localStorage.getItem(PANEL_HEIGHT_KEY);
+  const savedHeight = localStorage.getItem(ROWS_HEIGHT_KEY);
   if (savedHeight !== null) {
     const height = parseInt(savedHeight, 10);
-    if (!isNaN(height) && height >= 200 && height <= 1000) {
-      panelHeight.value = height;
+    if (!isNaN(height) && height >= 100 && height <= 800) {
+      rowsHeight.value = height;
     }
   }
 });
@@ -111,8 +111,8 @@ watch(rowsDisplayMode, (val) => {
   localStorage.setItem(ROWS_DISPLAY_MODE_KEY, val);
 });
 
-watch(panelHeight, (val) => {
-  localStorage.setItem(PANEL_HEIGHT_KEY, String(val));
+watch(rowsHeight, (val) => {
+  localStorage.setItem(ROWS_HEIGHT_KEY, String(val));
 });
 
 // Variable labels A-P
@@ -252,7 +252,7 @@ function getRowDisplayContent(row: RowLike, rowIndex: number): string {
 function startResize(event: MouseEvent): void {
   isResizing.value = true;
   resizeStartY.value = event.clientY;
-  resizeStartHeight.value = panelHeight.value;
+  resizeStartHeight.value = rowsHeight.value;
 
   document.addEventListener('mousemove', handleResize);
   document.addEventListener('mouseup', stopResize);
@@ -265,8 +265,8 @@ function handleResize(event: MouseEvent): void {
   const deltaY = event.clientY - resizeStartY.value;
   const newHeight = resizeStartHeight.value + deltaY;
 
-  // Constrain between min and max heights
-  panelHeight.value = Math.max(200, Math.min(1000, newHeight));
+  // Constrain between min and max heights for rows section only
+  rowsHeight.value = Math.max(100, Math.min(800, newHeight));
 }
 
 function stopResize(): void {
@@ -285,7 +285,7 @@ function stopResize(): void {
     :expanded-width="expandedWidth"
     @expanded-change="onExpandedChange"
   >
-    <div class="variable-monitor-content" :style="{ minHeight: panelHeight + 'px', maxHeight: panelHeight + 'px' }">
+    <div class="variable-monitor-content">
       <!-- Toggle Controls Header (Fixed) -->
       <div class="variable-controls">
       <!-- Format buttons row -->
@@ -364,7 +364,7 @@ function stopResize(): void {
     </div>
 
     <!-- Variables Grid Container (Scrollable) -->
-    <div class="variables-container">
+    <div class="variables-container panel-scrollable">
       <div class="variables-grid" :class="{ 'single-column': useSingleColumn }">
         <div class="variables-column">
         <div
@@ -407,9 +407,9 @@ function stopResize(): void {
     <!-- Rows Subsection (Collapsible) -->
     <div v-if="rows && rows.length > 0" class="rows-subsection">
       <!-- Collapsible Divider -->
-      <div class="rows-divider" @click="toggleRowsSubsection">
+      <div class="rows-divider subsection-divider" @click="toggleRowsSubsection">
         <div style="display: flex; align-items: center;">
-          <span class="expand-icon">{{ rowsSubsectionExpanded ? '▼' : '▸' }}</span>
+          <span class="subsection-toggle-icon" :class="{ expanded: rowsSubsectionExpanded }">▸</span>
           <span class="divider-title">Rows</span>
         </div>
         <div class="rows-controls">
@@ -433,7 +433,7 @@ function stopResize(): void {
       </div>
 
       <!-- Rows List (Scrollable) -->
-      <div v-if="rowsSubsectionExpanded" class="rows-container">
+      <div v-if="rowsSubsectionExpanded" class="rows-container panel-scrollable" :style="{ height: rowsHeight + 'px' }">
         <div
           v-for="(row, idx) in rows"
           :key="idx"
@@ -446,11 +446,12 @@ function stopResize(): void {
       </div>
     </div>
 
-    <!-- Resize Handle -->
+    <!-- Resize Handle - Only show when rows section is expanded -->
     <div
+      v-if="rows && rows.length > 0 && rowsSubsectionExpanded"
       class="resize-handle"
       @mousedown="startResize"
-      title="Drag to resize panel"
+      title="Drag to resize rows section"
     >
       <div class="resize-indicator"></div>
     </div>
@@ -464,7 +465,7 @@ function stopResize(): void {
   position: relative;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   padding: 4px 4px 0 4px;
 }
 
@@ -480,21 +481,10 @@ function stopResize(): void {
   background-color: #000;
 }
 
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .control-label {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.7);
   min-width: 48px;
-}
-
-.toggle-group {
-  display: flex;
-  gap: 2px;
 }
 
 .format-toggle-btn {
@@ -555,23 +545,6 @@ function stopResize(): void {
   padding-right: 2px;
 }
 
-/* Custom scrollbar styling */
-.variables-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.variables-container::-webkit-scrollbar-track {
-  background: rgba(52, 204, 153, 0.1);
-}
-
-.variables-container::-webkit-scrollbar-thumb {
-  background: rgba(52, 204, 153, 0.4);
-  border-radius: 3px;
-}
-
-.variables-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(52, 204, 153, 0.6);
-}
 
 /* Variables Grid */
 .variables-grid {
@@ -707,16 +680,11 @@ function stopResize(): void {
   user-select: none;
 }
 
-.rows-divider:hover .expand-icon,
 .rows-divider:hover .divider-title {
   color: #F1F700;
 }
 
-.expand-icon {
-  font-size: 10px;
-  color: #34cc99;
-  transition: color 0.2s;
-  display: inline-block;
+.subsection-toggle-icon {
   margin-right: 4px;
 }
 
@@ -758,29 +726,12 @@ function stopResize(): void {
 
 /* Rows Container - Scrollable */
 .rows-container {
-  max-height: 200px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 4px 2px 0 2px;
+  flex-shrink: 0;
 }
 
-/* Custom scrollbar for rows container */
-.rows-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.rows-container::-webkit-scrollbar-track {
-  background: rgba(52, 204, 153, 0.1);
-}
-
-.rows-container::-webkit-scrollbar-thumb {
-  background: rgba(52, 204, 153, 0.4);
-  border-radius: 3px;
-}
-
-.rows-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(52, 204, 153, 0.6);
-}
 
 /* Row Item */
 .row-item {

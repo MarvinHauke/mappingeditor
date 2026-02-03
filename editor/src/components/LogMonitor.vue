@@ -31,6 +31,24 @@ const {
 // Selected entry for expanded details view
 const expandedEntryId = ref<number | null>(null);
 
+// Dynamic sizing: stop automatic growth after 3 messages
+const MESSAGE_THRESHOLD = 3;
+const shouldLockHeight = computed(() => filteredEntries.value.length > MESSAGE_THRESHOLD);
+
+// Entries list style - lock automatic growth when threshold exceeded
+const entriesListStyle = computed(() => {
+  if (shouldLockHeight.value) {
+    return {
+      flex: '1 1 auto',      // Fill available space when resizable
+      overflowY: 'auto'      // Enable scrolling
+    } as const
+  }
+  return {
+    flex: '0 1 auto',        // Grow naturally with content
+    overflow: 'visible'
+  } as const
+});
+
 // Position to the left of Variable Monitor
 // Settings: minimized 100px, expanded 180px
 // Selection: minimized 120px, expanded 260px (only if visible)
@@ -120,6 +138,10 @@ const panelTitle = computed(() => {
     :right-position="rightPosition"
     minimized-width="140px"
     expanded-width="350px"
+    :resizable="shouldLockHeight"
+    :min-height="150"
+    :max-height="800"
+    :default-height="150"
     @expanded-change="onExpandedChange"
   >
     <template #header-extra>
@@ -195,7 +217,7 @@ const panelTitle = computed(() => {
       </div>
 
       <!-- Entries list -->
-      <div class="entries-list">
+      <div class="entries-list panel-scrollable" :style="entriesListStyle">
         <div v-if="filteredEntries.length === 0" class="empty-state">
           <span v-if="entryCount === 0">No log entries</span>
           <span v-else>No entries match filters</span>
@@ -235,82 +257,13 @@ const panelTitle = computed(() => {
 .log-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-height: 320px;
-}
-
-.filter-bar {
-  display: flex;
-  gap: 8px;
-  padding: 4px;
-  background: rgba(52, 204, 153, 0.1);
-  border-bottom: 1px solid #34cc99;
-}
-
-.filter-group {
-  display: flex;
-  gap: 2px;
-}
-
-.filter-btn {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #34cc99;
-  background: #000;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-  opacity: 0.4;
-}
-
-.filter-btn.active {
-  opacity: 1;
-}
-
-.filter-btn:hover {
-  border-color: #F1F700;
-}
-
-.filter-btn.source-btn {
-  font-size: 10px;
-  font-weight: bold;
-  color: #34cc99;
-}
-
-.type-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-
-.clear-btn {
-  margin-left: auto;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: bold;
-  border: 1px solid #34cc99;
-  background: #000;
-  color: #34cc99;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.clear-btn:hover:not(:disabled) {
-  background: #cc8534;
-  color: #000;
-  border-color: #cc8534;
-}
-
-.clear-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
 }
 
 .entries-list {
-  flex: 1;
-  overflow-y: auto;
+  overflow-x: hidden;
   padding: 2px;
 }
 

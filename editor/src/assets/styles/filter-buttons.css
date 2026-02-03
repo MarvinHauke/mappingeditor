@@ -1,0 +1,82 @@
+/* Shared filter and control styles for all monitors */
+
+/* Filter bar (used in LogMonitor, MidiMonitor) */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(52, 204, 153, 0.1);
+  border-bottom: 1px solid #34cc99;
+  flex-shrink: 0;
+}
+
+/* Control group (used in VariableMonitor and other controls) */
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Group of related buttons (2px spacing between buttons) */
+.filter-group,
+.toggle-group {
+  display: flex;
+  gap: 2px;
+}
+
+.filter-btn {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #34cc99;
+  background: #000;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  opacity: 0.4;
+  padding: 0;
+}
+
+.filter-btn.active {
+  opacity: 1;
+}
+
+.filter-btn:hover {
+  border-color: #F1F700;
+}
+
+.filter-btn.source-btn {
+  font-size: 10px;
+  font-weight: bold;
+  color: #34cc99;
+}
+
+.type-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.clear-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: bold;
+  border: 1px solid #34cc99;
+  background: #000;
+  color: #34cc99;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: #cc8534;
+  color: #000;
+  border-color: #cc8534;
+}
+
+.clear-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

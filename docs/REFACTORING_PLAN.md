@@ -159,7 +159,7 @@ See the **Detailed Implementation Plan** section below for the comprehensive pha
 
 - **Short-term (Low Effort):** Phase 1 - Toasts, Buttons, TypeDoc comments
 - **Medium-term (Medium Effort):** Phases 2-3 - Row Value Display, Global Documentation
-- **Long-term (High Effort):** Phases 4-6 - useFileIO, usePanelLayout, SelectionToolbar refactoring
+- **Long-term (High Effort):** Phases 4-7 - useFileIO, usePanelLayout, SelectionToolbar, Style Consolidation
 
 ---
 
@@ -181,6 +181,7 @@ See the **Detailed Implementation Plan** section below for the comprehensive pha
 ### 🔜 Remaining Phases
 
 - **Phase 6:** SelectionToolbar Enhancement
+- **Phase 7:** Style Consolidation & Unification
 - **Future:** Undo/Redo UI (builds on Phase 3.5 action log)
 - **Future:** Debugger & Simulation features (Phase 0.1, 0.11, 0.13 from FEATURE_PLAN.md)
 
@@ -1457,6 +1458,411 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 
 ---
 
+## Phase 7: Style Consolidation & Unification
+
+### Overview
+
+**Goal:** Unify and consolidate styling across the NerdSEQ Mapping Editor to reduce duplication while maintaining the exact current visual appearance.
+
+**Status:** 📋 PLANNED
+
+**Priority:** MEDIUM - Improves maintainability and consistency, but not blocking other features
+
+### Problem Summary
+
+**Current Issues:**
+- **163+ hardcoded color values** across 23 components (`#34cc99`, `#F1F700`, etc.)
+- **75+ hardcoded spacing values** (4px, 6px, 8px duplicated everywhere)
+- **Inconsistent button styling** (IconButton uses hardcoded colors, MenuButton uses CSS variables)
+- **Duplicated component patterns** (panel headers, message items, scrollbars)
+- **No semantic color variables** for success/warning/danger states
+
+**Foundation (Good):**
+- CSS variables exist in `/editor/src/assets/styles/variables.css`
+- Shared form classes in `/editor/src/assets/styles/form-elements.css`
+- All components use scoped styles (best practice)
+
+### Solution Approach
+
+4-phase incremental refactoring that maintains visual appearance while consolidating styles.
+
+---
+
+#### 7.1 Expand CSS Variables (1-2 hours)
+**Risk:** LOW - No component changes yet
+
+**Add to `/editor/src/assets/styles/variables.css`:**
+
+**Semantic Color Variables:**
+```css
+/* Semantic state colors */
+--color-success: #28a745;
+--color-warning: #ffc107;
+--color-danger: #dc3545;
+--color-info: #34cc99;
+
+/* MIDI message type colors */
+--color-midi-note: #34cc99;
+--color-midi-cc: #F1F700;
+--color-midi-nrpn: #ff6b6b;
+--color-midi-pitchbend: #4ecdc4;
+--color-midi-aftertouch: #95e1d3;
+
+/* Background variants */
+--color-bg-panel: #34cc99;
+--color-bg-panel-body: #000;
+--color-bg-toolbar: #34cc99;
+--color-bg-button: #000;
+--color-bg-button-hover: rgba(52, 204, 153, 0.4);
+
+/* Primary color opacity variants */
+--color-primary-10: rgba(52, 204, 153, 0.1);
+--color-primary-30: rgba(52, 204, 153, 0.3);
+--color-primary-40: rgba(52, 204, 153, 0.4);
+--color-primary-50: rgba(52, 204, 153, 0.5);
+--color-primary-60: rgba(52, 204, 153, 0.6);
+--color-primary-80: rgba(52, 204, 153, 0.8);
+
+/* Text colors */
+--color-text-muted: rgba(52, 204, 153, 0.6);
+```
+
+**Spacing Scale:**
+```css
+/* Spacing scale (2px base unit) */
+--spacing-1: 2px;
+--spacing-2: 4px;
+--spacing-3: 6px;
+--spacing-4: 8px;
+--spacing-5: 10px;
+--spacing-6: 12px;
+```
+
+**Shadows & Borders:**
+```css
+/* Shadows */
+--shadow-panel: 0 4px 6px rgba(0, 0, 0, 0.3);
+--shadow-scrollbar-track: rgba(0, 0, 0, 0.3);
+--shadow-locked: 0 0 8px 2px #dc3545;
+--shadow-locked-inset: inset 0 0 4px rgba(220, 53, 69, 0.3);
+
+/* Borders */
+--border-panel: 2px solid #000;
+--border-panel-secondary: 2px solid #34cc99;
+--border-button: 1px solid #34cc99;
+```
+
+**Typography Scale:**
+```css
+/* Font sizes */
+--font-size-xs: 10px;
+--font-size-sm: 11px;
+--font-size-base: 12px;
+--font-size-md: 14px;
+
+/* Line heights */
+--line-height-tight: 1;
+--line-height-normal: 1.2;
+```
+
+**Border Radius:**
+```css
+--border-radius-sm: 2px;
+--border-radius-md: 4px;
+```
+
+**Verification:** Run `npm run dev`, verify no visual changes.
+
+---
+
+#### 7.2 Create Utility Classes (2-3 hours)
+**Risk:** LOW - Optional classes, no breaking changes
+
+**Add to `/editor/src/assets/styles/form-elements.css`:**
+
+**Panel Component Classes:**
+```css
+/* Panel headers */
+.panel-header-base {
+  background-color: var(--color-bg-panel);
+  border-bottom: var(--border-panel);
+  box-shadow: var(--shadow-panel);
+  padding: var(--spacing-1) var(--spacing-4);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+}
+
+.panel-header-interactive {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--transition-standard);
+}
+
+.panel-header-interactive:hover {
+  background-color: var(--color-hover);
+}
+
+/* Panel body */
+.panel-body-base {
+  padding: var(--spacing-2);
+  background-color: var(--color-bg-panel-body);
+  border: var(--border-panel-secondary);
+  border-top: none;
+}
+
+/* Scrollable panels */
+.panel-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel-scrollable::-webkit-scrollbar-track {
+  background: var(--shadow-scrollbar-track);
+}
+
+.panel-scrollable::-webkit-scrollbar-thumb {
+  background: var(--color-primary-50);
+}
+
+.panel-scrollable::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-80);
+}
+```
+
+**Button Utility Classes:**
+```css
+/* Action buttons */
+.action-btn-base {
+  padding: var(--spacing-2) var(--spacing-3);
+  border: var(--border-button);
+  background-color: var(--color-bg-button);
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: bold;
+  transition: all var(--transition-fast);
+}
+
+.action-btn-base:hover:not(:disabled) {
+  background-color: var(--color-bg-button-hover);
+}
+
+.action-btn-base:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Filter buttons */
+.filter-btn-base {
+  padding: var(--spacing-1) var(--spacing-3);
+  border: var(--border-button);
+  background-color: var(--color-bg-button);
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  transition: all var(--transition-fast);
+}
+
+.filter-btn-base.active {
+  background-color: var(--color-primary-30);
+  border-color: var(--color-hover);
+}
+```
+
+**Message Item Classes:**
+```css
+.message-item {
+  padding: var(--spacing-2) var(--spacing-3);
+  border-bottom: 1px solid var(--color-primary-30);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.message-item:hover {
+  background-color: var(--color-primary-10);
+}
+
+.message-item:last-child {
+  border-bottom: none;
+}
+```
+
+**Type Indicator Classes:**
+```css
+.type-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--spacing-2);
+}
+
+.type-indicator-info { background-color: var(--color-info); }
+.type-indicator-success { background-color: var(--color-success); }
+.type-indicator-warning { background-color: var(--color-warning); }
+.type-indicator-error { background-color: var(--color-danger); }
+```
+
+**Verification:** Classes added but not used yet. No visual impact.
+
+---
+
+#### 7.3 Component Updates (6-8 hours)
+**Risk:** MEDIUM - Visual regression possible
+
+Update components incrementally, one at a time, with screenshot comparison.
+
+**Tier 1: Foundation Components (2 hours)**
+1. **BasePanel.vue** - Convert hardcoded colors to CSS variables
+2. **IconButton.vue** - Convert to CSS variable pattern like MenuButton
+3. **ToastNotifications.vue** - Use semantic color variables
+
+**Tier 2: Panel Components (3 hours)**
+4. **MidiMonitor.vue** - MIDI message type colors + CSS variables
+5. **LogMonitor.vue** - Log type colors + filter buttons
+6. **VariableMonitor.vue** - CSS variables for spacing/colors
+7. **SettingsPanel.vue** - CSS variables
+
+**Tier 3: Toolbar Components (2 hours)**
+8. **SelectionToolbar.vue** - Action button classes + CSS variables
+9. **MultiSelectionToolbar.vue** - Similar to SelectionToolbar
+
+**Tier 4: Extra Components (2 hours)**
+10. All 9 Extra components (CalcSkipSourceExtra, VariableSourceExtra, etc.)
+
+**Tier 5: Remaining (1 hour)**
+11. **RowCommentSection.vue**
+12. **RowActionButtons.vue**
+13. **GlobalDocumentationPanel.vue**
+
+**Per-Component Workflow:**
+1. Take screenshot BEFORE changes
+2. Replace hardcoded values with CSS variables:
+   - `#34cc99` → `var(--color-primary)`
+   - `#F1F700` → `var(--color-hover)`
+   - `4px` → `var(--spacing-2)`
+   - etc.
+3. Test in dev server
+4. Take screenshot AFTER, compare side-by-side
+5. Verify hover/disabled/locked states
+6. Commit with descriptive message
+
+**Example change (BasePanel.vue):**
+```css
+/* Before */
+background-color: #34cc99;
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+padding: 2px 8px;
+
+/* After */
+background-color: var(--color-bg-panel);
+box-shadow: var(--shadow-panel);
+padding: var(--spacing-1) var(--spacing-4);
+```
+
+---
+
+#### 7.4 Verification (2-3 hours)
+**Risk:** LOW
+
+**Visual Regression Testing:**
+- [ ] Test all components in default state
+- [ ] Test hover states on all interactive elements
+- [ ] Test disabled states
+- [ ] Test locked states (A/B cache)
+- [ ] Test panel expand/collapse animations
+- [ ] Test MIDI Monitor with live MIDI messages (all types)
+- [ ] Test Log Monitor with analyzer warnings
+- [ ] Test SelectionToolbar with multi-row selection
+- [ ] Test all color variations (row colors, warnings, errors)
+
+**Browser Testing:**
+- [ ] Chrome (primary)
+- [ ] Firefox
+- [ ] Safari (if on macOS)
+
+**Type Check:**
+```bash
+npm run type-check
+```
+
+**Dev Server:**
+```bash
+npm run dev
+# Visual inspection at http://localhost:5173
+```
+
+### Critical Files
+
+**CSS Foundation (Phase 7.1-7.2):**
+- `/editor/src/assets/styles/variables.css` - Add all new CSS variables
+- `/editor/src/assets/styles/form-elements.css` - Add utility classes
+
+**High Priority Components (Phase 7.3 Tier 1-2):**
+- `/editor/src/components/BasePanel.vue` - Foundation panel (affects 5+ children)
+- `/editor/src/components/IconButton.vue` - Button standardization
+- `/editor/src/components/MidiMonitor.vue` - Complex panel with MIDI colors
+- `/editor/src/components/LogMonitor.vue` - Complex panel with log colors
+- `/editor/src/components/SelectionToolbar.vue` - Action buttons pattern
+
+**Medium Priority (Phase 7.3 Tier 3-4):**
+- `/editor/src/components/VariableMonitor.vue`
+- `/editor/src/components/SettingsPanel.vue`
+- `/editor/src/components/MultiSelectionToolbar.vue`
+- `/editor/src/components/ToastNotifications.vue`
+
+**Lower Priority (Phase 7.3 Tier 4-5):**
+- All Extra components (9 files)
+- `/editor/src/components/RowCommentSection.vue`
+- `/editor/src/components/RowActionButtons.vue`
+- `/editor/src/components/GlobalDocumentationPanel.vue`
+
+### Success Criteria
+
+- [ ] **Zero visual changes** to existing UI
+- [ ] **163+ hardcoded colors** → ~10 (95% reduction)
+- [ ] **75+ hardcoded spacing values** → ~5 (93% reduction)
+- [ ] **All duplicated patterns** extracted to utility classes
+- [ ] **All components tested** in all states
+- [ ] **No TypeScript errors**
+- [ ] **Documentation updated** with usage guide
+
+### Expected Outcomes
+
+**Quantitative:**
+- 95% reduction in hardcoded colors
+- 93% reduction in hardcoded spacing
+- 100% elimination of duplicated patterns
+- 15-20% reduction in CSS lines
+
+**Qualitative:**
+- Single source of truth for all styling values
+- Easy to change global colors/spacing in future
+- Faster component development with utility classes
+- Consistent spacing, colors, typography across app
+
+### Rollback Plan
+
+If visual regression detected:
+1. Immediately revert the specific component commit
+2. Document the issue
+3. Fix in isolation
+4. Re-test before proceeding
+
+Each component updated independently for safe rollback.
+
+### Effort Estimate
+
+| Phase | Duration |
+|-------|----------|
+| Phase 7.1: CSS Variables | 1-2 hours |
+| Phase 7.2: Utility Classes | 2-3 hours |
+| Phase 7.3: Component Updates | 6-8 hours |
+| Phase 7.4: Verification | 2-3 hours |
+| **Total** | **16-18 hours (~3-4 days)** |
+
+---
+
 ## Verification & Testing
 
 ### After Phase 1: Short-Term Wins
@@ -1543,8 +1949,9 @@ Convert to use BasePanel wrapper and integrate with usePanelLayout.
 | 4. useFileIO Refactoring | 8-10 hours | 2 days | 🔀 MERGED INTO 3.6 |
 | 5. usePanelLayout Refactoring | 6-8 hours | 1-2 days | 🔀 MERGED INTO 3.6 |
 | 6. SelectionToolbar Enhancement | 3-4 hours | 0.5 days | 📋 PLANNED |
-| **Total** | **66-86 hours** | **12-15 days** | |
-| **Remaining** | **32-41 hours** | **7-8 days** | |
+| 7. Style Consolidation | 16-18 hours | 3-4 days | 📋 PLANNED |
+| **Total** | **82-104 hours** | **15-19 days** | |
+| **Remaining** | **48-59 hours** | **10-12 days** | |
 
 ---
 
@@ -1625,6 +2032,8 @@ EditorApp.vue
 ---
 
 ## Last Updated
+
+**2026-02-02** - Added Phase 7 (Style Consolidation & Unification) with comprehensive plan to consolidate 163+ hardcoded color values and 75+ spacing values into CSS variables and utility classes. 4-phase incremental refactoring targeting 95% reduction in hardcoded values while maintaining exact visual appearance. Estimated 16-18 hours over 3-4 days.
 
 **2026-02-01** - Added Phase 3.6 (EditorApp Modularization) with plan to extract 6 composables from EditorApp.vue. Updated Phase 3.5 status to PARTIALLY COMPLETE (useActionHistory exists). Created `docs/EditorApp_modules.md` with detailed implementation plan.
 

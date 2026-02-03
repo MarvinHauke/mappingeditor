@@ -73,9 +73,11 @@ function onExpandedChange(expanded: boolean): void {
     right-position="10px"
     minimized-width="100px"
     expanded-width="180px"
+    custom-max-height="none"
     @expanded-change="onExpandedChange"
   >
-    <div class="setting-item">
+    <div class="settings-content">
+      <div class="setting-item">
       <span class="setting-label">Row Index Format</span>
       <button
         class="toggle-btn"
@@ -87,9 +89,9 @@ function onExpandedChange(expanded: boolean): void {
       </button>
     </div>
 
-    <div class="setting-divider" @click="panelsSectionExpanded = !panelsSectionExpanded">
+    <div class="setting-divider subsection-divider" @click="panelsSectionExpanded = !panelsSectionExpanded">
       <span class="divider-label">Panels</span>
-      <span class="collapse-icon" :class="{ expanded: panelsSectionExpanded }">▸</span>
+      <span class="subsection-toggle-icon" :class="{ expanded: panelsSectionExpanded }">▸</span>
     </div>
 
     <div v-if="panelsSectionExpanded" class="collapsible-section">
@@ -149,9 +151,9 @@ function onExpandedChange(expanded: boolean): void {
       </div>
     </div>
 
-    <div class="setting-divider" @click="infoSectionExpanded = !infoSectionExpanded">
+    <div class="setting-divider subsection-divider" @click="infoSectionExpanded = !infoSectionExpanded">
       <span class="divider-label">Info</span>
-      <span class="collapse-icon" :class="{ expanded: infoSectionExpanded }">▸</span>
+      <span class="subsection-toggle-icon" :class="{ expanded: infoSectionExpanded }">▸</span>
     </div>
 
     <div v-if="infoSectionExpanded" class="collapsible-section">
@@ -165,10 +167,17 @@ function onExpandedChange(expanded: boolean): void {
         <span class="info-value">{{ firmwareMajor }}.{{ firmwareMinor }}</span>
       </div>
     </div>
+    </div>
   </BasePanel>
 </template>
 
 <style scoped>
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
 .setting-item {
   display: flex;
   flex-direction: column;
@@ -220,27 +229,12 @@ function onExpandedChange(expanded: boolean): void {
   color: #F1F700;
 }
 
-.setting-divider:hover .collapse-icon {
-  color: #F1F700;
-}
-
 .divider-label {
   color: #34cc99;
   font-size: 10px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-}
-
-.collapse-icon {
-  color: #34cc99;
-  font-size: 10px;
-  transition: transform 0.2s ease;
-  display: inline-block;
-}
-
-.collapse-icon.expanded {
-  transform: rotate(90deg);
 }
 
 .collapsible-section {
