@@ -25,6 +25,8 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 - ✅ **Analyzer warnings don't adapt to Hex/Dec setting** - Fixed. `useStaticAnalyzer` now accepts `displayRowIndexAsHex` ref and formats all row indices in warning messages accordingly. Analysis re-runs when setting toggles.
 
+- ✅ **Toolbar Copy button inconsistency** (2026-02-04) - Fixed critical bug where copying a single row with the toolbar Copy button incorrectly called `copyRows()` instead of `copyRow()`, setting wrong clipboard state and causing paste auto-advance to fail. Modified `handleMultiCopy()` to check selection size and call appropriate function. Now toolbar and keyboard shortcuts behave consistently.
+
 ## Known Bugs - Needs Investigation
 
 - ⚠️ **Extra field reset when function changes within same type** - DEFERRED
@@ -75,16 +77,46 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
   **Workaround for users**: Re-enter extra parameters after changing functions. Values are preserved in NerdSEQ after export if set before saving.
 
-### Phase 0.1 - Convinience features for Copy paste and row selection
+### Phase 0.1 - Convenience features for Copy paste and row selection ✅
 
-- Add the option to select a single row without opening the comment section.
-  - The comment section is initally opened. Close the comment section if a row is selected and you click on it again.
-  - If you click a third time the row will be deselected
-  - This state is saved and if you select another row, the comment section is also closed or opened,
-    dependent on the last toggle state.
-- after a row paste action automatically select the next row, to be able keep on pasting. only add this paste fall through if i paste a whole row!
-- Add fall through option after Midi learn as well. Select the next row with
-  - add a settings checkbox to unselect that option.
+**Status:** ✅ **COMPLETED** (2026-02-04)
+
+- ✅ **Three-click row selection cycle**:
+  - Click 1: Select row (comment section state preserved from previous selection)
+  - Click 2: Open comment section
+  - Click 3: Deselect row
+  - **Sticky comment state**: Comment section open/closed state persists when switching rows
+
+- ✅ **Paste Auto-Advance System**:
+  - Three configurable modes: DISABLED / ROWS / ALL (default: ALL)
+  - **Row paste**: Auto-advances and closes comment section (clean slate)
+  - **Source paste**: Auto-advances and keeps comment open (workflow continuity)
+  - **Destination paste**: Auto-advances and keeps comment open
+  - Multi-row paste never auto-advances (intentional bulk operation)
+  - Setting toggle in header toolbar with localStorage persistence
+  - Keyboard shortcuts (Ctrl+V) and toolbar buttons both support auto-advance
+
+- ✅ **MIDI Learn Auto-Advance**:
+  - Checkbox in Settings > Auto-Advance section
+  - Automatically moves to next MIDI Learn row after successful learn
+  - Prevents duplicate learns (same MIDI message ignored)
+  - Auto-start on next MIDI Learn row for seamless workflow
+  - Default: enabled
+
+**Implementation Details:**
+- `advanceToNextRow(currentRowIndex, keepCommentOpen)` helper function
+- `handlePasteRow()`, `handlePasteSource()`, `handlePasteDestination()` wrappers
+- `expandedCommentRowIndex` ref for explicit comment section tracking
+- Global `lastLearnedMidiMessage` tracking to prevent duplicates
+- Smooth scrolling animation with boundary checks
+
+**Files Modified:**
+- `editor/src/components/EditorApp.vue`
+- `editor/src/components/SettingsPanel.vue`
+- `editor/src/components/MidiLearnExtra.vue`
+- `editor/src/composables/useMidi.ts`
+
+**See:** Serena memory `paste-auto-advance-system-2026-02` for comprehensive documentation.
 
 ### search for references
 

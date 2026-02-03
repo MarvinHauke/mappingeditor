@@ -6,7 +6,17 @@ This document tracks recent implementations, architectural observations, and opp
 
 ---
 
-## Recent Bug Fixes and Improvements (2026-01-31)
+## Recent Bug Fixes and Improvements (2026-02-04)
+
+### ✅ Recent Feature Implementations (2026-02-04)
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Paste Auto-Advance System | ✅ IMPLEMENTED | Three modes (DISABLED/ROWS/ALL), localStorage persistence, smart comment handling |
+| MIDI Learn Auto-Advance | ✅ IMPLEMENTED | Auto-advance to next MIDI Learn row, duplicate prevention |
+| Enhanced Row Selection | ✅ IMPLEMENTED | Three-click cycle, sticky comment state, improved multi-selection |
+| Settings Panel Auto-Advance Section | ✅ IMPLEMENTED | New collapsible section with MIDI Learn and Paste toggles |
+| Toolbar Copy Button Fix | ✅ FIXED | Now correctly distinguishes single/multi-row copy operations |
 
 ### ✅ Critical Data Integrity Fixes
 
@@ -16,6 +26,7 @@ This document tracks recent implementations, architectural observations, and opp
 | Lock bypass via Delete/Backspace keys | CRITICAL | ✅ FIXED | Keyboard shortcuts now check lock state |
 | Reset button clears locked mappings | HIGH | ✅ FIXED | Reset button disabled when locked + early return check |
 | Skip Destination encoding mismatch | HIGH | ✅ FIXED | Unified to 96 functions matching Skip Source |
+| Toolbar Copy button inconsistency | HIGH | ✅ FIXED | Now calls correct function based on selection size |
 
 ### ✅ UX Consistency Improvements
 
@@ -43,16 +54,17 @@ All modification operations now check lock state:
 
 ## Recently Implemented Components
 
-| Component | Purpose | Potential Improvements |
-|-----------|---------|------------------------|
+| Component | Purpose | Recent Updates (2026-02-04) |
+|-----------|---------|------------------------------|
 | `MenuButton.vue` | Unified button styling with variants | Consider adding icon slot support for icon+text buttons |
 | `ToastNotifications.vue` | Transient notifications system | Currently underutilized - integrate for more events (save, export, etc.) |
 | `BasePanel.vue` | Foldable side panels (Variables, Settings, MidiMonitor) | Add drag-to-dock functionality (Phase 0.1 advanced) |
 | `SelectionToolbar.vue` | Multi-row operations toolbar | Consider moving to BasePanel-based implementation |
-| `SettingsPanel.vue` | Settings & Info display | Consider separating concerns (settings vs. info/stats) |
+| `SettingsPanel.vue` | Settings & Info display | ✅ Added Auto-Advance section with MIDI Learn and Paste toggles |
 | `RowCommentSection.vue` | Row details and warnings display | Well-structured, minimal changes needed |
 | `RowActionButtons.vue` | Copy/paste/clear per-row actions | Could migrate to IconButton pattern |
 | `SkipDestinationExtra.vue` | Skip destination parameters | ✅ Refactored to two-dropdown pattern (matches source encoding) |
+| `MidiLearnExtra.vue` | MIDI learn mode UI | ✅ Added auto-start support, duplicate message prevention |
 
 ---
 
@@ -71,25 +83,33 @@ All modification operations now check lock state:
 
 ## Architecture Observations
 
-### 1. EditorApp.vue is Large (~2,130 lines total, 1,300 script lines)
+### 1. EditorApp.vue is Large (~2,400 lines total, ~1,600 script lines after 2026-02-04 updates)
+
+**Recent Growth (2026-02-04):** Added ~280 lines for paste/MIDI learn auto-advance systems and enhanced row selection.
 
 The main component handles multiple concerns:
 - File I/O (import/export)
 - Serialization/deserialization
-- Row selection state
+- Row selection state (recently enhanced with 3-click cycle and sticky comment state)
 - Panel positioning coordination
 - Document state management
 - Skip analysis logic
 - Keyboard shortcuts
 - Row metadata (colors, comments)
+- **NEW:** Auto-advance systems (paste and MIDI learn)
+- **NEW:** Comment section expansion tracking
 
-**Solution: Phase 3.6 Modularization**
+**Solution: Phase 3.6 Modularization - MORE IMPORTANT THAN EVER**
 
 See `docs/EditorApp_modules.md` for the complete extraction plan:
-- 6 composables to extract (~730 lines)
-- Target: Reduce to ~400 script lines
+- 6 composables to extract (~730 lines + recent 280 lines = ~1,010 lines)
+- Target: Reduce from ~1,600 to ~500 script lines
 - Incremental PR strategy with automated tests
 - Full implementation details and API designs
+
+**NOTE:** The recent auto-advance and selection enhancements make modularization more valuable. These features could be extracted into:
+- `useAutoAdvance.ts` - Paste and MIDI learn auto-advance logic
+- `useRowSelection.ts` - Enhanced selection with sticky comment state
 
 ### 2. Panel Positioning is Complex
 
@@ -2032,6 +2052,8 @@ EditorApp.vue
 ---
 
 ## Last Updated
+
+**2026-02-04** - Documented major feature implementations: Paste Auto-Advance System (3 modes), MIDI Learn Auto-Advance, Enhanced Row Selection (3-click cycle, sticky comment state), Settings Panel Auto-Advance section, and Toolbar Copy button bug fix. Updated EditorApp.vue size (~2,400 lines total, ~1,600 script) to reflect recent additions. Emphasized increased importance of Phase 3.6 modularization. Comprehensive commit: "Add comprehensive auto-advance system and enhance row selection UX" (406 insertions, 68 deletions across 6 files).
 
 **2026-02-02** - Added Phase 7 (Style Consolidation & Unification) with comprehensive plan to consolidate 163+ hardcoded color values and 75+ spacing values into CSS variables and utility classes. 4-phase incremental refactoring targeting 95% reduction in hardcoded values while maintaining exact visual appearance. Estimated 16-18 hours over 3-4 days.
 
