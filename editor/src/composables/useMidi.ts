@@ -1,4 +1,4 @@
-import { ref, readonly, onMounted, onUnmounted } from 'vue'
+import { ref, readonly } from 'vue'
 
 // Type Definitions
 export interface ParsedMidiMessage {
@@ -22,15 +22,15 @@ interface NrpnBuffer {
   lastUpdate: number
 }
 
-// Singleton state to share across component instances
-const isSupported = ref<boolean>(false)
+// Check Web MIDI API support immediately
+const isSupported = ref<boolean>('requestMIDIAccess' in navigator)
 const isEnabled = ref<boolean>(false)
 const midiAccess = ref<MIDIAccess | null>(null)
 const inputs = ref<MIDIInput[]>([])
 const lastMessage = ref<ParsedMidiMessage | null>(null)
 const messageHistory = ref<ParsedMidiMessage[]>([])
 const isLearning = ref<boolean>(false)
-const learningCallback = ref<((msg: ParsedMidiMessage) => void) | null>(null)
+const learningCallback = ref<((msg: ParsedMidiMessage) => boolean) | null>(null)
 const learningTimeout = ref<number | null>(null)
 
 // NRPN buffers (one per channel)
@@ -87,9 +87,12 @@ const MAX_HISTORY = 50
  *   console.log('Channel:', msg.channel);
  *   if (msg.type === 'cc') {
  *     console.log('CC#', msg.cc, 'Value:', msg.value);
+ *     return true; // Accept the message
  *   } else if (msg.type === 'nrpn') {
  *     console.log('NRPN:', msg.nrpn, 'Value:', msg.nrpnValue);
+ *     return true; // Accept the message
  *   }
+ *   return false; // Reject other message types
  * });
  *
  * // Monitor incoming messages
@@ -241,10 +244,12 @@ export function useMidi() {
     lastMessage.value = parsed
     addToHistory(parsed)
 
-    // If learning, call callback and stop
+    // If learning, call callback and only stop if message was accepted
     if (isLearning.value && learningCallback.value) {
-      learningCallback.value(parsed)
-      stopLearning()
+      const accepted = learningCallback.value(parsed)
+      if (accepted) {
+        stopLearning()
+      }
     }
   }
 
@@ -306,7 +311,7 @@ export function useMidi() {
   }
 
   // Start learning mode
-  function startLearning(callback: (msg: ParsedMidiMessage) => void, timeoutMs = 10000): void {
+  function startLearning(callback: (msg: ParsedMidiMessage) => boolean, timeoutMs = 10000): void {
     isLearning.value = true
     learningCallback.value = callback
 
@@ -336,20 +341,6 @@ export function useMidi() {
     messageHistory.value = []
     lastMessage.value = null
   }
-
-  // Check MIDI support on mount
-  onMounted(() => {
-    isSupported.value = 'requestMIDIAccess' in navigator
-
-    if (!isSupported.value) {
-      console.warn('Web MIDI API not supported in this browser. Please use Chrome, Edge, Opera, or Firefox 109+.')
-    }
-  })
-
-  // Cleanup on unmount
-  onUnmounted(() => {
-    stopLearning()
-  })
 
   return {
     // State (read-only)

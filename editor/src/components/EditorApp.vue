@@ -56,6 +56,9 @@ const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
 const selectedRowIndices = ref<Set<number>>(new Set());
 const lastClickedRowIndex = ref<number | null>(null);
 
+// Comment section expansion state
+const expandedCommentRowIndex = ref<number | null>(null);
+
 // Computed for backwards compatibility with single selection UI
 const selectedRowIndex = computed(() =>
   selectedRowIndices.value.size === 1
@@ -120,12 +123,29 @@ const MIDI_MONITOR_VISIBLE_KEY = 'nerdseq-show-midi-monitor';
 const VARIABLE_MONITOR_VISIBLE_KEY = 'nerdseq-show-variable-monitor';
 const LOG_MONITOR_VISIBLE_KEY = 'nerdseq-show-log-monitor';
 const DESCRIPTION_VISIBLE_KEY = 'nerdseq-show-description';
+const MIDI_LEARN_AUTO_ADVANCE_KEY = 'nerdseq-midi-learn-auto-advance';
+const PASTE_AUTO_ADVANCE_KEY = 'nerdseq-paste-auto-advance';
 // Selection Toolbar defaults to true (enabled by default)
 const showSelectionToolbar = ref(localStorage.getItem(SELECTION_TOOLBAR_VISIBLE_KEY) !== 'false');
 const showMidiMonitor = ref(localStorage.getItem(MIDI_MONITOR_VISIBLE_KEY) === 'true');
 const showVariableMonitor = ref(localStorage.getItem(VARIABLE_MONITOR_VISIBLE_KEY) === 'true');
 const showLogMonitor = ref(localStorage.getItem(LOG_MONITOR_VISIBLE_KEY) === 'true');
 const showDescription = ref(localStorage.getItem(DESCRIPTION_VISIBLE_KEY) === 'true');
+const midiLearnAutoAdvance = ref(localStorage.getItem(MIDI_LEARN_AUTO_ADVANCE_KEY) !== 'false'); // Default: true
+
+// Initialize paste auto-advance setting with proper type handling
+const storedPasteAutoAdvance = localStorage.getItem(PASTE_AUTO_ADVANCE_KEY);
+const pasteAutoAdvance = ref<'disabled' | 'rows-only' | 'all'>(
+  storedPasteAutoAdvance === 'disabled' || storedPasteAutoAdvance === 'rows-only' || storedPasteAutoAdvance === 'all'
+    ? storedPasteAutoAdvance
+    : 'all' // Default: all
+);
+
+// Track which row should auto-start MIDI learn
+const midiLearnAutoStartRow = ref<number | null>(null);
+
+// Track last learned MIDI message globally to prevent duplicates
+const lastLearnedMidiMessage = ref<string | null>(null);
 
 // Watch and persist panel visibility
 watch(showSelectionToolbar, (val) => {
@@ -147,6 +167,13 @@ watch(showLogMonitor, (val) => {
 watch(showDescription, (val) => {
   localStorage.setItem(DESCRIPTION_VISIBLE_KEY, val.toString());
   if (!val) globalDocPanelExpanded.value = false;
+});
+watch(midiLearnAutoAdvance, (val) => {
+  localStorage.setItem(MIDI_LEARN_AUTO_ADVANCE_KEY, val.toString());
+});
+
+watch(pasteAutoAdvance, (val) => {
+  localStorage.setItem(PASTE_AUTO_ADVANCE_KEY, val);
 });
 
 // Row index display format (hex/decimal)
@@ -430,33 +457,169 @@ async function handleSlotSwitch(slot: 'A' | 'B'): Promise<void> {
 // Row selection functions
 function handleRowClick(rowIndex: number, event: MouseEvent): void {
   if (event.shiftKey && lastClickedRowIndex.value !== null) {
-    // Shift+Click: Select range
+    // Shift+Click: Select range with sticky comment state
+    const wasCommentOpen = expandedCommentRowIndex.value !== null;
     const start = Math.min(lastClickedRowIndex.value, rowIndex);
     const end = Math.max(lastClickedRowIndex.value, rowIndex);
     for (let i = start; i <= end; i++) {
       selectedRowIndices.value.add(i);
     }
+    if (wasCommentOpen) {
+      // Apply comment state to newly selected row
+      if (rowComments.value[rowIndex] === undefined) {
+        rowComments.value[rowIndex] = '';
+      }
+      expandedCommentRowIndex.value = rowIndex;
+    } else {
+      expandedCommentRowIndex.value = null;
+    }
   } else if (event.ctrlKey || event.metaKey) {
-    // Ctrl/Cmd+Click: Toggle individual
+    // Ctrl/Cmd+Click: Toggle individual with sticky comment state
+    const wasCommentOpen = expandedCommentRowIndex.value !== null;
     if (selectedRowIndices.value.has(rowIndex)) {
       selectedRowIndices.value.delete(rowIndex);
+      // Clear comment expansion if this row was expanded
+      if (expandedCommentRowIndex.value === rowIndex) {
+        expandedCommentRowIndex.value = null;
+      }
     } else {
       selectedRowIndices.value.add(rowIndex);
+      if (wasCommentOpen) {
+        // Apply comment state to newly selected row
+        if (rowComments.value[rowIndex] === undefined) {
+          rowComments.value[rowIndex] = '';
+        }
+        expandedCommentRowIndex.value = rowIndex;
+      } else {
+        expandedCommentRowIndex.value = null;
+      }
     }
   } else {
-    // Normal click: Toggle single selection
-    if (selectedRowIndices.value.size === 1 && selectedRowIndices.value.has(rowIndex)) {
-      // Clicking on the only selected row - deselect it
-      selectedRowIndices.value.clear();
-    } else {
-      // Select only this row
+    // Normal click: Simple three-click cycle with sticky comment state
+    const isOnlySelected = selectedRowIndices.value.size === 1 && selectedRowIndices.value.has(rowIndex);
+    const isCommentExpanded = expandedCommentRowIndex.value === rowIndex;
+    const wasCommentOpen = expandedCommentRowIndex.value !== null; // Track if ANY comment was open
+
+    if (!selectedRowIndices.value.has(rowIndex)) {
+      // Click 1: Select row and apply current comment state
       selectedRowIndices.value.clear();
       selectedRowIndices.value.add(rowIndex);
+      if (wasCommentOpen) {
+        // Previous selection had comment open, so open this one too
+        if (rowComments.value[rowIndex] === undefined) {
+          rowComments.value[rowIndex] = '';
+        }
+        expandedCommentRowIndex.value = rowIndex;
+      } else {
+        // Previous selection had no comment, so don't open this one
+        expandedCommentRowIndex.value = null;
+      }
+    } else if (isOnlySelected && !isCommentExpanded) {
+      // Click 2: Open comment section
+      if (rowComments.value[rowIndex] === undefined) {
+        rowComments.value[rowIndex] = '';
+      }
+      expandedCommentRowIndex.value = rowIndex;
+    } else if (isOnlySelected && isCommentExpanded) {
+      // Click 3: Deselect row
+      selectedRowIndices.value.clear();
+      expandedCommentRowIndex.value = null;
+    } else {
+      // Clicked on a different row in a multi-selection - switch to single selection
+      selectedRowIndices.value.clear();
+      selectedRowIndices.value.add(rowIndex);
+      if (wasCommentOpen) {
+        // Previous selection had comment open, apply to new selection
+        if (rowComments.value[rowIndex] === undefined) {
+          rowComments.value[rowIndex] = '';
+        }
+        expandedCommentRowIndex.value = rowIndex;
+      } else {
+        expandedCommentRowIndex.value = null;
+      }
     }
   }
   lastClickedRowIndex.value = rowIndex;
   // Force reactivity
   selectedRowIndices.value = new Set(selectedRowIndices.value);
+}
+
+
+// Handle scroll to row from LogMonitor
+function handleScrollToRow(rowIndex: number): void {
+  // Select the row (no comment opens)
+  selectedRowIndices.value.clear();
+  selectedRowIndices.value.add(rowIndex);
+  expandedCommentRowIndex.value = null;
+  selectedRowIndices.value = new Set(selectedRowIndices.value);
+  
+  // Scroll the row into view
+  const rowElement = document.querySelector(`[data-row-index="${rowIndex}"]`);
+  if (rowElement) {
+    rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+
+// Helper function for MIDI learn source function update
+function handleSourceMidiLearnFunctionUpdate(rowIndex: number, functionKey: number): void {
+  const sourceFunc = currentlySelectedSourceTypes.value[rowIndex].functions.find((f: MappingTuple) => f.key === functionKey);
+  if (sourceFunc) {
+    mappingDocument.value.rows[rowIndex].source.function = new SourceFunction(functionKey, sourceFunc.abbr, sourceFunc.description);
+  }
+  // Reset auto-start flag and advance to next MIDI Learn row
+  midiLearnAutoStartRow.value = null;
+  handleMidiLearnComplete(rowIndex);
+}
+
+// Helper function for MIDI learn destination function update
+function handleDestMidiLearnFunctionUpdate(rowIndex: number, functionKey: number): void {
+  const destFunc = currentlySelectedDestinationTypes.value[rowIndex].functions.find((f: MappingTuple) => f.key === functionKey);
+  if (destFunc) {
+    mappingDocument.value.rows[rowIndex].destination.function = new DestinationFunction(functionKey, destFunc.abbr, destFunc.description);
+  }
+  // Reset auto-start flag and advance to next MIDI Learn row
+  midiLearnAutoStartRow.value = null;
+  handleMidiLearnComplete(rowIndex);
+}
+
+// Handle MIDI learn completion - auto-advance to next MIDI Learn row if enabled
+function handleMidiLearnComplete(currentRowIndex: number): void {
+  if (!midiLearnAutoAdvance.value) return;
+  
+  // Find the next row with MIDI Learn (source MIDI Learn OR destination MIDI CC Learn)
+  let nextLearnRowIndex = -1;
+  for (let i = currentRowIndex + 1; i < mappingDocument.value.rows.length; i++) {
+    const row = mappingDocument.value.rows[i];
+    
+    // Check for source MIDI Learn (MIDI/CC/NRPN with Learn function)
+    const isSourceMidiLearn = [5, 6, 7].includes(row.source.type.key) && row.source.function.key === 48;
+    
+    // Check for destination MIDI CC Learn
+    const isDestMidiLearn = row.destination.type.key === 5 && row.destination.function.key === 48;
+    
+    if (isSourceMidiLearn || isDestMidiLearn) {
+      nextLearnRowIndex = i;
+      break;
+    }
+  }
+  
+  // If found, select that row and trigger auto-start
+  if (nextLearnRowIndex !== -1) {
+    selectedRowIndices.value.clear();
+    selectedRowIndices.value.add(nextLearnRowIndex);
+    expandedCommentRowIndex.value = null;
+    selectedRowIndices.value = new Set(selectedRowIndices.value);
+    
+    // Set the auto-start flag for the next row
+    midiLearnAutoStartRow.value = nextLearnRowIndex;
+    
+    // Scroll into view
+    const rowElement = document.querySelector(`[data-row-index="${nextLearnRowIndex}"]`);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
 }
 
 function clearRowSelection(): void {
@@ -683,12 +846,25 @@ function handleMultiCut(): void {
 }
 
 function handleMultiCopy(): void {
-  copyRows(sortedSelectedIndices.value);
+  const indices = sortedSelectedIndices.value;
+  if (indices.length === 1) {
+    copyRow(indices[0]);
+  } else if (indices.length > 1) {
+    copyRows(indices);
+  }
 }
 
 function handleMultiPaste(): void {
   if (sortedSelectedIndices.value.length > 0) {
-    pasteRows(sortedSelectedIndices.value[0]);
+    const startIndex = sortedSelectedIndices.value[0];
+
+    // For single row paste, use handlePasteRow to get auto-advance behavior
+    if (hasCopiedRow.value && sortedSelectedIndices.value.length === 1) {
+      handlePasteRow(startIndex);
+    } else {
+      // For multi-row paste, use pasteRows directly (no auto-advance)
+      pasteRows(startIndex);
+    }
   }
 }
 
@@ -702,6 +878,52 @@ function handleMultiMoveDown(): void {
   const result = moveRowsDown(sortedSelectedIndices.value);
   selectedRowIndices.value = new Set(result.newIndices);
   handleMoveWarnings(result.referenceUpdateResult);
+}
+
+// Paste operation wrappers with auto-advance support
+function handlePasteRow(rowIndex: number): void {
+  pasteRow(rowIndex);
+  if (pasteAutoAdvance.value === 'rows-only' || pasteAutoAdvance.value === 'all') {
+    advanceToNextRow(rowIndex, false); // Close comment section for full row paste
+  }
+}
+
+function handlePasteSource(rowIndex: number): void {
+  pasteSource(rowIndex);
+  if (pasteAutoAdvance.value === 'all') {
+    advanceToNextRow(rowIndex, true); // Keep comment section open for source paste
+  }
+}
+
+function handlePasteDestination(rowIndex: number): void {
+  pasteDestination(rowIndex);
+  if (pasteAutoAdvance.value === 'all') {
+    advanceToNextRow(rowIndex, true); // Keep comment section open for destination paste
+  }
+}
+
+// Helper function to advance to the next row
+function advanceToNextRow(currentRowIndex: number, keepCommentOpen = false): void {
+  const nextRowIndex = currentRowIndex + 1;
+  if (nextRowIndex < mappingDocument.value.rows.length) {
+    selectedRowIndices.value.clear();
+    selectedRowIndices.value.add(nextRowIndex);
+
+    // Keep comment section open if requested (for source/destination paste workflow)
+    if (keepCommentOpen) {
+      expandedCommentRowIndex.value = nextRowIndex;
+    } else {
+      expandedCommentRowIndex.value = null;
+    }
+
+    selectedRowIndices.value = new Set(selectedRowIndices.value);
+
+    // Scroll into view
+    const rowElement = document.querySelector(`[data-row-index="${nextRowIndex}"]`);
+    if (rowElement) {
+      rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
 }
 
 // Track accumulated reference updates for toast deduplication
@@ -814,7 +1036,13 @@ function handleKeyDown(event: KeyboardEvent): void {
     if (hasCopiedRows.value && indices.length > 0) {
       pasteRows(indices[0]);
     } else if (hasCopiedRow.value && indices.length === 1) {
-      pasteRow(indices[0]);
+      const currentRowIndex = indices[0];
+      pasteRow(currentRowIndex);
+
+      // Auto-advance to next row after full row paste (if enabled)
+      if (pasteAutoAdvance.value === 'rows-only' || pasteAutoAdvance.value === 'all') {
+        advanceToNextRow(currentRowIndex);
+      }
     }
     event.preventDefault();
   } else if (event.key === 'Escape') {
@@ -1321,6 +1549,8 @@ function downloadMap() {
     v-model:show-variable-monitor="showVariableMonitor"
     v-model:show-log-monitor="showLogMonitor"
     v-model:show-description="showDescription"
+    v-model:midi-learn-auto-advance="midiLearnAutoAdvance"
+    v-model:paste-auto-advance="pasteAutoAdvance"
     :header-text="mappingDocument.header.headerText"
     :firmware-major="mappingDocument.header.majorVersion"
     :firmware-minor="mappingDocument.header.minorVersion"
@@ -1383,6 +1613,7 @@ function downloadMap() {
     :show-variable-monitor="showVariableMonitor"
     :variable-monitor-expanded="variableMonitorExpanded"
     @expanded-change="logMonitorExpanded = $event"
+    @scroll-to-row="handleScrollToRow"
   />
 
   <main>
@@ -1520,7 +1751,7 @@ function downloadMap() {
         <div>Destination Extra</div>
         <div>Clear</div>
       </div>
-      <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index" :style="{ backgroundColor: getRowBackgroundColor(row.index) }">
+      <div id="rowsGridContainer" v-for="row in mappingDocument.rows" :key="row.index" :data-row-index="row.index" :style="{ backgroundColor: getRowBackgroundColor(row.index) }">
 
         <div
           class="gridItem rowIndex pt-1"
@@ -1579,12 +1810,10 @@ function downloadMap() {
             mode="source"
             :source-type="row.source.type.key"
             :is-locked="isCurrentLocked"
-            @function-update="(functionKey: number) => {
-              const sourceFunc = currentlySelectedSourceTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
-              if (sourceFunc) {
-                row.source.function = new SourceFunction(functionKey, sourceFunc.abbr, sourceFunc.description)
-              }
-            }"
+            :auto-start="midiLearnAutoStartRow === row.index"
+            :last-learned-message="lastLearnedMidiMessage"
+            @update-last-message="(msg: string) => lastLearnedMidiMessage = msg"
+            @function-update="(functionKey: number) => handleSourceMidiLearnFunctionUpdate(row.index, functionKey)"
           />
 
           <!-- Calc or Skip Source Type -->
@@ -1703,12 +1932,10 @@ function downloadMap() {
             v-model="row.destination.extra as DestinationExtra"
             mode="destination"
             :is-locked="isCurrentLocked"
-            @function-update="(functionKey: number) => {
-              const destFunc = currentlySelectedDestinationTypes[row.index].functions.find((f: MappingTuple) => f.key === functionKey)
-              if (destFunc) {
-                row.destination.function = new DestinationFunction(functionKey, destFunc.abbr, destFunc.description)
-              }
-            }"
+            :auto-start="midiLearnAutoStartRow === row.index"
+            :last-learned-message="lastLearnedMidiMessage"
+            @update-last-message="(msg: string) => lastLearnedMidiMessage = msg"
+            @function-update="(functionKey: number) => handleDestMidiLearnFunctionUpdate(row.index, functionKey)"
           />
 
           <!-- Midi CC Destination Type -->
@@ -1833,7 +2060,7 @@ function downloadMap() {
 
         <!-- Comment section (unfolds only when single row is selected) -->
         <RowCommentSection
-          v-if="selectedRowIndices.size === 1 && isRowSelected(row.index)"
+          v-if="expandedCommentRowIndex === row.index"
           :row-index="row.index"
           :source-empty="row.source.type.key === EMPTY_KEY"
           :destination-empty="row.destination.type.key === EMPTY_KEY"
@@ -1851,12 +2078,13 @@ function downloadMap() {
           :source-skip-active="row.source.type.key === SKIP_SOURCE_TYPE_KEY && row.source.function.key !== EMPTY_KEY && Math.floor(row.source.function.key / 6) + 1 > 0"
           :destination-skip-active="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY && row.destination.function.key !== EMPTY_KEY && Math.floor(row.destination.function.key / 6) + 1 > 0"
           :is-locked="isCurrentLocked"
-          v-model="rowComments[row.index]"
+          :model-value="rowComments[row.index] || ''"
+          @update:model-value="(val) => rowComments[row.index] = val"
           @copy-source="copySource"
-          @paste-source="pasteSource"
+          @paste-source="handlePasteSource"
           @clear-source="clearSource"
           @copy-destination="copyDestination"
-          @paste-destination="pasteDestination"
+          @paste-destination="handlePasteDestination"
           @update-variable="updateVariableValue"
           @clear-destination="clearDestination"
         />

@@ -9,6 +9,8 @@ const props = defineProps<{
   showVariableMonitor: boolean
   showLogMonitor: boolean
   showDescription: boolean
+  midiLearnAutoAdvance: boolean
+  pasteAutoAdvance: 'disabled' | 'rows-only' | 'all'
   // Info section props
   headerText: string
   firmwareMajor: number
@@ -23,11 +25,18 @@ const emit = defineEmits<{
   'update:showVariableMonitor': [value: boolean]
   'update:showLogMonitor': [value: boolean]
   'update:showDescription': [value: boolean]
+  'update:midiLearnAutoAdvance': [value: boolean]
+  'update:pasteAutoAdvance': [value: 'disabled' | 'rows-only' | 'all']
 }>()
 
 // Sub-section expanded states
+const autoAdvanceSectionExpanded = ref(localStorage.getItem('settings-auto-advance-expanded') !== 'false')
 const panelsSectionExpanded = ref(localStorage.getItem('settings-panels-expanded') !== 'false')
 const infoSectionExpanded = ref(localStorage.getItem('settings-info-expanded') !== 'false')
+
+watch(autoAdvanceSectionExpanded, (val) => {
+  localStorage.setItem('settings-auto-advance-expanded', val.toString())
+})
 
 watch(panelsSectionExpanded, (val) => {
   localStorage.setItem('settings-panels-expanded', val.toString())
@@ -61,6 +70,26 @@ function toggleDescription(): void {
   emit('update:showDescription', !props.showDescription)
 }
 
+
+function toggleMidiLearnAutoAdvance(): void {
+  emit('update:midiLearnAutoAdvance', !props.midiLearnAutoAdvance)
+}
+
+function togglePasteAutoAdvance(): void {
+  const states: Array<'disabled' | 'rows-only' | 'all'> = ['disabled', 'rows-only', 'all']
+  const currentIndex = states.indexOf(props.pasteAutoAdvance)
+  const nextIndex = (currentIndex + 1) % states.length
+  emit('update:pasteAutoAdvance', states[nextIndex])
+}
+
+function getPasteAutoAdvanceLabel(): string {
+  switch (props.pasteAutoAdvance) {
+    case 'disabled': return 'OFF'
+    case 'rows-only': return 'ROWS'
+    case 'all': return 'ALL'
+  }
+}
+
 function onExpandedChange(expanded: boolean): void {
   emit('expandedChange', expanded)
 }
@@ -87,6 +116,36 @@ function onExpandedChange(expanded: boolean): void {
       >
         {{ displayRowIndexAsHex ? 'HEX' : 'DEC' }}
       </button>
+    </div>
+
+    <div class="setting-divider subsection-divider" @click="autoAdvanceSectionExpanded = !autoAdvanceSectionExpanded">
+      <span class="divider-label">Auto-Advance</span>
+      <span class="subsection-toggle-icon" :class="{ expanded: autoAdvanceSectionExpanded }">▸</span>
+    </div>
+
+    <div v-if="autoAdvanceSectionExpanded" class="collapsible-section">
+      <div class="setting-item">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            :checked="midiLearnAutoAdvance"
+            @change="toggleMidiLearnAutoAdvance"
+          />
+          <span>MIDI Learn Auto-Advance</span>
+        </label>
+      </div>
+
+      <div class="setting-item">
+        <span class="setting-label">Paste Auto-Advance</span>
+        <button
+          class="toggle-btn"
+          :class="{ active: pasteAutoAdvance !== 'disabled' }"
+          @click="togglePasteAutoAdvance"
+          :title="pasteAutoAdvance === 'disabled' ? 'Disabled' : pasteAutoAdvance === 'rows-only' ? 'Only for whole rows' : 'For all pastes (rows, source, destination)'"
+        >
+          {{ getPasteAutoAdvanceLabel() }}
+        </button>
+      </div>
     </div>
 
     <div class="setting-divider subsection-divider" @click="panelsSectionExpanded = !panelsSectionExpanded">
@@ -235,6 +294,21 @@ function onExpandedChange(expanded: boolean): void {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.subsection-toggle-icon {
+  color: #34cc99;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.subsection-toggle-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.setting-divider:hover .subsection-toggle-icon {
+  color: #F1F700;
 }
 
 .collapsible-section {

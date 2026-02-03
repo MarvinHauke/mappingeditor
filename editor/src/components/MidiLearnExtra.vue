@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel, ref, computed, onUnmounted } from 'vue'
+import { defineModel, ref, computed, watch, onUnmounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 import { SourceExtra, DestinationExtra } from '../modules/documentModel'
 import { EMPTY_ABBR, EMPTY_DESCRIPTION } from '../modules/dataModel'
@@ -15,12 +15,14 @@ const props = defineProps<{
   mode: 'source' | 'destination'
   sourceType?: number // Required when mode='source': 5=MIDI, 6=MIDI CC, 7=MIDI NRPN
   isLocked?: boolean
+  autoStart?: boolean // Auto-start learning when this prop becomes true
+  lastLearnedMessage?: string | null // Last learned message key from parent (to prevent duplicates)
 }>()
 
 // Generic model that works with both SourceExtra and DestinationExtra
 const model = defineModel<SourceExtra | DestinationExtra>({ required: true })
 
-const emit = defineEmits(['update:modelValue', 'functionUpdate'])
+const emit = defineEmits(['update:modelValue', 'functionUpdate', 'updateLastMessage'])
 
 const { startLearning, stopLearning } = useMidi()
 
@@ -37,6 +39,9 @@ const learnedValue = ref<number | null>(null)
 const learningCountdown = ref<number>(10)
 const countdownInterval = ref<number | null>(null)
 const learnError = ref<string>('')
+
+// Track if we've already auto-started (to prevent duplicate triggers)
+const hasAutoStarted = ref(false)
 
 // Computed values
 const channelWithOffset = computed(() => {
@@ -93,8 +98,16 @@ function handleStopLearning(): void {
   stopLearning()
 }
 
-// Handle learned MIDI message
-function handleMidiMessage(msg: ParsedMidiMessage): void {
+// Handle learned MIDI message - returns true if accepted, false if rejected
+function handleMidiMessage(msg: ParsedMidiMessage): boolean {
+  // Create a unique key for this message
+  const messageKey = `${msg.type}-${msg.channel}-${msg.note ?? msg.cc ?? msg.nrpn ?? 0}`
+
+  // Ignore if this is the same message as the last one learned globally
+  if (props.lastLearnedMessage === messageKey) {
+    return false
+  }
+
   learnedChannel.value = msg.channel
 
   if (props.mode === 'source') {
@@ -103,19 +116,25 @@ function handleMidiMessage(msg: ParsedMidiMessage): void {
       case 5: // MIDI (Note)
         if (msg.type === 'note' && msg.note !== undefined) {
           learnedValue.value = msg.note
+          emit('updateLastMessage', messageKey)
           updateModel(msg.note)
+          return true
         }
         break
       case 6: // MIDI CC
         if (msg.type === 'cc' && msg.cc !== undefined) {
           learnedValue.value = msg.cc
+          emit('updateLastMessage', messageKey)
           updateModel(msg.cc)
+          return true
         }
         break
       case 7: // MIDI NRPN
         if (msg.type === 'nrpn' && msg.nrpn !== undefined) {
           learnedValue.value = msg.nrpn
+          emit('updateLastMessage', messageKey)
           updateModel(msg.nrpn)
+          return true
         }
         break
     }
@@ -123,12 +142,19 @@ function handleMidiMessage(msg: ParsedMidiMessage): void {
     // Destination mode: handle CC and NRPN
     if (msg.type === 'cc' && msg.cc !== undefined) {
       learnedValue.value = msg.cc
+      emit('updateLastMessage', messageKey)
       updateModel(msg.cc)
+      return true
     } else if (msg.type === 'nrpn' && msg.nrpn !== undefined) {
       learnedValue.value = msg.nrpn
+      emit('updateLastMessage', messageKey)
       updateModel(msg.nrpn)
+      return true
     }
   }
+
+  // Message type doesn't match expected type for this mode
+  return false
 }
 
 // Update model with learned value
@@ -141,6 +167,9 @@ function updateModel(value: number): void {
   } else {
     model.value = new DestinationExtra(value, abbr, description)
   }
+
+  // Stop learning immediately after successful capture
+  handleStopLearning()
 
   // Also emit function update with learned channel
   if (channelWithOffset.value !== null) {
@@ -183,6 +212,24 @@ function generateDescription(value: number): string {
     return value <= 127 ? `MIDI Controller #${value}` : `MIDI NRPN Controller #${value}`
   }
 }
+
+// Auto-start learning when autoStart prop becomes true
+watch(
+  () => props.autoStart,
+  (shouldStart, oldValue) => {
+    // Only trigger when changing from false to true, and only once
+    if (shouldStart && !oldValue && !hasAutoStarted.value && !isLocalLearning.value && !props.isLocked) {
+      hasAutoStarted.value = true
+      // Small delay to ensure component is ready
+      setTimeout(() => {
+        handleStartLearning()
+      }, 50)
+    } else if (!shouldStart) {
+      // Reset flag when autoStart becomes false
+      hasAutoStarted.value = false
+    }
+  }
+)
 
 // Cleanup on unmount
 onUnmounted(() => {

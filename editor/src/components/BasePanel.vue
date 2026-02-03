@@ -53,21 +53,17 @@ function toggleExpand(): void {
 
 const panelWidth = computed(() => isExpanded.value ? props.expandedWidth : props.minimizedWidth)
 
-// Initialize resize composable only if resizable
-const resizeState = computed(() => {
-  if (!props.resizable) return null
-
-  return useResize({
-    storageKey: `${props.storageKey}-height`,
-    minHeight: props.minHeight,
-    maxHeight: props.maxHeight,
-    defaultHeight: props.defaultHeight
-  })
+// Initialize resize composable (always initialize, but only use if resizable)
+const resizeState = useResize({
+  storageKey: `${props.storageKey}-height`,
+  minHeight: props.minHeight,
+  maxHeight: props.maxHeight,
+  defaultHeight: props.defaultHeight
 })
 
-// Watch for height changes and emit
-watch(() => resizeState.value?.height.value, async (newHeight) => {
-  if (newHeight !== undefined) {
+// Watch for height changes and emit (only if resizable)
+watch(() => resizeState.height.value, async (newHeight) => {
+  if (props.resizable && newHeight !== undefined) {
     emit('heightChange', newHeight)
     await nextTick()
     checkOverflow()
@@ -76,10 +72,10 @@ watch(() => resizeState.value?.height.value, async (newHeight) => {
 
 // Computed style for panel-body
 const panelBodyStyle = computed(() => {
-  if (!props.resizable || !resizeState.value) {
+  if (!props.resizable) {
     return { maxHeight: props.customMaxHeight }
   }
-  return { maxHeight: `${resizeState.value.height.value}px` }
+  return { maxHeight: `${resizeState.height.value}px` }
 })
 
 // Check if content is overflowing
@@ -149,7 +145,7 @@ defineExpose({ isExpanded })
 
       <!-- Resize handle (only if resizable) -->
       <div
-        v-if="resizable && resizeState"
+        v-if="resizable"
         class="resize-handle"
         @mousedown="resizeState.startResize"
         title="Drag to resize panel"

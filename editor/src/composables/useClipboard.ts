@@ -295,6 +295,7 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     const row = findRow(rowIndex);
     if (!row) return;
     copiedRowData.value = deepCloneRow(row);
+    copiedRowsData.value = [];  // Clear multi-row clipboard for mutual exclusion
   }
 
   function pasteRow(rowIndex: number): void {
@@ -382,6 +383,7 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
       .map(idx => findRow(idx))
       .filter((row): row is NonNullable<typeof row> => row !== undefined)
       .map(row => deepCloneRow(row));
+    copiedRowData.value = null;  // Clear single-row clipboard for mutual exclusion
   }
 
   function pasteRows(startIndex: number): void {
