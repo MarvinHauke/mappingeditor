@@ -2,17 +2,25 @@
 
 ## Executive Summary
 
-**Current State:**
-- Total lines: 2,130
-- Script lines: 1,300
-- Template lines: 830
-- Functions: 60+
-- Reactive properties: 40+
-- Concerns: File I/O, serialization, selection, panels, skip analysis, keyboard shortcuts, metadata
+**Current State (Updated 2026-02-04):**
+- Total lines: ~2,400 (was 2,130)
+- Script lines: ~1,600 (was 1,300)
+- Template lines: ~800
+- Functions: 70+ (was 60+)
+- Reactive properties: 50+ (was 40+)
+- Concerns: File I/O, serialization, selection, panels, skip analysis, keyboard shortcuts, metadata, **auto-advance systems**, **comment expansion tracking**
+
+**Recent Additions (+280 lines):**
+- Paste auto-advance system (3 modes: DISABLED/ROWS/ALL)
+- MIDI learn auto-advance with duplicate prevention
+- Enhanced row selection (3-click cycle, sticky comment state)
+- Comment section expansion tracking (`expandedCommentRowIndex`)
+- Auto-advance helpers (`advanceToNextRow`, paste wrappers)
 
 **Target State:**
-- Script lines: ~400 (reduction of 900 lines)
-- Extract 6 composables (~730 lines of reusable logic)
+- Script lines: ~500 (reduction of 1,100 lines)
+- Extract **7 composables** (~1,010 lines of reusable logic)
+  - Original 6 + new `useAutoAdvance`
 - Improve testability, maintainability, and enable debugger features
 
 **Benefits:**
@@ -25,35 +33,53 @@
 
 ## Current Architecture Analysis
 
-### File Metrics
+### File Metrics (Updated 2026-02-04)
 
 ```
-EditorApp.vue Total: 2,130 lines
-├── <script setup>: 1,300 lines
-│   ├── Imports: 50 lines
-│   ├── State declarations: 216 lines
+EditorApp.vue Total: ~2,400 lines
+├── <script setup>: ~1,600 lines
+│   ├── Imports: 55 lines (+5 for new state)
+│   ├── State declarations: 236 lines (+20 for auto-advance/comment expansion)
 │   ├── Serialization: 120 lines
 │   ├── Skip analysis: 180 lines
-│   ├── Row selection: 100 lines
+│   ├── Row selection: 180 lines (+80 for 3-click cycle, sticky state)
+│   ├── Auto-advance: 140 lines (NEW: paste/MIDI wrappers, advanceToNextRow)
 │   ├── Multi-row operations: 80 lines
-│   ├── Keyboard shortcuts: 100 lines
+│   ├── Keyboard shortcuts: 120 lines (+20 for paste auto-advance)
 │   ├── File I/O: 200 lines
 │   ├── Selection handlers: 130 lines
-│   └── Helpers: 124 lines
-└── <template>: 830 lines
+│   └── Helpers: 159 lines (+35 for MIDI learn handlers)
+└── <template>: ~800 lines
 ```
 
-### Identified Concerns
+**Change Summary (+280 script lines):**
+- +20 lines: State declarations (expandedCommentRowIndex, pasteAutoAdvance, etc.)
+- +80 lines: Enhanced row selection (3-click cycle, sticky comment state)
+- +140 lines: Auto-advance system (paste/MIDI wrappers, advanceToNextRow)
+- +20 lines: Keyboard shortcuts (paste auto-advance integration)
+- +35 lines: MIDI learn handlers (auto-start, duplicate tracking)
 
-| Concern | Lines | Complexity | Extraction Priority |
-|---------|-------|------------|---------------------|
-| 1. Skip Analysis | 180 | HIGH | HIGH (pure logic, reusable) |
-| 2. Row Selection | 100 | MEDIUM | HIGH (state machine) |
-| 3. Panel State | 120 | LOW | MEDIUM (simple state) |
-| 4. Keyboard Shortcuts | 100 | MEDIUM | MEDIUM (event handling) |
-| 5. Serialization | 150 | MEDIUM | HIGH (testable) |
-| 6. File Handling | 300 | HIGH | CRITICAL (data integrity) |
-| 7. Row Metadata | 120 | LOW | MEDIUM (colors, comments) |
+### Identified Concerns (Updated 2026-02-04)
+
+| Concern | Lines | Complexity | Extraction Priority | Status |
+|---------|-------|------------|---------------------|--------|
+| 1. Skip Analysis | 180 | HIGH | HIGH (pure logic, reusable) | Planned |
+| 2. Row Selection | 180 | HIGH | HIGH (state machine + sticky state) | **UPDATED** (+80 lines) |
+| 3. Panel State | 120 | LOW | MEDIUM (simple state) | Planned |
+| 4. Keyboard Shortcuts | 120 | MEDIUM | MEDIUM (event handling) | **UPDATED** (+20 lines) |
+| 5. Serialization | 150 | MEDIUM | HIGH (testable) | Planned |
+| 6. File Handling | 300 | HIGH | CRITICAL (data integrity) | Planned |
+| 7. Row Metadata | 120 | LOW | MEDIUM (colors, comments) | Planned |
+| **8. Auto-Advance** | **140** | **MEDIUM** | **HIGH (workflow feature)** | **NEW 2026-02-04** |
+
+**New Concern #8: Auto-Advance Systems**
+- Paste auto-advance (row/source/destination with 3 modes)
+- MIDI learn auto-advance with duplicate prevention
+- `advanceToNextRow(currentRowIndex, keepCommentOpen)` helper
+- Paste wrappers: `handlePasteRow()`, `handlePasteSource()`, `handlePasteDestination()`
+- MIDI learn completion handlers
+- Global `lastLearnedMidiMessage` tracking
+- Should be extracted to `useAutoAdvance.ts` composable
 
 ### Dependency Graph
 
@@ -242,16 +268,20 @@ describe('useSkipAnalysis', () => {
 
 ---
 
-### Phase B.2: useRowSelection (~4-5 hours)
+### Phase B.2: useRowSelection (~6-7 hours) **UPDATED 2026-02-04**
 
-**Purpose:** Extract row selection state machine (single select, multi-select with Shift/Ctrl).
+**Purpose:** Extract enhanced row selection state machine with 3-click cycle and sticky comment state.
+
+**⚠️ COMPLEXITY INCREASED:** Recent additions (+80 lines) include three-click cycle logic and sticky comment state preservation when switching rows.
 
 #### Functions to Extract
 
-**From EditorApp.vue lines 55-56, 427-464, 661-670:**
+**From EditorApp.vue lines 55-57, 427-544, 661-670:**
 - `selectedRowIndices: Ref<Set<number>>`
 - `lastClickedRowIndex: Ref<number | null>`
-- `handleRowClick(rowIndex: number, event: MouseEvent)`
+- `expandedCommentRowIndex: Ref<number | null>` **NEW 2026-02-04**
+- `handleRowClick(rowIndex: number, event: MouseEvent)` - **Enhanced** with 3-click cycle + sticky state
+- `handleScrollToRow(rowIndex: number)` **NEW 2026-02-04**
 - `clearRowSelection()`
 - `isRowSelected(rowIndex: number): boolean`
 - `sortedSelectedIndices: ComputedRef<number[]>`

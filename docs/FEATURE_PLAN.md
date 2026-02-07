@@ -104,6 +104,7 @@ A simulation and debugging system for the Mapping Editor that allows users to va
   - Default: enabled
 
 **Implementation Details:**
+
 - `advanceToNextRow(currentRowIndex, keepCommentOpen)` helper function
 - `handlePasteRow()`, `handlePasteSource()`, `handlePasteDestination()` wrappers
 - `expandedCommentRowIndex` ref for explicit comment section tracking
@@ -111,6 +112,7 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 - Smooth scrolling animation with boundary checks
 
 **Files Modified:**
+
 - `editor/src/components/EditorApp.vue`
 - `editor/src/components/SettingsPanel.vue`
 - `editor/src/components/MidiLearnExtra.vue`
@@ -118,11 +120,12 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 **See:** Serena memory `paste-auto-advance-system-2026-02` for comprehensive documentation.
 
-### search for references
+### search for references (added in Row monitor)
 
 - include a option to search for references and how often they are used. (maybe a later feature)
+- jump to reference by clicking on it in row and variable monitor
 
-### Phase 0.11 - Visual additions
+### Phase 0.11 - Visual additions (partly done, resizeoptions and debugging options are missing)
 
 - Add middle Row which conatains > or X dependent on, if the row will be executed or not
   -> later i want this to be part of the debugger. But for now only add visual feedback from static analysis
@@ -177,7 +180,7 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 
 ---
 
-## Phase 0.1 Selection Toolbar Enhancement
+## Phase 0.1 Selection Toolbar Enhancement ✅
 
 - Convert multi-selection toolbar to BasePanel-based component
 - Make visible for single selections too
@@ -186,13 +189,15 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 ### Advanced (Future):
 
 - Draggable panels with "::" handle
-- Docking functionality (like Minimeters)
+- reordering and Docking functionality (like Minimeters)
 
 ---
 
 ## Phase 1: Foundation (Remaining)
 
-### 1.3 Row Value Display in Comment Section
+### 1.3 Row Value Display in Comment Section ✅
+
+**Status:** ✅ **IMPLEMENTED** (2026-02-07)
 
 Show hex, decimal, and binary values of the currently selected row (matching NerdSEQ mapping menu style):
 
@@ -204,7 +209,86 @@ Dest Value:    1024  |  0x0400  |  0b010000000000
                      [████████░░░░░░░░] 50%
 ```
 
-### 1.4 Global Mapping Documentation
+**✅ Variable Value Faders (Current):**
+- **Location:** `RowCommentSection.vue` (lines 101-111, 149-159)
+- Interactive sliders for Variable source/destination types
+- Range: 0-4095 (12-bit values)
+- Real-time value adjustment with visual progress indicator
+- Replaces static progress bar when Variable type detected
+- Updates Variable Monitor and document state immediately
+- **Limitation:** Requires row expansion to access
+- Event: `updateVariable(variableIndex, value)` → `EditorApp.vue` line ~635
+
+**Implementation Details:**
+- CSS custom property `--slider-progress` for visual feedback
+- Title tooltip: "Click or drag to set variable value"
+- Bidirectional: Works for both source and destination variables
+- Integrates with existing Variable Monitor display
+
+**Next:** See Phase 1.5 for planned migration to main table view
+
+### 1.5 Variable Fader Migration to Main Table ⏳
+
+**Status:** 📋 **PLANNED**
+
+**Goal:** Move variable faders from `RowCommentSection` (hidden until row expansion) to `VariableSourceExtra` (always visible in main table).
+
+**Current Problem:**
+- Variable faders require expanding comment section to access
+- Not visible in compact table view
+- Inconsistent with other Extra components
+
+**Proposed Solution:**
+Replace number input in `VariableSourceExtra.vue` with slider/progress bar UI:
+
+**Unchecked "From Row/Var" Mode:**
+- Horizontal editable slider/fader (0-4095)
+- Visual progress fill (#34cc99 → #F1F700 on hover)
+- Click anywhere on slider to set value
+- Cursor: `ew-resize` (east-west resize)
+
+**Checked "From Row/Var" Mode:**
+- Read-only progress bar showing incoming value
+- Value source: Variable A-P (function keys 0-15) or Row reference (keys 16-85)
+- Live updates when source variable/row changes
+- Tooltip: "Incoming value: {value} ({hex})"
+
+**Benefits:**
+- ✅ Always visible without row expansion
+- ✅ Consistent with main table workflow
+- ✅ Faster value adjustment (no need to expand rows)
+- ✅ Read-only progress bar shows live incoming values in "From Row/Var" mode
+
+**Files to Modify:**
+1. `VariableSourceExtra.vue` (~180 lines modified)
+   - Replace `<input type="number">` with conditional slider/progress bar
+   - Add `incomingValue` prop for read-only mode
+   - Add helper functions: `toPercent()`, `toHex()`
+   - Add ~100 lines of CSS for slider styling
+
+2. `EditorApp.vue` (~30 lines added)
+   - Add `getVariableSourceIncomingValue(row)` helper function
+   - Pass `:incoming-value` prop to `VariableSourceExtra`
+
+3. `RowCommentSection.vue` (~70 lines removed)
+   - Remove editable slider (lines 101-111, 149-159)
+   - Keep read-only progress bar for display only
+   - Remove slider-specific CSS (lines 314-363)
+
+**Detailed Implementation Plan:**
+See `/Users/pforsten/.claude/plans/foamy-cuddling-oasis.md` for complete step-by-step implementation guide with:
+- Full template code
+- Complete CSS styling
+- Edge case handling
+- Testing checklist
+- Verification steps
+
+**Effort Estimate:** 4-5 hours
+
+**Future Enhancement:**
+- Integrate with undo/redo system (`SetVariableValueCommand`)
+
+### 1.6 Global Mapping Documentation ✅ (revision needed)
 
 Add a collapsible textarea in the header for mapping-level documentation:
 
@@ -440,7 +524,7 @@ function isRowSkipped(row: MappingRow): boolean {
 }
 ```
 
-### 3.2 Row Value Monitor
+### 3.2 Row Value Monitor ✅
 
 Display real-time values in RowCommentSection during simulation:
 
@@ -468,41 +552,46 @@ Last Update: Cycle 1247 (0.5s ago)  ↑ Rising
 
 Extended the existing VariableMonitor component with advanced debugging features:
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| Unused Variables | Grey out variables not used in mapping | ✅ |
-| Value Format Toggle | Switch between DEC/HEX/BIN/BOOL display | ✅ |
-| Row Writers Display | Show which rows write to each variable | ✅ |
-| Visual Status | Border colors: read (teal), written (brighter) | ✅ |
+| Feature             | Description                                    | Status |
+| ------------------- | ---------------------------------------------- | ------ |
+| Unused Variables    | Grey out variables not used in mapping         | ✅     |
+| Value Format Toggle | Switch between DEC/HEX/BIN/BOOL display        | ✅     |
+| Row Writers Display | Show which rows write to each variable         | ✅     |
+| Visual Status       | Border colors: read (teal), written (brighter) | ✅     |
 
 **Implementation:**
+
 - New composable: `useVariableUsage.ts` - tracks variable reads/writes across all rows
 - Enhanced VariableMonitor with toggle controls and conditional styling
 - LocalStorage persistence for user preferences
 
 **Value Formats:**
+
 - **Decimal**: `0` to `4095` (default)
 - **Hexadecimal**: `0x000` to `0xFFF`
 - **Binary**: `0b000000000000` to `0b111111111111` (12-bit)
 - **Boolean**: `0` (false) or `1` (true for any non-zero)
 
 **Visual Indicators:**
+
 - **Greyed out**: Variable not read or written (opacity 0.3)
 - **Teal border**: Variable is read
 - **Brighter background**: Variable is written
 - **Writers list**: Shows row indices (e.g., "5, 12, 34")
 
 **Features (Future):**
+
 - Reads column: which rows are reading the variable
 - Last Write timestamp: when variable was last updated
 
-### 3.4 Row Values Submonitor in Variable Monitor
+### 3.4 Row Values Submonitor in Variable Monitor ✅
 
 **Status:** 📋 Planned
 
 Add a collapsible "Rows" section within the Variable Monitor that displays destination output values for all 70 mapping rows.
 
 **Features:**
+
 - **Always-present collapsible section** below variables (not a display mode button)
 - **Format integration**: Row values respond to DEC/HEX/BIN/BOOL buttons (same as variables)
 - **Independent scrolling**: Variables fixed at top, rows section scrolls separately
@@ -513,6 +602,7 @@ Add a collapsible "Rows" section within the Variable Monitor that displays desti
 - **Readers display mode**: Optional toggle to show which rows are reading/referencing each row (cross-reference visualization)
 
 **UI Layout:**
+
 ```
 ┌─────────────────────────────────────┐
 │ Variables Monitor                   │
@@ -535,6 +625,7 @@ Add a collapsible "Rows" section within the Variable Monitor that displays desti
 ```
 
 **Value Formatting Examples:**
+
 - **Decimal**: `00: CV Out1     5`
 - **Hexadecimal**: `00: CV Out1     0x005`
 - **Binary**: `00: CV Out1     0b000000000101`
@@ -564,6 +655,7 @@ Add a toggle button `[Readers]` alongside the format buttons to switch between v
 **Cross-Reference Detection:**
 
 The system should detect rows that reference other rows through:
+
 - **Skip Source/Destination**: Rows that skip to a specific row index
   - Skip conditions with target row parameters
   - Skip N rows calculations that land on specific rows
@@ -572,6 +664,7 @@ The system should detect rows that reference other rows through:
 - **Future**: Any other row-to-row reference mechanisms
 
 **UI Behavior:**
+
 - **Click on reader index**: Jump to and select that row in main editor
 - **Hover**: Show tooltip with source type and function of the referencing row
 - **Color coding**: Match row colors from main editor for visual consistency
@@ -580,11 +673,13 @@ The system should detect rows that reference other rows through:
 - **Many readers**: If >5 readers, show count: "← 7 rows" with expandable detail
 
 **Row Index Format:**
+
 - Respects hex/dec setting from Settings panel
 - Decimal mode: `← 5, 12, 35`
 - Hex mode: `← 0x05, 0x0C, 0x23`
 
 **Implementation Details:**
+
 - `RowLike` interface for type safety
 - `formatRowDestination()` - formats destination info
 - `getDestinationValue()` - formats values using current `valueFormat`
@@ -594,6 +689,7 @@ The system should detect rows that reference other rows through:
 - Display mode state: `rowsDisplayMode: 'values' | 'readers'` (localStorage: `variable-rows-display-mode`)
 
 **New Service Required:**
+
 - `rowReferenceService.ts` - Analyzes all rows to build reference graph
   - `buildReferenceMap(rows: Row[]): Map<number, number[]>` - Maps row index → reader row indices
   - `getReaders(rowIndex: number): number[]` - Returns rows that reference this row
@@ -603,6 +699,7 @@ The system should detect rows that reference other rows through:
   - Cached and invalidated on row changes
 
 **Files to Modify:**
+
 1. `editor/src/services/rowReferenceService.ts` (NEW, ~150 lines)
    - Implement row reference analysis and tracking
    - Build and maintain reference graph
@@ -620,6 +717,7 @@ The system should detect rows that reference other rows through:
    - Add handler for row navigation from readers click
 
 **Future Enhancements:**
+
 - Computed output values based on source input + min/max/offset scaling
 - Filter to show only rows with active destinations
 - Highlight row dependencies in a graph visualization

@@ -640,6 +640,42 @@ function updateVariableValue(variableIndex: number, value: number): void {
   }
 }
 
+/**
+ * Get incoming value for Variable source when "From Row/Var" is checked
+ * Returns the resolved value from variables A-P or row destination values
+ */
+function getVariableSourceIncomingValue(row: {
+  source: {
+    extra: { keyOrValue: number };
+    function: { key: number };
+  };
+}): number | undefined {
+  // Only applies when checkbox is checked (keyOrValue === 0)
+  if (row.source.extra.keyOrValue !== 0) {
+    return undefined;
+  }
+
+  // row.source.function.key contains the reference:
+  // 0-15: Variables A-P
+  // 16-85: Row references (row 0-69)
+  const refKey = row.source.function.key;
+
+  if (refKey >= 0 && refKey <= 15) {
+    // Variable reference (A-P)
+    return mappingDocument.value.variables[refKey].value;
+  } else if (refKey >= 16 && refKey <= 85) {
+    // Row reference
+    const referencedRowIndex = refKey - 16;
+    const referencedRow = mappingDocument.value.rows[referencedRowIndex];
+    if (referencedRow && referencedRow.destination.extra.keyOrValue !== EMPTY_KEY) {
+      // Return the destination's keyOrValue (adjusted for 1-based indexing in binary format)
+      return referencedRow.destination.extra.keyOrValue - 1;
+    }
+  }
+
+  return 0; // Default to 0 if no valid reference
+}
+
 function formatRowIndex(index: number): string {
   if (displayRowIndexAsHex.value) {
     return index.toString(16).toUpperCase().padStart(2, '0');
@@ -1830,7 +1866,8 @@ function downloadMap() {
           <!-- Variable Source Type -->
           <VariableSourceExtra v-model="row.source.extra as SourceExtra"
             v-else-if="row.source.type.key === VAR_SOURCE_TYPE_KEY"
-            :is-locked="isCurrentLocked" />
+            :is-locked="isCurrentLocked"
+            :incoming-value="getVariableSourceIncomingValue(row)" />
 
           <!-- External Source Type, Keyboard Function -->
           <select
@@ -2069,10 +2106,6 @@ function downloadMap() {
           :warnings="getRowWarnings(row.index)"
           :source-value="row.source.type.key === VAR_SOURCE_TYPE_KEY && row.source.extra.keyOrValue === 0 && row.source.function.key >= 0 && row.source.function.key < 16 ? mappingDocument.variables[row.source.function.key].value : row.source.extra.keyOrValue"
           :destination-value="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY && row.destination.extra.keyOrValue === 0 && row.destination.function.key >= 0 && row.destination.function.key < 16 ? mappingDocument.variables[row.destination.function.key].value : row.destination.extra.keyOrValue"
-          :is-source-variable="row.source.type.key === VAR_SOURCE_TYPE_KEY && row.source.extra.keyOrValue === 0 && row.source.function.key >= 0 && row.source.function.key < 16"
-          :source-variable-index="row.source.function.key"
-          :is-destination-variable="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY && row.destination.extra.keyOrValue === 0 && row.destination.function.key >= 0 && row.destination.function.key < 16"
-          :destination-variable-index="row.destination.function.key"
           :is-source-skip="row.source.type.key === SKIP_SOURCE_TYPE_KEY"
           :is-destination-skip="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY"
           :source-skip-active="row.source.type.key === SKIP_SOURCE_TYPE_KEY && row.source.function.key !== EMPTY_KEY && Math.floor(row.source.function.key / 6) + 1 > 0"
@@ -2085,7 +2118,6 @@ function downloadMap() {
           @clear-source="clearSource"
           @copy-destination="copyDestination"
           @paste-destination="handlePasteDestination"
-          @update-variable="updateVariableValue"
           @clear-destination="clearDestination"
         />
       </div>

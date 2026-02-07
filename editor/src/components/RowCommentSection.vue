@@ -11,10 +11,6 @@ defineProps<{
   warnings: AnalyzerWarning[];
   sourceValue: number;
   destinationValue: number;
-  isSourceVariable: boolean;
-  sourceVariableIndex: number;
-  isDestinationVariable: boolean;
-  destinationVariableIndex: number;
   isSourceSkip: boolean;
   isDestinationSkip: boolean;
   sourceSkipActive: boolean;
@@ -30,7 +26,6 @@ const emit = defineEmits<{
   'copyDestination': [rowIndex: number];
   'pasteDestination': [rowIndex: number];
   'clearDestination': [rowIndex: number];
-  'updateVariable': [variableIndex: number, value: number];
 }>();
 
 function getWarningIcon(severity: string): string {
@@ -98,18 +93,7 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
           <span class="value-item value-bool" :class="{ 'bool-true': getBoolValue(sourceValue, isSourceSkip, sourceSkipActive) === 'TRUE' }">
             {{ getBoolValue(sourceValue, isSourceSkip, sourceSkipActive) }}
           </span>
-          <input
-            v-if="isSourceVariable"
-            type="range"
-            min="0"
-            max="4095"
-            :value="sourceValue"
-            :style="{ '--slider-progress': toPercent(sourceValue) + '%' }"
-            @input="emit('updateVariable', sourceVariableIndex, parseInt(($event.target as HTMLInputElement).value))"
-            class="variable-slider"
-            title="Click or drag to set variable value"
-          />
-          <div v-else class="progress-bar">
+          <div class="progress-bar">
             <div class="progress-fill" :style="{ width: toPercent(sourceValue) + '%' }"></div>
           </div>
         </div>
@@ -146,18 +130,7 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
           <span class="value-item value-bool" :class="{ 'bool-true': getBoolValue(destinationValue, isDestinationSkip, destinationSkipActive) === 'TRUE' }">
             {{ getBoolValue(destinationValue, isDestinationSkip, destinationSkipActive) }}
           </span>
-          <input
-            v-if="isDestinationVariable"
-            type="range"
-            min="0"
-            max="4095"
-            :value="destinationValue"
-            :style="{ '--slider-progress': toPercent(destinationValue) + '%' }"
-            @input="emit('updateVariable', destinationVariableIndex, parseInt(($event.target as HTMLInputElement).value))"
-            class="variable-slider"
-            title="Click or drag to set variable value"
-          />
-          <div v-else class="progress-bar">
+          <div class="progress-bar">
             <div class="progress-fill" :style="{ width: toPercent(destinationValue) + '%' }"></div>
           </div>
         </div>
@@ -309,57 +282,6 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
   height: 100%;
   background-color: #34cc99;
   transition: width 0.2s ease;
-}
-
-.variable-slider {
-  flex: 1;
-  height: 8px;
-  -webkit-appearance: none;
-  appearance: none;
-  background-color: #000;
-  border: 1px solid #34cc99;
-  outline: none;
-  min-width: 80px;
-  max-width: 150px;
-  cursor: pointer;
-  position: relative;
-}
-
-/* Invisible but draggable thumb - spans full slider width */
-.variable-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 16px;
-  background: rgba(241, 247, 0, 0.01);
-  border: none;
-  cursor: ew-resize;
-  border-radius: 0;
-}
-
-.variable-slider::-moz-range-thumb {
-  width: 12px;
-  height: 16px;
-  background: rgba(241, 247, 0, 0.01);
-  border: none;
-  cursor: ew-resize;
-  border-radius: 0;
-}
-
-/* Create progress fill effect using track background */
-.variable-slider::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-  height: 4px;
-}
-
-.variable-slider::-moz-range-track {
-  background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-  height: 4px;
-}
-
-/* Hover effect - slightly lighter to indicate interactivity */
-.variable-slider:hover {
-  border-color: #F1F700;
 }
 
 .action-btn {

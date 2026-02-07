@@ -2051,6 +2051,147 @@ EditorApp.vue
 
 ---
 
+## Recent Investigation: Variable Fader Migration & .MAP Export Safety (2026-02-07)
+
+### Overview
+
+Investigated the impact of migrating Variable Fader UI from `RowCommentSection.vue` to `VariableSourceExtra.vue` on .MAP binary exports.
+
+**Conclusion: ZERO .MAP EXPORT IMPACT** - Pure UI refactoring with no data model changes.
+
+### Key Findings
+
+#### 1. .MAP Binary Format (1502 bytes)
+
+```
+Byte Offset  | Content                    | Size
+-------------|----------------------------|--------
+0-69         | Header                     | 70 bytes
+70-1469      | 70 Rows × 20 bytes/row     | 1400 bytes
+1470-1501    | 16 Variables × 2 bytes/var | 32 bytes
+```
+
+**Variable Storage:**
+- 16 variables (A-P) stored at bytes 1470-1501
+- Each variable: 16-bit unsigned Little Endian
+- Range: 0-4095 (12-bit values)
+- Exported by `formatters.ts` lines 153-156 from `mappingDocument.variables[i].value`
+
+**Row Source Extra Storage:**
+- `row.source.extra.keyOrValue` stored at byte offset: `70 + (rowIndex × 20) + 4`
+- Range: 0-4096 (0 = "From Row/Var" mode, 1-4096 = constant values 0-4095)
+
+#### 2. What the Migration Actually Does
+
+**Two separate UI changes:**
+
+1. **VariableSourceExtra Enhancement** (Primary):
+   - Replace number input with horizontal slider for `row.source.extra.keyOrValue`
+   - Unchecked "From Row/Var": Editable slider (0-4095)
+   - Checked "From Row/Var": Read-only progress bar showing incoming value
+   - **Data modified**: Row source extra field (already exported in .MAP)
+
+2. **RowCommentSection Simplification** (Secondary):
+   - Remove global variable value faders (decision confirmed: Option A)
+   - Keep read-only progress bar for display only
+   - **UX Impact**: Users must use Variable Monitor panel to set global variable values
+   - **Data NOT affected**: Global variables still exported, just set from different UI
+
+#### 3. Semantic Clarification
+
+The FEATURE_PLAN.md section 1.5 title "Move variable faders from RowCommentSection to VariableSourceExtra" is **misleading**. The plan actually involves:
+
+- **RowCommentSection fader**: Sets `mappingDocument.variables[A-P].value` (global state) - **being removed**
+- **VariableSourceExtra slider**: Sets `row.source.extra.keyOrValue` (row-specific constant) - **being added**
+
+These are **different sliders** controlling **different values**.
+
+#### 4. Data Flow Verification
+
+**Current variable value update flow:**
+```
+RowCommentSection slider → emit('updateVariable', variableIndex, value)
+                         ↓ (EditorApp.vue handler)
+mappingDocument.variables[variableIndex].value = value
+                         ↓ (scheduleCacheSave debounced 1s)
+IndexedDB persistence
+                         ↓ (formatters.toBlob())
+Bytes 1470-1501 in .MAP export
+```
+
+**Proposed row constant value update flow:**
+```
+VariableSourceExtra slider → v-model="varValue"
+                           ↓ (numChanged event)
+row.source.extra.keyOrValue = value
+                           ↓ (scheduleCacheSave debounced 1s)
+IndexedDB persistence
+                           ↓ (formatters.toBlob())
+Bytes 70+ in .MAP export (row data)
+```
+
+Both flows modify fields **already serialized** by existing export logic. UI location doesn't matter.
+
+#### 5. Export Verification Strategy
+
+**Test workflow:**
+1. Create test mapping with Variable A = 1234 (via Variable Monitor)
+2. Create row with Variable source (function = Variable A, extra keyOrValue = 2500)
+3. Export to .MAP file
+4. Binary inspection:
+   ```javascript
+   const buffer = fs.readFileSync('test.map');
+   const varAValue = buffer.readUInt16LE(1470); // Should be 1234
+   const row0SourceExtra = buffer.readUInt16LE(74); // Should be 2501 (2500+1)
+   ```
+5. Round-trip test: Import .MAP → verify values preserved
+
+### Implementation Plan
+
+**Files to modify:**
+1. `VariableSourceExtra.vue` (~180 lines): Add slider/progress bar UI
+2. `EditorApp.vue` (~30 lines): Add `getVariableSourceIncomingValue()` helper
+3. `RowCommentSection.vue` (~70 lines removed): Remove editable sliders
+
+**No changes required:**
+- ❌ `formatters.ts` - Export logic unchanged
+- ❌ `parsers.ts` - Import logic unchanged
+- ❌ `documentModel.ts` - Variable class unchanged
+
+**Detailed plan:** `/Users/pforsten/.claude/plans/foamy-cuddling-oasis.md`
+**Integration plan:** `/Users/pforsten/.claude/plans/woolly-herding-lantern.md`
+
+**Effort estimate:** 4.5-6.5 hours
+
+### Critical Observations
+
+1. **No map-export-guardian review needed**: Zero impact on binary export logic
+2. **Data model unchanged**: Only UI components modified
+3. **Backward compatibility preserved**: .MAP format unchanged
+4. **UX change requires documentation**: Removal of RowCommentSection global variable faders should be documented in release notes
+
+### Testing Checklist
+
+**Functional:**
+- [ ] VariableSourceExtra slider updates row source extra correctly
+- [ ] Read-only progress bar shows live incoming values
+- [ ] Variable Monitor still sets global variable values
+- [ ] Locked state disables slider but shows values
+
+**Export:**
+- [ ] .MAP binary export byte-identical (same input values)
+- [ ] JSON export includes correct variable values array
+- [ ] Round-trip (export → import) preserves all values
+- [ ] Binary inspection confirms correct byte offsets
+
+**Regression:**
+- [ ] Variable Monitor displays/edits global variables
+- [ ] SETVAR destination writes to global variables
+- [ ] Static analyzer variable warnings still work
+- [ ] MIDI learn functions with Variable source rows
+
+---
+
 ## Last Updated
 
 **2026-02-04** - Documented major feature implementations: Paste Auto-Advance System (3 modes), MIDI Learn Auto-Advance, Enhanced Row Selection (3-click cycle, sticky comment state), Settings Panel Auto-Advance section, and Toolbar Copy button bug fix. Updated EditorApp.vue size (~2,400 lines total, ~1,600 script) to reflect recent additions. Emphasized increased importance of Phase 3.6 modularization. Comprehensive commit: "Add comprehensive auto-advance system and enhance row selection UX" (406 insertions, 68 deletions across 6 files).
