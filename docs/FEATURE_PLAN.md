@@ -209,81 +209,78 @@ Dest Value:    1024  |  0x0400  |  0b010000000000
                      [████████░░░░░░░░] 50%
 ```
 
-**✅ Variable Value Faders (Current):**
-- **Location:** `RowCommentSection.vue` (lines 101-111, 149-159)
-- Interactive sliders for Variable source/destination types
-- Range: 0-4095 (12-bit values)
-- Real-time value adjustment with visual progress indicator
-- Replaces static progress bar when Variable type detected
-- Updates Variable Monitor and document state immediately
-- **Limitation:** Requires row expansion to access
-- Event: `updateVariable(variableIndex, value)` → `EditorApp.vue` line ~635
-
 **Implementation Details:**
-- CSS custom property `--slider-progress` for visual feedback
-- Title tooltip: "Click or drag to set variable value"
-- Bidirectional: Works for both source and destination variables
-- Integrates with existing Variable Monitor display
+- Row value monitor displays in RowCommentSection when row is selected
+- Shows Decimal, Hex (0x...), Binary (0b...), and Boolean (TRUE/FALSE) formats
+- Visual progress bars for both source and destination (0-4095 range)
+- Boolean display: TRUE for non-zero values, FALSE for zero
+- Skip destination special handling: Shows skip execution state
+- Copy/Paste/Clear buttons for source and destination
+- Integrates with static analyzer warnings display
 
-**Next:** See Phase 1.5 for planned migration to main table view
+**Note:** Variable value editing was migrated to `VariableSourceExtra.vue` in Phase 1.5 for always-visible access. RowCommentSection now displays read-only value monitors only.
 
-### 1.5 Variable Fader Migration to Main Table ⏳
+### 1.5 Variable Fader Migration to Main Table ✅
 
-**Status:** 📋 **PLANNED**
+**Status:** ✅ **IMPLEMENTED** (2026-02-07/08)
 
 **Goal:** Move variable faders from `RowCommentSection` (hidden until row expansion) to `VariableSourceExtra` (always visible in main table).
 
-**Current Problem:**
-- Variable faders require expanding comment section to access
-- Not visible in compact table view
-- Inconsistent with other Extra components
+**Implementation Summary:**
 
-**Proposed Solution:**
-Replace number input in `VariableSourceExtra.vue` with slider/progress bar UI:
+Replaced number input in `VariableSourceExtra.vue` with interactive horizontal fader/slider UI.
 
-**Unchecked "From Row/Var" Mode:**
-- Horizontal editable slider/fader (0-4095)
-- Visual progress fill (#34cc99 → #F1F700 on hover)
-- Click anywhere on slider to set value
-- Cursor: `ew-resize` (east-west resize)
+**Unchecked "From Row/Var" Mode (Editable):**
+- ✅ Horizontal interactive fader with range 0-4095
+- ✅ Visual gradient fill showing current value percentage
+- ✅ Metallic handle indicator at current position
+- ✅ Number input overlay for keyboard entry
+- ✅ Technical hardware styling (repeating-linear-gradient background)
+- ✅ Range slider for mouse/touch interaction (invisible, positioned over fader)
+- ✅ Input validation and clamping to valid range
+- ✅ Real-time value updates
 
-**Checked "From Row/Var" Mode:**
-- Read-only progress bar showing incoming value
-- Value source: Variable A-P (function keys 0-15) or Row reference (keys 16-85)
-- Live updates when source variable/row changes
-- Tooltip: "Incoming value: {value} ({hex})"
+**Checked "From Row/Var" Mode (Read-Only):**
+- ✅ Read-only progress bar showing incoming value
+- ✅ Value source: Variable A-P (function keys 0-15) or Row reference (keys 16-85)
+- ✅ Live updates via `getVariableSourceIncomingValue()` helper
+- ✅ Display-only number value overlay
+- ✅ Same visual styling as editable mode
 
-**Benefits:**
-- ✅ Always visible without row expansion
-- ✅ Consistent with main table workflow
-- ✅ Faster value adjustment (no need to expand rows)
-- ✅ Read-only progress bar shows live incoming values in "From Row/Var" mode
+**Benefits Achieved:**
+- ✅ Always visible in main table without row expansion
+- ✅ Consistent with other Extra component patterns
+- ✅ Faster value adjustment with visual feedback
+- ✅ Read-only progress bar shows live incoming values
+- ✅ Locked state support (disabled when slot locked)
+- ✅ Input validation prevents invalid states (NaN, out-of-range)
 
-**Files to Modify:**
-1. `VariableSourceExtra.vue` (~180 lines modified)
-   - Replace `<input type="number">` with conditional slider/progress bar
-   - Add `incomingValue` prop for read-only mode
-   - Add helper functions: `toPercent()`, `toHex()`
-   - Add ~100 lines of CSS for slider styling
+**Files Modified:**
+1. ✅ `VariableSourceExtra.vue` (~270 lines changed across 4 commits)
+   - Replaced `<input type="number">` with conditional fader/progress bar
+   - Added `incomingValue` prop for read-only mode
+   - Added helper function: `toPercent()`
+   - Added ~140 lines of CSS for fader styling (hardware aesthetic)
+   - Added input validation and clamping logic
 
-2. `EditorApp.vue` (~30 lines added)
-   - Add `getVariableSourceIncomingValue(row)` helper function
-   - Pass `:incoming-value` prop to `VariableSourceExtra`
+2. ✅ `EditorApp.vue` (~44 lines added)
+   - Added `getVariableSourceIncomingValue(row)` helper function
+   - Passes `:incoming-value` prop to `VariableSourceExtra`
+   - Supports both Variable (A-P) and Row reference (0-69) display
 
-3. `RowCommentSection.vue` (~70 lines removed)
-   - Remove editable slider (lines 101-111, 149-159)
-   - Keep read-only progress bar for display only
-   - Remove slider-specific CSS (lines 314-363)
+3. ✅ `RowCommentSection.vue` (~82 lines removed)
+   - Removed editable slider (no longer needed)
+   - Kept read-only progress bars for source/destination value monitoring
+   - Simplified to display-only functionality
 
-**Detailed Implementation Plan:**
-See `/Users/pforsten/.claude/plans/foamy-cuddling-oasis.md` for complete step-by-step implementation guide with:
-- Full template code
-- Complete CSS styling
-- Edge case handling
-- Testing checklist
-- Verification steps
+**Commits:**
+- `da5b455` - Initial implementation (2026-02-07)
+- `7d183bd` - Styling improvements
+- `2930824` - Styling corrections
+- `237c430` - Final styling cleanup (2026-02-08)
+- (pending) - Input validation and clamping
 
-**Effort Estimate:** 4-5 hours
+**Actual Effort:** ~6 hours (including styling iterations)
 
 **Future Enhancement:**
 - Integrate with undo/redo system (`SetVariableValueCommand`)

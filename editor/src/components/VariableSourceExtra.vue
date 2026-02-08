@@ -35,7 +35,16 @@ function checkChanged() {
 }
 
 function numChanged() {
-    const actualKey = varValue.value + 1;
+    // Ensure we have a valid number
+    const numValue = Number(varValue.value);
+    if (isNaN(numValue)) return;
+
+    // Clamp to valid range
+    const clampedValue = Math.max(0, Math.min(MAX_VALUE, numValue));
+    varValue.value = clampedValue;
+
+    // Convert UI value (0-4095) to internal format (1-4096)
+    const actualKey = clampedValue + 1;
     const { abbr, description } = genVarSourceExtraDnA(actualKey);
     model.value = new SourceExtra(actualKey, abbr, description);
 }
@@ -84,7 +93,7 @@ defineEmits(['update:modelValue']);
                     class="fader-slider"
                     min="0"
                     :max="MAX_VALUE"
-                    v-model="varValue"
+                    v-model.number="varValue"
                     @input="numChanged"
                     :disabled="isLocked"
                 />
@@ -95,8 +104,8 @@ defineEmits(['update:modelValue']);
                     class="fader-input"
                     min="0"
                     :max="MAX_VALUE"
-                    v-model="varValue"
-                    @change="numChanged"
+                    v-model.number="varValue"
+                    @input="numChanged"
                     :disabled="isLocked"
                     ref="varInput"
                 />
