@@ -182,8 +182,7 @@ defineEmits(['update:modelValue']);
     overflow: hidden;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
-    padding-right: 8px;
+    justify-content: center;
     border: 1px solid #000;
     border-top-color: #0a0a0a;
     border-left-color: #0a0a0a;
@@ -254,39 +253,33 @@ defineEmits(['update:modelValue']);
     z-index: 2;
     width: 70px;
     height: 70%;
-    background: #0a0a0a;
-    border: 1px solid #2a2a2a;
-    border-top-color: #000;
-    border-left-color: #000;
+    background: transparent;
+    border: none;
     color: #34cc99;
-    text-align: left;
+    text-align: center;
     font-size: 13px;
     font-weight: 700;
     font-family: 'Courier New', Courier, monospace;
     outline: none;
     padding: 4px 6px;
-    box-shadow:
-        inset 0 1px 2px rgba(0, 0, 0, 0.8),
-        0 1px 0 rgba(255, 255, 255, 0.05);
     letter-spacing: 0.5px;
+    -moz-appearance: textfield;
 }
 
 .fader-input:focus {
-    background: #0d0d0d;
-    border-color: #34cc99;
     color: #F1F700;
-    box-shadow:
-        inset 0 1px 2px rgba(0, 0, 0, 0.8),
-        0 0 4px rgba(52, 204, 153, 0.3);
-}
-
-.fader-input:hover:not(:disabled) {
-    border-color: #34cc99;
 }
 
 .fader-input:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+/* Remove number input spinners */
+.fader-input::-webkit-outer-spin-button,
+.fader-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 /* Read-only mode */
