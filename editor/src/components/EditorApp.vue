@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import _ from "lodash";
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import {
   DataModel, type MappingTuple, type MappingType, EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION, MIDI_NRPN_SOURCE_TYPE_KEY, CALC_SOURCE_TYPE_KEY, SKIP_SOURCE_TYPE_KEY,
   EXTERNAL_SOURCE_TYPE_KEY, keyboardSourceExtras, segaGamepadSourceExtras, nerdseqButtonsSourceExtras, globalButtonsDestinationExtras, globalModesDestinationExtras, globalScreensDestinationExtras,
@@ -45,6 +45,7 @@ import { useVariableUsage } from '../composables/useVariableUsage';
 import { useSkipAnalysis } from '../composables/useSkipAnalysis';
 import { useRowSelection } from '../composables/useRowSelection';
 import { usePanelState } from '../composables/usePanelState';
+import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts';
 import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
@@ -649,91 +650,30 @@ function getRowBackgroundColor(rowIndex: number): string | undefined {
   return rowColors.value.get(rowIndex);
 }
 
-// Keyboard shortcuts for multi-selection
-function handleKeyDown(event: KeyboardEvent): void {
-  // Don't handle shortcuts if user is typing in an input
-  const target = event.target as HTMLElement;
-  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-    return;
-  }
-
-  // Slot switching shortcuts (1 = Slot A, 2 = Slot B)
-  if (event.key === '1' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-    if (activeSlot.value !== 'A') {
-      handleSlotSwitch('A');
-    }
-    event.preventDefault();
-    return;
-  } else if (event.key === '2' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-    if (activeSlot.value !== 'B') {
-      handleSlotSwitch('B');
-    }
-    event.preventDefault();
-    return;
-  }
-
-  // Undo/Redo shortcuts (work globally, not just for selections)
-  if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !event.shiftKey) {
-    undo();
-    event.preventDefault();
-    return;
-  } else if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || (event.key === 'z' && event.shiftKey))) {
-    redo();
-    event.preventDefault();
-    return;
-  }
-
-  // Rest of shortcuts require row selection
-  if (selectedRowIndices.value.size === 0) return;
-
-  const indices = sortedSelectedIndices.value;
-
-  if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
-    if (selectedRowIndices.value.size > 1) {
-      copyRows(indices);
-    } else if (indices.length === 1) {
-      copyRow(indices[0]);
-    }
-    event.preventDefault();
-  } else if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
-    if (selectedRowIndices.value.size > 1) {
-      cutRows(indices);
-    }
-    event.preventDefault();
-  } else if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-    if (hasCopiedRows.value && indices.length > 0) {
-      pasteRows(indices[0]);
-    } else if (hasCopiedRow.value && indices.length === 1) {
-      const currentRowIndex = indices[0];
-      pasteRow(currentRowIndex);
-
-      // Auto-advance to next row after full row paste (if enabled)
-      if (pasteAutoAdvance.value === 'rows-only' || pasteAutoAdvance.value === 'all') {
-        advanceToNextRow(currentRowIndex);
-      }
-    }
-    event.preventDefault();
-  } else if (event.key === 'Escape') {
-    clearRowSelection();
-    event.preventDefault();
-  } else if (event.key === 'Delete' || event.key === 'Backspace') {
-    // Check lock state before clearing
-    if (isCurrentLocked.value) {
-      event.preventDefault();
-      return;
-    }
-
-    if (selectedRowIndices.value.size > 1) {
-      clearRows(indices);
-    } else if (indices.length === 1) {
-      clearRow(indices[0]);
-    }
-    event.preventDefault();
-  }
-}
+// Keyboard shortcuts composable (registers/unregisters event listeners)
+useKeyboardShortcuts({
+  selectedRowIndices,
+  sortedSelectedIndices,
+  activeSlot,
+  isCurrentLocked,
+  pasteAutoAdvance,
+  hasCopiedRow,
+  hasCopiedRows,
+  handleSlotSwitch,
+  undo,
+  redo,
+  copyRow,
+  copyRows,
+  cutRows,
+  pasteRow,
+  pasteRows,
+  clearRow,
+  clearRows,
+  clearRowSelection,
+  advanceToNextRow
+});
 
 onMounted(() => {
-  document.addEventListener('keydown', handleKeyDown);
   // Load row index display preference from localStorage
   initDisplayPreferences();
 });
@@ -761,9 +701,7 @@ watch(activeSlot, (newSlot, oldSlot) => {
   }
 });
 
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleKeyDown);
-});
+
 
 function readFile() {
   const file = fileInput.value?.files?.[0];
