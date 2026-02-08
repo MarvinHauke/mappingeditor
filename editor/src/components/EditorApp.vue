@@ -42,12 +42,16 @@ import { useWarningLog } from '../composables/useWarningLog';
 import { useMappingCache, type CachedMapping } from '../composables/useMappingCache';
 import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
 import { useVariableUsage } from '../composables/useVariableUsage';
+import { useSkipAnalysis } from '../composables/useSkipAnalysis';
 import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
 const fileInput = ref<HTMLInputElement | null>(null);
+
+// Skip analysis composable
+const { isRowSkipped } = useSkipAnalysis(mappingDocument);
 
 const currentlySelectedSourceTypes = ref(new Array<MappingType>());
 const currentlySelectedDestinationTypes = ref(new Array<MappingType>());
@@ -681,183 +685,6 @@ function formatRowIndex(index: number): string {
     return index.toString(16).toUpperCase().padStart(2, '0');
   }
   return index.toString();
-}
-
-/**
- * Helper: Check if a byte is a constant (0-25 = constants 0-4095)
- */
-function isConstant(byte: number): boolean {
-  return byte >= 0 && byte <= 25;
-}
-
-/**
- * Helper: Get constant value from byte (0-25 maps to values 0-4095)
- */
-function getConstantValue(byte: number): number {
-  // Constants 0-25 map to values: 0, 1, 2, ..., 4095
-  // Using step increments for higher values
-  const constantMap = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, 35, 40, 45, 50,
-    100, 200, 500, 1000, 2000, 3000, 4095
-  ];
-  return constantMap[byte] ?? 0;
-}
-
-// Type alias for row-like objects (works with both Row instances and plain objects)
-type RowLike = {
-  index: number;
-  source: {
-    type: { key: number };
-    function: { key: number };
-    extra: { keyOrValue: number }
-  };
-  destination: {
-    type: { key: number };
-    function: { key: number };
-    extra: { keyOrValue: number }
-  }
-};
-
-/**
- * Analyze Skip SOURCE condition to check if it will actually skip
- * Returns: true if skip will execute, false if skip is always false, null if indeterminate
- */
-function analyzeSkipSourceCondition(row: RowLike): boolean | null {
-  if (row.source.type.key !== SKIP_SOURCE_TYPE_KEY) {
-    return null;
-  }
-
-  const extraValue = row.source.extra.keyOrValue;
-  const byte1 = (extraValue >> 8) & 0xFF;
-  const byte2 = extraValue & 0xFF;
-
-  // If not both constants, we can't determine at edit time - assume it might skip
-  if (!isConstant(byte1) || !isConstant(byte2)) {
-    return null; // Indeterminate
-  }
-
-  const val1 = getConstantValue(byte1);
-  const val2 = getConstantValue(byte2);
-
-  // Get condition from function key
-  const funcKey = row.source.function.key;
-  if (funcKey === EMPTY_KEY) {
-    return false;
-  }
-
-  const condition = funcKey % 6;
-
-  // Evaluate the condition
-  let result: boolean;
-  switch (condition) {
-    case 0: result = val1 < val2; break;   // <
-    case 1: result = val1 <= val2; break;  // <=
-    case 2: result = val1 > val2; break;   // >
-    case 3: result = val1 >= val2; break;  // >=
-    case 4: result = val1 === val2; break; // =
-    case 5: result = val1 !== val2; break; // <>
-    default: return null;
-  }
-
-  return result;
-}
-
-/**
- * Analyze Skip DESTINATION condition
- * Now uses the same encoding as SOURCE (function = skip count + condition, extra = params)
- */
-function analyzeSkipDestCondition(row: RowLike): boolean | null {
-  if (row.destination.type.key !== SKIP_DESTINATION_TYPE_KEY) {
-    return null;
-  }
-
-  const extraValue = row.destination.extra.keyOrValue;
-  const byte1 = (extraValue >> 8) & 0xFF;
-  const byte2 = extraValue & 0xFF;
-
-  // If not both constants, we can't determine at edit time - assume it might skip
-  if (!isConstant(byte1) || !isConstant(byte2)) {
-    return null; // Indeterminate
-  }
-
-  const val1 = getConstantValue(byte1);
-  const val2 = getConstantValue(byte2);
-
-  // Get condition from function key (same as SOURCE)
-  const funcKey = row.destination.function.key;
-  if (funcKey === EMPTY_KEY) {
-    return false;
-  }
-
-  const condition = funcKey % 6;
-
-  // Evaluate the condition
-  let result: boolean;
-  switch (condition) {
-    case 0: result = val1 < val2; break;   // <
-    case 1: result = val1 <= val2; break;  // <=
-    case 2: result = val1 > val2; break;   // >
-    case 3: result = val1 >= val2; break;  // >=
-    case 4: result = val1 === val2; break; // =
-    case 5: result = val1 !== val2; break; // <>
-    default: return null;
-  }
-
-  return result;
-}
-
-function isRowSkipped(row: RowLike): boolean {
-  // Check if this row will be skipped by a previous row's Skip command
-  const currentIndex = row.index;
-
-  // Check all previous rows
-  for (let i = 0; i < currentIndex; i++) {
-    const prevRow = mappingDocument.value.rows[i] as MappingRow;
-
-    // Check Skip source
-    if (prevRow.source.type.key === SKIP_SOURCE_TYPE_KEY) {
-      const functionKey = prevRow.source.function.key;
-      if (functionKey !== EMPTY_KEY) {
-        const skipCount = Math.floor(functionKey / 6) + 1;
-
-        // Check if this row falls within the skip range
-        if (skipCount > 0 && currentIndex > i && currentIndex <= i + skipCount) {
-          // Analyze the skip condition
-          const willSkip = analyzeSkipSourceCondition(prevRow);
-
-          // Only show X if skip is DEFINITELY TRUE (not false, not indeterminate)
-          // Show > for always false or indeterminate (variables, row refs)
-          if (willSkip === true) {
-            return true;
-          }
-        }
-      }
-    }
-
-    // Check Skip destination
-    // Skip DESTINATION function encoding: skip_count (1-16) * 6 + condition (0-5)
-    // Decode skip count: Math.floor(functionKey / 6) + 1 (SAME AS SOURCE)
-    if (prevRow.destination.type.key === SKIP_DESTINATION_TYPE_KEY) {
-      const functionKey = prevRow.destination.function.key;
-      if (functionKey !== EMPTY_KEY) {
-        const skipCount = Math.floor(functionKey / 6) + 1;
-
-        // Check if this row falls within the skip range
-        if (skipCount > 0 && currentIndex > i && currentIndex <= i + skipCount) {
-          // Analyze the skip condition
-          const willSkip = analyzeSkipDestCondition(prevRow);
-
-          // Only show X if skip is DEFINITELY TRUE (not false, not indeterminate)
-          // Show > for always false or indeterminate (variables, row refs)
-          if (willSkip === true) {
-            return true;
-          }
-        }
-      }
-    }
-  }
-
-  return false;
 }
 
 // Multi-selection computed properties
