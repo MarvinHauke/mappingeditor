@@ -15,15 +15,9 @@ const varCheck = ref<HTMLInputElement>();
 const disableNum = ref<boolean>(false);
 const varValue = ref<number>(EMPTY_KEY);
 
-// Helper functions for value display
 function toPercent(value: number): number {
   if (value === EMPTY_KEY) return 0;
   return Math.round((value / MAX_VALUE) * 100);
-}
-
-function toHex(value: number): string {
-  if (value === EMPTY_KEY) return '0x0000';
-  return '0x' + value.toString(16).toUpperCase().padStart(4, '0');
 }
 
 function checkChanged() {
@@ -78,19 +72,16 @@ defineEmits(['update:modelValue']);
             </div>
         </div>
         <div class="second" :class="{ 'input-disabled': disableNum, 'section-locked': isLocked }">
-            <!-- Editable fader when "From Row/Var" is unchecked (constant value mode) -->
+            <!-- Editable fader mode -->
             <div v-if="!disableNum" class="fader-container">
-                <!-- Lighter green fill showing current value (filled area) -->
                 <div class="fader-fill" :style="{ width: toPercent(varValue) + '%' }">
-                    <!-- Grey handle at value position -->
                     <div class="fader-handle"></div>
                 </div>
 
-                <!-- Range slider (invisible, for mouse interaction) -->
+                <!-- Invisible range slider for mouse interaction -->
                 <input
                     type="range"
                     class="fader-slider"
-                    :class="{ 'slider-locked': isLocked }"
                     min="0"
                     :max="MAX_VALUE"
                     v-model="varValue"
@@ -98,11 +89,10 @@ defineEmits(['update:modelValue']);
                     :disabled="isLocked"
                 />
 
-                <!-- Number input fixed on the right -->
+                <!-- Number input for value display and keyboard entry -->
                 <input
                     type="number"
                     class="fader-input"
-                    :class="{ 'input-locked': isLocked }"
                     min="0"
                     :max="MAX_VALUE"
                     v-model="varValue"
@@ -112,15 +102,11 @@ defineEmits(['update:modelValue']);
                 />
             </div>
 
-            <!-- Read-only progress bar when "From Row/Var" is checked (incoming value mode) -->
-            <div v-else class="fader-container readonly">
-                <!-- Lighter green fill showing incoming value (filled area) -->
+            <!-- Read-only fader mode -->
+            <div v-else class="fader-container">
                 <div class="fader-fill" :style="{ width: toPercent(incomingValue ?? 0) + '%' }">
-                    <!-- Grey handle at value position -->
                     <div class="fader-handle"></div>
                 </div>
-
-                <!-- Display value -->
                 <div class="fader-display">{{ incomingValue ?? 0 }}</div>
             </div>
         </div>
@@ -163,74 +149,49 @@ defineEmits(['update:modelValue']);
     width: 50%;
     background-color: var(--color-primary);
     padding: 0;
-    border-top: 1px solid rgba(52, 204, 153, 0.1);
 }
 
-/* Fader Container - technical hardware style with inset effect */
+/* Fader container with technical hardware styling */
 .fader-container {
     position: relative;
     width: 100%;
     height: 100%;
-    background:
-        repeating-linear-gradient(
-            0deg,
-            rgba(0, 0, 0, 0.3) 0px,
-            transparent 1px,
-            transparent 4px
-        ),
-        #1a1a1a;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.3) 0px, transparent 1px, transparent 4px), #1a1a1a;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #000;
-    border-top-color: #0a0a0a;
-    border-left-color: #0a0a0a;
-    border-bottom-color: #2a2a2a;
-    border-right-color: #2a2a2a;
+    border-left: 1px solid #0a0a0a;
+    border-right: 1px solid #2a2a2a;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-/* Lighter green fill showing current value (filled area) - brighter technical green */
+/* Gradient fill showing current value */
 .fader-fill {
     position: absolute;
     left: 0;
     top: 0;
     height: 100%;
-    background: linear-gradient(
-        180deg,
-        rgba(52, 204, 153, 0.5) 0%,
-        rgba(52, 204, 153, 0.4) 50%,
-        rgba(52, 204, 153, 0.5) 100%
-    );
+    background: linear-gradient(180deg, rgba(52, 204, 153, 0.5) 0%, rgba(52, 204, 153, 0.4) 50%, rgba(52, 204, 153, 0.5) 100%);
     transition: width 0.1s ease;
     z-index: 0;
     pointer-events: none;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.1),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Technical indicator handle at value position */
+/* Position indicator handle */
 .fader-handle {
     position: absolute;
     right: -1px;
     top: 0;
     width: 2px;
     height: 100%;
-    background: linear-gradient(
-        180deg,
-        #aaa 0%,
-        #888 50%,
-        #666 100%
-    );
-    box-shadow:
-        1px 0 0 rgba(255, 255, 255, 0.3),
-        -1px 0 2px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, #aaa 0%, #888 50%, #666 100%);
+    box-shadow: 1px 0 0 rgba(255, 255, 255, 0.3), -1px 0 2px rgba(0, 0, 0, 0.5);
     pointer-events: none;
 }
 
-/* Invisible range slider for mouse interaction (middle layer) */
+/* Invisible range slider for mouse interaction */
 .fader-slider {
     position: absolute;
     left: 0;
@@ -247,7 +208,7 @@ defineEmits(['update:modelValue']);
     cursor: not-allowed;
 }
 
-/* Number input field - technical display style */
+/* Number input field */
 .fader-input {
     position: relative;
     z-index: 2;
@@ -257,17 +218,18 @@ defineEmits(['update:modelValue']);
     border: none;
     color: #34cc99;
     text-align: center;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     font-family: 'Courier New', Courier, monospace;
     outline: none;
     padding: 4px 6px;
-    letter-spacing: 0.5px;
     -moz-appearance: textfield;
+    text-shadow: 0 0 4px rgba(52, 204, 153, 0.5);
 }
 
 .fader-input:focus {
     color: #F1F700;
+    text-shadow: 0 0 6px rgba(241, 247, 0, 0.6);
 }
 
 .fader-input:disabled {
@@ -282,20 +244,14 @@ defineEmits(['update:modelValue']);
     margin: 0;
 }
 
-/* Read-only mode */
-.fader-container.readonly {
-    cursor: default;
-}
-
-/* Display value in read-only mode - technical readout style */
+/* Display value in read-only mode */
 .fader-display {
     position: relative;
     z-index: 2;
     color: #34cc99;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     font-family: 'Courier New', Courier, monospace;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 3px rgba(52, 204, 153, 0.3);
+    text-shadow: 0 0 4px rgba(52, 204, 153, 0.5);
 }
 </style>
