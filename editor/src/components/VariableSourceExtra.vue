@@ -78,37 +78,50 @@ defineEmits(['update:modelValue']);
             </div>
         </div>
         <div class="second" :class="{ 'input-disabled': disableNum, 'section-locked': isLocked }">
-            <!-- Editable slider when "From Row/Var" is unchecked (constant value mode) -->
-            <div v-if="!disableNum" class="variable-slider-container">
+            <!-- Editable fader when "From Row/Var" is unchecked (constant value mode) -->
+            <div v-if="!disableNum" class="fader-container">
+                <!-- Lighter green fill showing current value (filled area) -->
+                <div class="fader-fill" :style="{ width: toPercent(varValue) + '%' }">
+                    <!-- Grey handle at value position -->
+                    <div class="fader-handle"></div>
+                </div>
+
+                <!-- Range slider (invisible, for mouse interaction) -->
                 <input
                     type="range"
-                    class="variable-slider-editable"
+                    class="fader-slider"
                     :class="{ 'slider-locked': isLocked }"
                     min="0"
                     :max="MAX_VALUE"
                     v-model="varValue"
                     @input="numChanged"
                     :disabled="isLocked"
-                    :style="{ '--slider-progress': toPercent(varValue) + '%' }"
-                    :title="`Value: ${varValue} (${toHex(varValue)})`"
                 />
-                <div class="variable-value-label">
-                    <span class="value-dec">{{ varValue }}</span>
-                    <span class="value-hex">{{ toHex(varValue) }}</span>
-                </div>
+
+                <!-- Number input fixed on the right -->
+                <input
+                    type="number"
+                    class="fader-input"
+                    :class="{ 'input-locked': isLocked }"
+                    min="0"
+                    :max="MAX_VALUE"
+                    v-model="varValue"
+                    @change="numChanged"
+                    :disabled="isLocked"
+                    ref="varInput"
+                />
             </div>
+
             <!-- Read-only progress bar when "From Row/Var" is checked (incoming value mode) -->
-            <div v-else class="variable-progress-readonly" :class="{ 'progress-locked': isLocked }">
-                <div class="progress-bar-wrapper">
-                    <div
-                        class="progress-bar-fill"
-                        :style="{ width: toPercent(incomingValue ?? 0) + '%' }"
-                    ></div>
+            <div v-else class="fader-container readonly">
+                <!-- Lighter green fill showing incoming value (filled area) -->
+                <div class="fader-fill" :style="{ width: toPercent(incomingValue ?? 0) + '%' }">
+                    <!-- Grey handle at value position -->
+                    <div class="fader-handle"></div>
                 </div>
-                <div class="progress-label">
-                    <span class="value-dec">{{ incomingValue ?? 0 }}</span>
-                    <span class="value-hex">{{ toHex(incomingValue ?? 0) }}</span>
-                </div>
+
+                <!-- Display value -->
+                <div class="fader-display">{{ incomingValue ?? 0 }}</div>
             </div>
         </div>
     </div>
@@ -143,140 +156,153 @@ defineEmits(['update:modelValue']);
 
 .second {
     display: flex;
-    flex-direction: column;
-    justify-content: center;
+    flex-direction: row;
+    justify-content: stretch;
     align-items: stretch;
     height: 100%;
     width: 50%;
     background-color: var(--color-primary);
-    padding: 0 var(--form-padding-horizontal);
+    padding: 0;
+    border-top: 1px solid rgba(52, 204, 153, 0.1);
 }
 
-/* Editable Slider Container */
-.variable-slider-container {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    width: 100%;
-}
-
-.variable-slider-editable {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 8px;
-    background: #000;
-    border: 1px solid #34cc99;
-    outline: none;
-    overflow: hidden;
-    cursor: pointer;
+/* Fader Container - technical hardware style with inset effect */
+.fader-container {
     position: relative;
-}
-
-.variable-slider-editable:hover:not(:disabled) {
-    border-color: #F1F700;
-}
-
-.variable-slider-editable:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-/* Invisible but draggable thumb - spans full slider width */
-.variable-slider-editable::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 16px;
-    background: rgba(241, 247, 0, 0.01);
-    border: none;
-    cursor: ew-resize;
-    border-radius: 0;
-}
-
-.variable-slider-editable::-moz-range-thumb {
-    width: 12px;
-    height: 16px;
-    background: rgba(241, 247, 0, 0.01);
-    border: none;
-    cursor: ew-resize;
-    border-radius: 0;
-}
-
-/* Create progress fill effect using track background - this IS the fader */
-.variable-slider-editable::-webkit-slider-runnable-track {
-    background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-    height: 6px;
-}
-
-.variable-slider-editable::-moz-range-track {
-    background: linear-gradient(to right, #34cc99 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-    height: 6px;
-}
-
-/* Hover effect - change fill color to yellow */
-.variable-slider-editable:hover:not(:disabled)::-webkit-slider-runnable-track {
-    background: linear-gradient(to right, #F1F700 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-}
-
-.variable-slider-editable:hover:not(:disabled)::-moz-range-track {
-    background: linear-gradient(to right, #F1F700 var(--slider-progress, 0%), transparent var(--slider-progress, 0%));
-}
-
-/* Value labels below slider */
-.variable-value-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--color-text-primary);
-    opacity: 0.8;
-}
-
-.value-dec {
-    font-weight: 600;
-}
-
-.value-hex {
-    font-family: monospace;
-    opacity: 0.7;
-}
-
-/* Read-only Progress Bar - styled to match editable slider */
-.variable-progress-readonly {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
     width: 100%;
-}
-
-.progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--color-text-primary);
-    opacity: 0.8;
-}
-
-.progress-bar-wrapper {
-    width: 100%;
-    height: 8px;
-    background-color: #000;
-    overflow: hidden;
-    position: relative;
-}
-
-.progress-bar-fill {
     height: 100%;
-    background-color: #34cc99;
-    transition: width 0.2s ease;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.3) 0px,
+            transparent 1px,
+            transparent 4px
+        ),
+        #1a1a1a;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    border: 1px solid #000;
+    border-top-color: #0a0a0a;
+    border-left-color: #0a0a0a;
+    border-bottom-color: #2a2a2a;
+    border-right-color: #2a2a2a;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
-.progress-locked {
-    opacity: 0.5;
+/* Lighter green fill showing current value (filled area) - brighter technical green */
+.fader-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        rgba(52, 204, 153, 0.5) 0%,
+        rgba(52, 204, 153, 0.4) 50%,
+        rgba(52, 204, 153, 0.5) 100%
+    );
+    transition: width 0.1s ease;
+    z-index: 0;
+    pointer-events: none;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Locked state for editable slider */
-.slider-locked {
-    opacity: 0.5;
+/* Technical indicator handle at value position */
+.fader-handle {
+    position: absolute;
+    right: -1px;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(
+        180deg,
+        #aaa 0%,
+        #888 50%,
+        #666 100%
+    );
+    box-shadow:
+        1px 0 0 rgba(255, 255, 255, 0.3),
+        -1px 0 2px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+/* Invisible range slider for mouse interaction (middle layer) */
+.fader-slider {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: ew-resize;
+    z-index: 1;
+    margin: 0;
+}
+
+.fader-slider:disabled {
+    cursor: not-allowed;
+}
+
+/* Number input field - technical display style */
+.fader-input {
+    position: relative;
+    z-index: 2;
+    width: 70px;
+    height: 70%;
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-top-color: #000;
+    border-left-color: #000;
+    color: #34cc99;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Courier New', Courier, monospace;
+    outline: none;
+    padding: 4px 6px;
+    box-shadow:
+        inset 0 1px 2px rgba(0, 0, 0, 0.8),
+        0 1px 0 rgba(255, 255, 255, 0.05);
+    letter-spacing: 0.5px;
+}
+
+.fader-input:focus {
+    background: #0d0d0d;
+    border-color: #34cc99;
+    color: #F1F700;
+    box-shadow:
+        inset 0 1px 2px rgba(0, 0, 0, 0.8),
+        0 0 4px rgba(52, 204, 153, 0.3);
+}
+
+.fader-input:hover:not(:disabled) {
+    border-color: #34cc99;
+}
+
+.fader-input:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Read-only mode */
+.fader-container.readonly {
+    cursor: default;
+}
+
+/* Display value in read-only mode - technical readout style */
+.fader-display {
+    position: relative;
+    z-index: 2;
+    color: #34cc99;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: 'Courier New', Courier, monospace;
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 3px rgba(52, 204, 153, 0.3);
 }
 </style>
