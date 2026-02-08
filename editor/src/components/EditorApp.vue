@@ -46,6 +46,7 @@ import { useSkipAnalysis } from '../composables/useSkipAnalysis';
 import { useRowSelection } from '../composables/useRowSelection';
 import { usePanelState } from '../composables/usePanelState';
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts';
+import { useAutoAdvance } from '../composables/useAutoAdvance';
 import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
@@ -549,51 +550,21 @@ function handleMultiMoveDown(): void {
   handleMoveWarnings(result.referenceUpdateResult);
 }
 
-// Paste operation wrappers with auto-advance support
-function handlePasteRow(rowIndex: number): void {
-  pasteRow(rowIndex);
-  if (pasteAutoAdvance.value === 'rows-only' || pasteAutoAdvance.value === 'all') {
-    advanceToNextRow(rowIndex, false); // Close comment section for full row paste
-  }
-}
-
-function handlePasteSource(rowIndex: number): void {
-  pasteSource(rowIndex);
-  if (pasteAutoAdvance.value === 'all') {
-    advanceToNextRow(rowIndex, true); // Keep comment section open for source paste
-  }
-}
-
-function handlePasteDestination(rowIndex: number): void {
-  pasteDestination(rowIndex);
-  if (pasteAutoAdvance.value === 'all') {
-    advanceToNextRow(rowIndex, true); // Keep comment section open for destination paste
-  }
-}
-
-// Helper function to advance to the next row
-function advanceToNextRow(currentRowIndex: number, keepCommentOpen = false): void {
-  const nextRowIndex = currentRowIndex + 1;
-  if (nextRowIndex < mappingDocument.value.rows.length) {
-    selectedRowIndices.value.clear();
-    selectedRowIndices.value.add(nextRowIndex);
-
-    // Keep comment section open if requested (for source/destination paste workflow)
-    if (keepCommentOpen) {
-      expandedCommentRowIndex.value = nextRowIndex;
-    } else {
-      expandedCommentRowIndex.value = null;
-    }
-
-    selectedRowIndices.value = new Set(selectedRowIndices.value);
-
-    // Scroll into view
-    const rowElement = document.querySelector(`[data-row-index="${nextRowIndex}"]`);
-    if (rowElement) {
-      rowElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
-}
+// Auto-advance composable (paste + advance to next row)
+const {
+  advanceToNextRow,
+  handlePasteRow,
+  handlePasteSource,
+  handlePasteDestination
+} = useAutoAdvance({
+  selectedRowIndices,
+  expandedCommentRowIndex,
+  pasteAutoAdvance,
+  totalRowCount: 70,
+  pasteRow,
+  pasteSource,
+  pasteDestination
+});
 
 // Track accumulated reference updates for toast deduplication
 let accumulatedReferenceCount = 0;
