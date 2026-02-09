@@ -9,12 +9,8 @@ import {
   VISU_SHADER_SELECT_FUNCTION_KEY, VISU_SHADER_FUNCTIONS_FUNCTION_KEY, VISU_MODULATORS_FUNCTION_KEY, VISU_ENVELOPES_FUNCTION_KEY, VISU_LFOS_FUNCTION_KEY,
   visuShaderSelectExtras, visuShaderFunctionsExtras, visuModulatorsExtras, visuEnvelopesExtras, visuLfosExtras
 } from '../modules/dataModel';
-import { MappingDocument, Row as MappingRow, Source, SourceType, SourceFunction, SourceExtra, DestinationType, DestinationFunction, DestinationExtra, Destination, Header } from '../modules/documentModel';
-import { MappingDocumentParser } from '../modules/parsers';
+import { MappingDocument, Row as MappingRow, Source, SourceType, SourceFunction, SourceExtra, DestinationType, DestinationFunction, DestinationExtra, Destination } from '../modules/documentModel';
 import * as formatters from '../modules/formatters';
-import schema from '../modules/documentModel.schema.json';
-
-import Ajv from 'ajv';
 
 import CalcSkipSourceExtra from './CalcSkipSourceExtra.vue';
 import NrpnSourceExtra from './NrpnSourceExtra.vue';
@@ -39,7 +35,7 @@ import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
 import { useWarningLog } from '../composables/useWarningLog';
-import { useMappingCache, type CachedMapping } from '../composables/useMappingCache';
+import { useMappingCache } from '../composables/useMappingCache';
 import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
 import { useVariableUsage } from '../composables/useVariableUsage';
 import { useSkipAnalysis } from '../composables/useSkipAnalysis';
@@ -47,6 +43,8 @@ import { useRowSelection } from '../composables/useRowSelection';
 import { usePanelState } from '../composables/usePanelState';
 import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts';
 import { useAutoAdvance } from '../composables/useAutoAdvance';
+import { useDocumentSerialization } from '../composables/useDocumentSerialization';
+import { useFileHandling } from '../composables/useFileHandling';
 import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
@@ -220,182 +218,43 @@ const {
   }
 });
 
-// Serialize current document for caching
-function serializeDocument(): CachedMapping {
-  const doc = mappingDocument.value;
-  return {
-    document: {
-      header: {
-        headerText: doc.header.headerText,
-        majorVersion: doc.header.majorVersion,
-        minorVersion: doc.header.minorVersion,
-        fileName: doc.header.fileName
-      },
-      rows: doc.rows.map(row => ({
-        sourceType: row.source.type.key,
-        sourceFunction: row.source.function.key,
-        sourceExtra: row.source.extra.keyOrValue,
-        destinationType: row.destination.type.key,
-        destinationFunction: row.destination.function.key,
-        destinationExtra: row.destination.extra.keyOrValue,
-        unused1: row.unused1,
-        unused2: row.unused2,
-        unused3: row.unused3,
-        unused4: row.unused4
-      })),
-      variables: doc.variables.map(v => v.value)
-    },
-    rowColors: Object.fromEntries(rowColors.value),
-    rowComments: { ...rowComments.value },
-    globalComment: doc.globalComment,
-    timestamp: Date.now()
-  };
-}
+// Document serialization & cache management
+const {
+  serializeDocument,
+  deserializeToDocument,
+  scheduleCacheSave,
+  handleSlotSwitch
+} = useDocumentSerialization({
+  mappingDocument,
+  currentlySelectedSourceTypes,
+  currentlySelectedDestinationTypes,
+  rowColors,
+  rowComments,
+  clearRowSelection,
+  analyzeDocument,
+  reset,
+  logInfo,
+  logError,
+  activeSlot,
+  isCurrentLocked,
+  saveToActiveSlot,
+  switchToA,
+  switchToB,
+  toggleLockA,
+  toggleLockB,
+  loadFromSlot
+});
 
-// Deserialize cached data to document
-function deserializeToDocument(cached: CachedMapping): void {
-  const doc = new MappingDocument();
-  
-  // Restore header
-  doc.header.headerText = cached.document.header.headerText;
-  doc.header.majorVersion = cached.document.header.majorVersion;
-  doc.header.minorVersion = cached.document.header.minorVersion;
-  doc.header.fileName = cached.document.header.fileName;
-  
-  // Restore rows
-  cached.document.rows.forEach((serialized, i) => {
-    if (i < doc.rows.length) {
-      const row = doc.rows[i];
-      
-      // Source
-      const sourceTypeData = DataModel.sourceTypes.find(st => st.key === serialized.sourceType);
-      if (sourceTypeData) {
-        row.source.type = new SourceType(sourceTypeData.key, sourceTypeData.abbr, sourceTypeData.description);
-        currentlySelectedSourceTypes.value[i] = sourceTypeData as MappingType;
-        
-        const sourceFuncData = sourceTypeData.functions.find((f: MappingTuple) => f.key === serialized.sourceFunction);
-        if (sourceFuncData) {
-          row.source.function = new SourceFunction(sourceFuncData.key, sourceFuncData.abbr, sourceFuncData.description);
-        }
-        
-        row.source.extra = new SourceExtra(serialized.sourceExtra, '', '');
-      }
-      
-      // Destination
-      const destTypeData = DataModel.destinationTypes.find(dt => dt.key === serialized.destinationType);
-      if (destTypeData) {
-        row.destination.type = new DestinationType(destTypeData.key, destTypeData.abbr, destTypeData.description);
-        currentlySelectedDestinationTypes.value[i] = destTypeData as MappingType;
-        
-        const destFuncData = destTypeData.functions.find((f: MappingTuple) => f.key === serialized.destinationFunction);
-        if (destFuncData) {
-          row.destination.function = new DestinationFunction(destFuncData.key, destFuncData.abbr, destFuncData.description);
-        }
-        
-        row.destination.extra = new DestinationExtra(serialized.destinationExtra, '', '');
-      }
-      
-      // Unused fields
-      row.unused1 = serialized.unused1;
-      row.unused2 = serialized.unused2;
-      row.unused3 = serialized.unused3;
-      row.unused4 = serialized.unused4;
-    }
-  });
-  
-  // Restore variables
-  cached.document.variables.forEach((val, i) => {
-    if (i < doc.variables.length) {
-      doc.variables[i].value = val;
-    }
-  });
-  
-  // Apply to reactive state
-  mappingDocument.value = doc;
-  
-  // Restore colors (preserve Map reference for undo commands)
-  rowColors.value.clear();
-  for (const [k, v] of Object.entries(cached.rowColors)) {
-    rowColors.value.set(parseInt(k), v);
-  }
-  
-  // Restore comments
-  rowComments.value = { ...cached.rowComments };
-
-  // Restore global comment
-  if (cached.globalComment) {
-    doc.globalComment = cached.globalComment;
-  }
-
-  // Clear selection
-  clearRowSelection();
-
-  // Run analysis
-  analyzeDocument();
-}
-
-// Save current document to cache (debounced)
-let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-function scheduleCacheSave(): void {
-  if (isCurrentLocked.value) return;
-  
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-  }
-  
-  saveTimeout = setTimeout(async () => {
-    try {
-      await saveToActiveSlot(serializeDocument());
-    } catch (error) {
-      console.error('Failed to save to cache:', error);
-    }
-  }, 1000);
-}
-
-// Handle A/B slot click - switch or toggle lock
-async function handleSlotSwitch(slot: 'A' | 'B'): Promise<void> {
-  // If clicking on already active slot, toggle lock
-  if (activeSlot.value === slot) {
-    if (slot === 'A') {
-      toggleLockA();
-    } else {
-      toggleLockB();
-    }
-    return;
-  }
-
-  // Save current to active slot first (if not locked)
-  if (!isCurrentLocked.value) {
-    try {
-      await saveToActiveSlot(serializeDocument());
-    } catch (error) {
-      console.error('Failed to save before switch:', error);
-    }
-  }
-
-  // Switch slot
-  if (slot === 'A') {
-    await switchToA();
-  } else {
-    await switchToB();
-  }
-
-  // Load from new slot
-  try {
-    const cached = await loadFromSlot(slot);
-    if (cached) {
-      deserializeToDocument(cached);
-      logInfo('system', `Loaded mapping from slot ${slot}`);
-    } else {
-      // No data in slot, reset to empty
-      reset();
-      logInfo('system', `Slot ${slot} is empty`);
-    }
-  } catch (error) {
-    console.error('Failed to load from slot:', error);
-    logError('system', 'Failed to load cached mapping');
-  }
-}
+// File I/O (MAP/JSON loading)
+const { readFile } = useFileHandling({
+  mappingDocument,
+  rowColors,
+  rowComments,
+  fileInput,
+  init,
+  clearCurrentHistory,
+  showToast
+});
 
 // Helper function for MIDI learn source function update
 function handleSourceMidiLearnFunctionUpdate(rowIndex: number, functionKey: number): void {
@@ -670,212 +529,6 @@ watch(activeSlot, (newSlot, oldSlot) => {
     logInfo('system', `Switched to Slot ${newSlot} (undo history preserved)`);
   }
 });
-
-
-
-function readFile() {
-  const file = fileInput.value?.files?.[0];
-
-  if (!file) {
-    alert('No file uploaded!');
-    return;
-  }
-
-  const reader = new FileReader();
-  const fileExtension = file.name.split('.').pop()?.toLowerCase();
-
-  switch (fileExtension) {
-
-    case 'map':
-      reader.readAsArrayBuffer(file);
-      reader.onload = async function (e: any) {
-        try {
-          const fileData = new Uint8Array(e.target.result);
-          console.log(`Loading .map file: ${file.name}, size: ${fileData.length} bytes`);
-          mappingDocument.value = MappingDocumentParser.parse(fileData);
-          init();
-          clearCurrentHistory(); // Clear undo history after loading new file
-          console.log('.map file loaded successfully');
-          showToast(`Loaded ${file.name} successfully`, 'success', 3000);
-          // Clear file input to allow reloading the same file
-          if (fileInput.value) {
-            fileInput.value.value = '';
-          }
-        } catch (error) {
-          console.error('Error parsing .map file:', error);
-          alert(`Error loading .map file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes\n\nCheck console for details.`);
-        }
-      };
-      break;
-
-    case 'json':
-      reader.readAsText(file);
-      reader.onload = function (e: any) {
-        try {
-          const fileData = e.target.result;
-          console.log(`Loading .json file: ${file.name}, size: ${fileData.length} chars`);
-          const jsonData = JSON.parse(fileData);
-
-          // Validate the JSON file against the schema
-          const ajv = () => new Ajv({ allErrors: true });
-          const validate = ajv().compile(schema);
-          const isValid = validate(jsonData);
-          if (!isValid) {
-            console.error('JSON Schema validation failed:', validate.errors);
-            alert(`Invalid JSON file structure!\n\nValidation errors:\n${validate.errors?.map(err => `• ${err.instancePath || 'root'}: ${err.message}`).join('\n')}\n\nCheck console for full details.`);
-            return;
-          }
-
-          // Reconstruct the MappingDocument with proper class instances
-          const mappingDoc = new MappingDocument();
-          const jsonObj = jsonData as any; // Cast to any to access properties
-          
-          // Handle both old and new JSON formats
-          if (jsonObj.header) {
-            // Old format
-            mappingDoc.header.headerText = jsonObj.header.headerText || mappingDoc.header.headerText;
-            mappingDoc.header.majorVersion = jsonObj.header.majorVersion || mappingDoc.header.majorVersion;
-            mappingDoc.header.minorVersion = jsonObj.header.minorVersion || mappingDoc.header.minorVersion;
-            mappingDoc.header.fileName = jsonObj.header.fileName || mappingDoc.header.fileName;
-          } else if (jsonObj.mappings) {
-            // New format
-            mappingDoc.header.headerText = jsonObj.header || mappingDoc.header.headerText;
-            mappingDoc.header.majorVersion = jsonObj.versionMajor || mappingDoc.header.majorVersion;
-            mappingDoc.header.minorVersion = jsonObj.versionMinor || mappingDoc.header.minorVersion;
-            mappingDoc.header.fileName = jsonObj.filename || mappingDoc.header.fileName;
-            
-            // Handle placeholder bytes
-            if (jsonObj.placeholderBytes && Array.isArray(jsonObj.placeholderBytes)) {
-              mappingDoc.header.reserved = new Uint8Array(jsonObj.placeholderBytes);
-            }
-          }
-
-          // Convert rows - handle both old and new formats
-          const rowsData = jsonObj.rows || jsonObj.mappings;
-          if (rowsData && Array.isArray(rowsData)) {
-            for (let i = 0; i < mappingDoc.rows.length; i++) {
-              const rowData = rowsData[i];
-              const row = mappingDoc.rows[i]; // Use the pre-initialized row
-              
-              if (rowData) {
-                // Handle both old format (rowData.source.type) and new format (rowData.sourceType)
-                const sourceTypeKey = rowData.source?.type ?? rowData.sourceType;
-                const sourceFunctionKey = rowData.source?.function ?? rowData.sourceFunction;  
-                const sourceExtraKey = rowData.source?.extra ?? rowData.sourceFunctionExtra;
-                const destinationTypeKey = rowData.destination?.type ?? rowData.destinationType;
-                const destinationFunctionKey = rowData.destination?.function ?? rowData.destinationFunction;
-                const destinationExtraKey = rowData.destination?.extra ?? rowData.destinationFunctionExtra;
-                
-                // Source - lookup from DataModel using numeric keys
-                const sourceTypeData = DataModel.sourceTypes.find(st => st.key === sourceTypeKey) as MappingType | undefined;
-                const sourceType = sourceTypeData ? new SourceType(sourceTypeData.key, sourceTypeData.abbr, sourceTypeData.description) 
-                                                  : new SourceType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                const sourceFunctionData = sourceTypeData?.functions.find((sf: MappingTuple) => sf.key === sourceFunctionKey);
-                const sourceFunction = sourceFunctionData ? new SourceFunction(sourceFunctionData.key, sourceFunctionData.abbr, sourceFunctionData.description)
-                                                          : new SourceFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                const sourceExtraData = sourceTypeData?.extras?.find((se: MappingTuple) => se.key === sourceExtraKey);
-                const sourceExtra = sourceExtraData ? new SourceExtra(sourceExtraData.key, sourceExtraData.abbr, sourceExtraData.description)
-                                                    : new SourceExtra(sourceExtraKey, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                row.source = new Source(sourceType, sourceFunction, sourceExtra);
-                
-                // Destination - lookup from DataModel using numeric keys  
-                const destinationTypeData = DataModel.destinationTypes.find(dt => dt.key === destinationTypeKey) as MappingType | undefined;
-                const destinationType = destinationTypeData ? new DestinationType(destinationTypeData.key, destinationTypeData.abbr, destinationTypeData.description)
-                                                            : new DestinationType(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                const destinationFunctionData = destinationTypeData?.functions.find((df: MappingTuple) => df.key === destinationFunctionKey);
-                const destinationFunction = destinationFunctionData ? new DestinationFunction(destinationFunctionData.key, destinationFunctionData.abbr, destinationFunctionData.description)
-                                                                    : new DestinationFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                const destinationExtraData = destinationTypeData?.extras?.find((de: MappingTuple) => de.key === destinationExtraKey);
-                const destinationExtra = destinationExtraData ? new DestinationExtra(destinationExtraData.key, destinationExtraData.abbr, destinationExtraData.description)
-                                                              : new DestinationExtra(destinationExtraKey, EMPTY_ABBR, EMPTY_DESCRIPTION);
-                
-                row.destination = new Destination(destinationType, destinationFunction, destinationExtra);
-                
-                // Handle unused fields for new format
-                if (typeof rowData.unused1 === 'number') row.unused1 = rowData.unused1;
-                if (typeof rowData.unused2 === 'number') row.unused2 = rowData.unused2;
-                if (typeof rowData.unused3 === 'number') row.unused3 = rowData.unused3;
-                if (typeof rowData.unused4 === 'number') row.unused4 = rowData.unused4;
-              }
-              // If no rowData for this index, the row keeps its default empty values
-            }
-          }
-
-          // Update variables from JSON
-          const variablesData = jsonObj.variables;
-          if (variablesData && Array.isArray(variablesData)) {
-            for (let i = 0; i < mappingDoc.variables.length && i < variablesData.length; i++) {
-              const varData = variablesData[i];
-              if (typeof varData === 'number') {
-                // New format: direct values
-                mappingDoc.variables[i].value = varData;
-              } else if (varData && typeof varData.value === 'number') {
-                // Old format: objects with value property
-                mappingDoc.variables[i].value = varData.value;
-              }
-            }
-          }
-
-          // Load editor metadata (row colors, comments, and global documentation)
-          if (jsonObj.editorMetadata) {
-            const metadata = jsonObj.editorMetadata;
-
-            // Load row colors (preserve Map reference for undo commands)
-            if (metadata.rowColors && typeof metadata.rowColors === 'object') {
-              rowColors.value.clear();
-              for (const [indexStr, color] of Object.entries(metadata.rowColors)) {
-                const index = parseInt(indexStr, 10);
-                if (!isNaN(index) && typeof color === 'string') {
-                  rowColors.value.set(index, color);
-                }
-              }
-            }
-
-            // Load row comments
-            if (metadata.rowComments && typeof metadata.rowComments === 'object') {
-              rowComments.value = metadata.rowComments as Record<number, string>;
-            }
-
-            // Load global documentation field
-            if (metadata.globalComment && typeof metadata.globalComment === 'string') {
-              mappingDoc.globalComment = metadata.globalComment;
-            }
-          }
-
-          mappingDocument.value = mappingDoc;
-          init();
-          clearCurrentHistory(); // Clear undo history after loading new file
-          console.log('.json file loaded successfully');
-          showToast(`Loaded ${file.name} successfully`, 'success', 3000);
-          // Clear file input to allow reloading the same file
-          if (fileInput.value) {
-            fileInput.value.value = '';
-          }
-        } catch (error) {
-          console.error('Error parsing .json file:', error);
-          if (error instanceof SyntaxError) {
-            alert(`JSON Parse Error: ${error.message}\n\nFile: ${file.name}\n\nThe file may be corrupted or not valid JSON.`);
-          } else {
-            alert(`Error loading .json file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\n\nCheck console for details.`);
-          }
-        }
-      };
-      break;
-
-    default:
-      alert(`Invalid file type: "${fileExtension}"\n\nSupported formats: .map (binary) or .json (text)`);
-  }
-
-  reader.onerror = function (e: any) {
-    console.error('FileReader error:', e);
-    alert(`File reading error: ${e.target.error.name}\n\nFile: ${file.name}`);
-  }
-}
 
 function reset() {
   // Check lock state before resetting
