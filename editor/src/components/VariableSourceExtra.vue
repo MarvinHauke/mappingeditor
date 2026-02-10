@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel, onMounted, ref } from 'vue';
+import { defineModel, nextTick, onMounted, ref } from 'vue';
 import { EMPTY_ABBR, EMPTY_DESCRIPTION, EMPTY_KEY, genNrpnSourceExtraDnA, genVarSourceExtraDnA } from '../modules/dataModel';
 import { SourceExtra } from '../modules/documentModel';
 
@@ -43,10 +43,27 @@ function numChanged() {
     const clampedValue = Math.max(0, Math.min(MAX_VALUE, numValue));
     varValue.value = clampedValue;
 
+    // Strip leading zeros from display (e.g. "05" → "5")
+    nextTick(() => {
+        if (varInput.value && varInput.value.value !== String(clampedValue)) {
+            varInput.value.value = String(clampedValue);
+        }
+    });
+
     // Convert UI value (0-4095) to internal format (1-4096)
     const actualKey = clampedValue + 1;
     const { abbr, description } = genVarSourceExtraDnA(actualKey);
     model.value = new SourceExtra(actualKey, abbr, description);
+}
+
+function selectAllOnFocus(event: FocusEvent) {
+    (event.target as HTMLInputElement).select();
+}
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        (event.target as HTMLInputElement).blur();
+    }
 }
 
 onMounted(() => {
@@ -106,6 +123,8 @@ defineEmits(['update:modelValue']);
                     :max="MAX_VALUE"
                     v-model.number="varValue"
                     @input="numChanged"
+                    @focus="selectAllOnFocus"
+                    @keydown="onKeydown"
                     :disabled="isLocked"
                     ref="varInput"
                 />
