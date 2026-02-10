@@ -3,6 +3,7 @@ import { computed, ref, watch, onMounted } from 'vue'
 import BasePanel from './BasePanel.vue'
 import type { VariableUsageInfo } from '@/composables/useVariableUsage'
 import { buildRowReadersMap } from '@/services/rowReferenceService'
+import { usePanelLayout } from '../composables/usePanelLayout'
 
 interface VariableLike {
   readonly name: string
@@ -27,13 +28,10 @@ const props = defineProps<{
   variables: VariableLike[]
   variableUsage: VariableUsageInfo[]
   displayRowIndexAsHex: boolean
-  settingsPanelExpanded: boolean
-  showSelectionToolbar: boolean
-  selectionToolbarExpanded: boolean
-  showMidiMonitor: boolean
-  midiMonitorExpanded: boolean
   rows?: RowLike[]
 }>()
+
+const { variablesRight } = usePanelLayout()
 
 const emit = defineEmits<{
   expandedChange: [expanded: boolean]
@@ -187,16 +185,6 @@ function getDisplayContent(varIndex: number): string {
   }
 }
 
-// Position based on Settings, Selection Toolbar, and MIDI Monitor states
-const rightPosition = computed(() => {
-  const settingsWidth = props.settingsPanelExpanded ? 180 : 100
-  const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0
-  const midiWidth = props.showMidiMonitor ? (props.midiMonitorExpanded ? 320 : 150) : 0
-  const visiblePanelCount = 1 + (props.showSelectionToolbar ? 1 : 0) + (props.showMidiMonitor ? 1 : 0)
-  const gaps = visiblePanelCount * 10
-  return `${settingsWidth + selWidth + midiWidth + gaps + 10}px`
-})
-
 // Expanded width - consistent sizing to avoid scrollbars
 const expandedWidth = computed(() => {
   // Use consistent 300px width for all formats to ensure proper panel docking
@@ -280,7 +268,7 @@ function stopResize(): void {
   <BasePanel
     title="Variables"
     storage-key="variable-monitor-expanded"
-    :right-position="rightPosition"
+    :right-position="variablesRight"
     minimized-width="110px"
     :expanded-width="expandedWidth"
     @expanded-change="onExpandedChange"

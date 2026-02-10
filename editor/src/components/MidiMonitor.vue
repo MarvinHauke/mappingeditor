@@ -2,28 +2,14 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 import BasePanel from './BasePanel.vue'
-
-const props = defineProps<{
-  settingsPanelExpanded: boolean
-  showSelectionToolbar: boolean
-  selectionToolbarExpanded: boolean
-}>()
+import { usePanelLayout } from '../composables/usePanelLayout'
 
 const emit = defineEmits<{
   expandedChange: [expanded: boolean]
 }>()
 
 const { isSupported, isEnabled, messageHistory, lastMessage, enableMidi, clearHistory: clearHistoryComposable } = useMidi()
-
-// Position based on Settings Panel and Selection Toolbar states
-// Settings: minimized 100px, expanded 180px
-// Selection Toolbar: minimized 120px, expanded 260px (only if visible)
-const rightPosition = computed(() => {
-  const settingsWidth = props.settingsPanelExpanded ? 180 : 100
-  const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0
-  const gaps = props.showSelectionToolbar ? 20 : 10 // 10px gap between each visible panel
-  return `${settingsWidth + selWidth + gaps + 10}px`
-})
+const { midiRight } = usePanelLayout()
 
 const showActivity = ref(false)
 
@@ -123,7 +109,7 @@ onMounted(async () => {
   <BasePanel
     title="MIDI Monitor"
     storage-key="midi-monitor-expanded"
-    :right-position="rightPosition"
+    :right-position="midiRight"
     minimized-width="150px"
     expanded-width="320px"
     :resizable="shouldLockHeight"

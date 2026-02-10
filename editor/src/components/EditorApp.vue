@@ -791,7 +791,6 @@ function downloadMap() {
     :can-move-up="canMoveUp"
     :can-move-down="canMoveDown"
     :is-locked="isCurrentLocked"
-    :settings-panel-expanded="settingsPanelExpanded"
     @expanded-change="selectionToolbarExpanded = $event"
     @cut="handleMultiCut"
     @copy="handleMultiCopy"
@@ -806,9 +805,6 @@ function downloadMap() {
   <!-- MIDI Monitor (docked to left of Selection Toolbar) -->
   <MidiMonitor
     v-if="midiSupported && showMidiMonitor"
-    :settings-panel-expanded="settingsPanelExpanded"
-    :show-selection-toolbar="showSelectionToolbar"
-    :selection-toolbar-expanded="selectionToolbarExpanded"
     @expanded-change="midiMonitorExpanded = $event"
   />
 
@@ -818,11 +814,6 @@ function downloadMap() {
     :variables="mappingDocument.variables"
     :variable-usage="variableUsage"
     :display-row-index-as-hex="displayRowIndexAsHex"
-    :settings-panel-expanded="settingsPanelExpanded"
-    :show-selection-toolbar="showSelectionToolbar"
-    :selection-toolbar-expanded="selectionToolbarExpanded"
-    :show-midi-monitor="midiSupported && showMidiMonitor"
-    :midi-monitor-expanded="midiMonitorExpanded"
     :rows="mappingDocument.rows"
     @expanded-change="variableMonitorExpanded = $event"
   />
@@ -830,13 +821,6 @@ function downloadMap() {
   <!-- Log Monitor (docked to left of Variable Monitor) -->
   <LogMonitor
     v-if="showLogMonitor"
-    :settings-panel-expanded="settingsPanelExpanded"
-    :show-selection-toolbar="showSelectionToolbar"
-    :selection-toolbar-expanded="selectionToolbarExpanded"
-    :show-midi-monitor="midiSupported && showMidiMonitor"
-    :midi-monitor-expanded="midiMonitorExpanded"
-    :show-variable-monitor="showVariableMonitor"
-    :variable-monitor-expanded="variableMonitorExpanded"
     @expanded-change="logMonitorExpanded = $event"
     @scroll-to-row="handleScrollToRow"
   />

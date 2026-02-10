@@ -165,6 +165,7 @@ defineExpose({ isExpanded })
   z-index: 1000;
   transition: all 0.3s ease;
   font-size: 12px;
+  overflow: hidden;
 }
 
 .panel-header {

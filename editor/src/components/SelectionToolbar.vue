@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import BasePanel from './BasePanel.vue';
 import { ROW_COLORS } from '../constants/colors';
+import { usePanelLayout } from '../composables/usePanelLayout';
 
 const props = defineProps<{
   selectedCount: number;
@@ -10,8 +11,9 @@ const props = defineProps<{
   canMoveUp: boolean;
   canMoveDown: boolean;
   isLocked: boolean;
-  settingsPanelExpanded: boolean;
 }>();
+
+const { selectionRight } = usePanelLayout();
 
 const emit = defineEmits<{
   (e: 'expandedChange', expanded: boolean): void;
@@ -47,13 +49,6 @@ const hasSelection = computed(() => props.selectedCount > 0);
 // Whether we can paste (have clipboard content)
 const canPaste = computed(() => props.hasCopiedRow || props.hasCopiedRows);
 
-// Position to the left of Settings Panel
-// Settings: minimized 100px, expanded 180px
-const rightPosition = computed(() => {
-  const settingsWidth = props.settingsPanelExpanded ? 180 : 100;
-  const gap = 10; // 10px gap between panels
-  return `${settingsWidth + gap + 10}px`;
-});
 
 const showColorPicker = ref(false);
 
@@ -72,7 +67,7 @@ function onExpandedChange(expanded: boolean): void {
   <BasePanel
     :title="panelTitle"
     storage-key="selection-toolbar-expanded"
-    :right-position="rightPosition"
+    :right-position="selectionRight"
     minimized-width="120px"
     expanded-width="260px"
     @expanded-change="onExpandedChange"

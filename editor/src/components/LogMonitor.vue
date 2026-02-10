@@ -2,16 +2,9 @@
 import { ref, computed } from 'vue';
 import BasePanel from './BasePanel.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
+import { usePanelLayout } from '../composables/usePanelLayout';
 
-const props = defineProps<{
-  settingsPanelExpanded: boolean;
-  showSelectionToolbar: boolean;
-  selectionToolbarExpanded: boolean;
-  showMidiMonitor: boolean;
-  midiMonitorExpanded: boolean;
-  showVariableMonitor: boolean;
-  variableMonitorExpanded: boolean;
-}>();
+const { logRight } = usePanelLayout();
 
 const emit = defineEmits<{
   (e: 'expandedChange', expanded: boolean): void;
@@ -49,21 +42,6 @@ const entriesListStyle = computed(() => {
   } as const
 });
 
-// Position to the left of Variable Monitor
-// Settings: minimized 100px, expanded 180px
-// Selection: minimized 120px, expanded 260px (only if visible)
-// MIDI: minimized 150px, expanded 320px (only if visible)
-// Variable: minimized 110px, expanded 300px (only if visible)
-const rightPosition = computed(() => {
-  const settingsWidth = props.settingsPanelExpanded ? 180 : 100;
-  const selWidth = props.showSelectionToolbar ? (props.selectionToolbarExpanded ? 260 : 120) : 0;
-  const midiWidth = props.showMidiMonitor ? (props.midiMonitorExpanded ? 320 : 150) : 0;
-  const varWidth = props.showVariableMonitor ? (props.variableMonitorExpanded ? 300 : 110) : 0;
-  // Count visible panels for gap calculation: Settings always visible
-  const visiblePanelCount = 1 + (props.showSelectionToolbar ? 1 : 0) + (props.showMidiMonitor ? 1 : 0) + (props.showVariableMonitor ? 1 : 0);
-  const gaps = visiblePanelCount * 10; // 10px gap between each visible panel
-  return `${settingsWidth + selWidth + midiWidth + varWidth + gaps + 10}px`;
-});
 
 // Toggle type filter
 function toggleTypeFilter(type: LogEntryType): void {
@@ -135,7 +113,7 @@ const panelTitle = computed(() => {
   <BasePanel
     :title="panelTitle"
     storage-key="warning-log-expanded"
-    :right-position="rightPosition"
+    :right-position="logRight"
     minimized-width="140px"
     expanded-width="350px"
     :resizable="shouldLockHeight"

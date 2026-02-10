@@ -12,13 +12,13 @@ const ROW_INDEX_DISPLAY_KEY = 'row-index-display-hex';
 
 export type PasteAutoAdvanceMode = 'disabled' | 'rows-only' | 'all';
 
-export function usePanelState() {
-  // Panel expanded states
-  const settingsPanelExpanded = ref(false);
-  const midiMonitorExpanded = ref(false);
-  const variableMonitorExpanded = ref(false);
-  const selectionToolbarExpanded = ref(false);
-  const logMonitorExpanded = ref(false);
+function createPanelState() {
+  // Panel expanded states — read from localStorage using the same keys BasePanel uses
+  const settingsPanelExpanded = ref(localStorage.getItem('settings-panel-expanded') === 'true');
+  const selectionToolbarExpanded = ref(localStorage.getItem('selection-toolbar-expanded') === 'true');
+  const midiMonitorExpanded = ref(localStorage.getItem('midi-monitor-expanded') === 'true');
+  const variableMonitorExpanded = ref(localStorage.getItem('variable-monitor-expanded') === 'true');
+  const logMonitorExpanded = ref(localStorage.getItem('warning-log-expanded') === 'true');
 
   // Global Documentation Panel expanded state
   const getInitialGlobalDocExpanded = (): boolean => {
@@ -114,4 +114,11 @@ export function usePanelState() {
     initDisplayPreferences,
     watchDisplayRowIndexAsHex
   };
+}
+
+let instance: ReturnType<typeof createPanelState> | null = null;
+
+export function usePanelState() {
+  if (!instance) instance = createPanelState();
+  return instance;
 }
