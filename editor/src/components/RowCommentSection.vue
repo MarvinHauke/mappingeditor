@@ -26,6 +26,7 @@ const emit = defineEmits<{
   'copyDestination': [rowIndex: number];
   'pasteDestination': [rowIndex: number];
   'clearDestination': [rowIndex: number];
+  'noticeWarning': [warningId: string, warning: AnalyzerWarning];
 }>();
 
 function getWarningIcon(severity: string): string {
@@ -141,7 +142,7 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
     <div v-if="warnings.length > 0" class="warnings-section">
       <div
         v-for="(warning, idx) in warnings"
-        :key="idx"
+        :key="warning.id || idx"
         class="warning-item"
         :class="`warning-${warning.severity}`"
       >
@@ -152,6 +153,11 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
           <span class="warning-message">{{ warning.message }}</span>
           <span v-if="warning.details" class="warning-details">{{ warning.details }}</span>
         </div>
+        <button
+          class="action-btn notice-btn"
+          @click="emit('noticeWarning', warning.id, warning)"
+          title="Acknowledge this warning"
+        >&#10003;</button>
       </div>
     </div>
 
@@ -365,10 +371,25 @@ function getBoolValue(value: number, isSkip: boolean, skipActive: boolean): stri
   color: #000;
 }
 
+.notice-btn {
+  border-color: #34cc99;
+  color: #34cc99;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.notice-btn:hover:not(:disabled) {
+  background-color: #34cc99;
+  color: #000;
+}
+
 .warning-content {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
 }
 
 .warning-message {

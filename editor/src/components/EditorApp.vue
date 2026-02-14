@@ -7,7 +7,8 @@ import {
   KEYBOARD_EXTERNAL_SOURCE_FUNCTION_KEY, SEGA_GAMEPAD_EXTERNAL_SOURCE_FUNCTION_KEY, NERDSEQ_BUTTONS_EXTERNAL_SOURCE_FUNCTION_KEY, VAR_SOURCE_TYPE_KEY, GLOBAL_DESTINATION_TYPE_KEY, GLOBAL_BUTTONS_DESTINATION_FUNCTION_KEY,
   GLOBAL_SCREENS_DESTINATION_FUNCTION_KEY, GLOBAL_MODES_DESTINATION_FUNCTION_KEY, MIDI_CC_DESTINATION_TYPE_KEY, DUAL_DESTINATION_TYPE_KEY, SKIP_DESTINATION_TYPE_KEY, VISU_DESTINATION_TYPE_KEY, SETVAR_DESTINATION_TYPE_KEY,
   VISU_SHADER_SELECT_FUNCTION_KEY, VISU_SHADER_FUNCTIONS_FUNCTION_KEY, VISU_MODULATORS_FUNCTION_KEY, VISU_ENVELOPES_FUNCTION_KEY, VISU_LFOS_FUNCTION_KEY,
-  visuShaderSelectExtras, visuShaderFunctionsExtras, visuModulatorsExtras, visuEnvelopesExtras, visuLfosExtras
+  visuShaderSelectExtras, visuShaderFunctionsExtras, visuModulatorsExtras, visuEnvelopesExtras, visuLfosExtras,
+  genVarSourceExtraDnA
 } from '../modules/dataModel';
 import { MappingDocument, Row as MappingRow, Source, SourceType, SourceFunction, SourceExtra, DestinationType, DestinationFunction, DestinationExtra, Destination } from '../modules/documentModel';
 import * as formatters from '../modules/formatters';
@@ -158,7 +159,9 @@ const {
   errorCount,
   analyzeDocument,
   getRowWarnings,
-  rowHasWarnings
+  rowHasWarnings,
+  noticeWarning: noticeAnalyzerWarning,
+  unnoticeWarning: unnoticeAnalyzerWarning
 } = useStaticAnalyzer(mappingDocument, displayRowIndexAsHex);
 
 // Variable Usage tracking
@@ -166,9 +169,10 @@ const { variableUsage } = useVariableUsage(mappingDocument);
 
 // Warning Log
 const {
+  addEntry: logAddEntry,
   addInfo: logInfo,
   addWarning: logWarning,
-  addError: logError
+  addError: logError,
 } = useWarningLog();
 
 // Mapping Cache (A/B toggle)
@@ -466,6 +470,34 @@ function handleMultiClear(): void {
   clearRows(sortedSelectedIndices.value);
 }
 
+/**
+ * Handle "noticing" a warning — moves it from row display to log monitor
+ */
+function handleNoticeWarning(warningId: string): void {
+  const warning = noticeAnalyzerWarning(warningId);
+  if (warning) {
+    const logType = warning.severity === 'error' ? 'error' as const : warning.severity === 'warning' ? 'warning' as const : 'info' as const;
+    const entryId = logAddEntry({
+      type: logType,
+      source: 'analyzer',
+      message: warning.message,
+      rowIndex: warning.rowIndex,
+      details: warning.details,
+      noticed: true,
+      analyzerWarningId: warningId
+    });
+    // Entry is already marked as noticed
+    void entryId;
+  }
+}
+
+/**
+ * Handle un-noticing a warning from the log monitor — restores it to row display
+ */
+function handleUnnoticeWarning(analyzerWarningId: string): void {
+  unnoticeAnalyzerWarning(analyzerWarningId);
+}
+
 function setRowColor(color: string | null): void {
   for (const idx of selectedRowIndices.value) {
     const colorValue = color && COLOR_PALETTE[color] ? COLOR_PALETTE[color] : null;
@@ -592,7 +624,14 @@ function sourceFunctionSelectionChanged(event: Event, rowIndex: number) {
   const selectedSourceFunction = currentlySelectedSourceTypes.value[rowIndex].functions.find(x => x.key === selectedSourceFunctionKey) as MappingTuple;
   const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow
   row.source.function = new SourceFunction(selectedSourceFunctionKey, selectedSourceFunction.abbr, selectedSourceFunction.description);
-  row.source.extra = new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+  // For Variable source, default to fader value 0 (internal key 1) so the variable is
+  // immediately trackable in the Variable Monitor. Other source types use EMPTY_KEY.
+  if (row.source.type.key === VAR_SOURCE_TYPE_KEY) {
+    const { abbr, description } = genVarSourceExtraDnA(1);
+    row.source.extra = new SourceExtra(1, abbr, description);
+  } else {
+    row.source.extra = new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+  }
 }
 
 enum SourceExtraVariant {
@@ -816,6 +855,7 @@ function downloadMap() {
     :display-row-index-as-hex="displayRowIndexAsHex"
     :rows="mappingDocument.rows"
     @expanded-change="variableMonitorExpanded = $event"
+    @scroll-to-row="handleScrollToRow"
   />
 
   <!-- Log Monitor (docked to left of Variable Monitor) -->
@@ -823,6 +863,7 @@ function downloadMap() {
     v-if="showLogMonitor"
     @expanded-change="logMonitorExpanded = $event"
     @scroll-to-row="handleScrollToRow"
+    @unnotice-warning="handleUnnoticeWarning"
   />
 
   <main>
@@ -1292,6 +1333,7 @@ function downloadMap() {
           @copy-destination="copyDestination"
           @paste-destination="handlePasteDestination"
           @clear-destination="clearDestination"
+          @notice-warning="(warningId: string) => handleNoticeWarning(warningId)"
         />
       </div>
       <div id="variablesContainer" class="pt-3"></div>

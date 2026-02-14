@@ -9,16 +9,19 @@ const { logRight } = usePanelLayout();
 const emit = defineEmits<{
   (e: 'expandedChange', expanded: boolean): void;
   (e: 'scrollToRow', rowIndex: number): void;
+  (e: 'unnoticeWarning', analyzerWarningId: string): void;
 }>();
 
-const { 
-  filteredEntries, 
-  filterByType, 
-  filterBySource, 
+const {
+  filteredEntries,
+  filterByType,
+  filterBySource,
+  showNoticed,
   clearLog,
   entryCount,
   warningCount,
-  errorCount
+  errorCount,
+  unnoticeEntry
 } = useWarningLog();
 
 // Selected entry for expanded details view
@@ -63,12 +66,30 @@ function toggleSourceFilter(source: LogEntrySource): void {
   filterBySource.value = new Set(filterBySource.value);
 }
 
+// Toggle noticed filter
+function toggleNoticedFilter(): void {
+  showNoticed.value = !showNoticed.value;
+}
+
+// Handle clicking a noticed entry — un-notice it and remove from log
+function handleUnnotice(entry: LogEntry): void {
+  if (entry.noticed && entry.analyzerWarningId) {
+    emit('unnoticeWarning', entry.analyzerWarningId);
+    unnoticeEntry(entry.id);
+  }
+}
+
 // Toggle expanded view for an entry
-function toggleExpanded(entryId: number): void {
-  if (expandedEntryId.value === entryId) {
+function toggleExpanded(entry: LogEntry): void {
+  // If this is a noticed entry, un-notice instead of expanding
+  if (entry.noticed && entry.analyzerWarningId) {
+    handleUnnotice(entry);
+    return;
+  }
+  if (expandedEntryId.value === entry.id) {
     expandedEntryId.value = null;
   } else {
-    expandedEntryId.value = entryId;
+    expandedEntryId.value = entry.id;
   }
 }
 
@@ -183,6 +204,14 @@ const panelTitle = computed(() => {
           >
             S
           </button>
+          <button
+            class="filter-btn source-btn noticed-filter-btn"
+            :class="{ active: showNoticed }"
+            @click="toggleNoticedFilter"
+            title="Toggle noticed entries"
+          >
+            N
+          </button>
         </div>
         <button
           class="clear-btn"
@@ -205,11 +234,12 @@ const panelTitle = computed(() => {
           v-for="entry in filteredEntries"
           :key="entry.id"
           class="log-entry"
-          :class="{ expanded: expandedEntryId === entry.id }"
-          @click="toggleExpanded(entry.id)"
+          :class="{ expanded: expandedEntryId === entry.id, noticed: entry.noticed }"
+          @click="toggleExpanded(entry)"
         >
           <div class="entry-header">
             <span class="type-indicator" :style="{ background: getTypeColor(entry.type) }"></span>
+            <span v-if="entry.noticed" class="noticed-icon" title="Noticed — click to un-notice">&#10003;</span>
             <span class="entry-time">{{ formatTime(entry.timestamp) }}</span>
             <span class="entry-source">{{ entry.source.charAt(0).toUpperCase() }}</span>
             <span
@@ -327,6 +357,27 @@ const panelTitle = computed(() => {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 2px;
   line-height: 1.4;
+}
+
+/* Noticed entries */
+.log-entry.noticed {
+  opacity: 0.5;
+  border-left-color: #34cc99;
+}
+
+.log-entry.noticed:hover {
+  opacity: 0.8;
+}
+
+.noticed-icon {
+  font-size: 9px;
+  color: #34cc99;
+  font-weight: bold;
+}
+
+.noticed-filter-btn {
+  color: #34cc99 !important;
+  border-color: rgba(52, 204, 153, 0.5) !important;
 }
 
 .badge-container {

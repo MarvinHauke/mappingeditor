@@ -21,6 +21,8 @@ export interface LogEntry {
   message: string;
   rowIndex?: number;
   details?: string;
+  noticed?: boolean;
+  analyzerWarningId?: string;
 }
 
 /**
@@ -33,17 +35,20 @@ export type LogEntryInput = Omit<LogEntry, 'id' | 'timestamp'>;
  */
 export interface UseWarningLogReturn {
   entries: Ref<LogEntry[]>;
-  addEntry: (entry: LogEntryInput) => void;
-  addInfo: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => void;
-  addWarning: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => void;
-  addError: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => void;
+  addEntry: (entry: LogEntryInput) => number;
+  addInfo: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
+  addWarning: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
+  addError: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
   clearLog: () => void;
   filterByType: Ref<Set<LogEntryType>>;
   filterBySource: Ref<Set<LogEntrySource>>;
+  showNoticed: Ref<boolean>;
   filteredEntries: ComputedRef<LogEntry[]>;
   entryCount: ComputedRef<number>;
   warningCount: ComputedRef<number>;
   errorCount: ComputedRef<number>;
+  noticeEntry: (id: number) => void;
+  unnoticeEntry: (id: number) => void;
 }
 
 // Maximum number of entries to keep
@@ -108,14 +113,16 @@ export function useWarningLog(): UseWarningLogReturn {
   // Active filters
   const filterByType = ref<Set<LogEntryType>>(new Set(['info', 'warning', 'error']));
   const filterBySource = ref<Set<LogEntrySource>>(new Set(['analyzer', 'reference', 'system']));
+  const showNoticed = ref<boolean>(true);
 
   /**
    * Filtered entries based on active filters
    */
   const filteredEntries = computed(() => {
-    return entries.value.filter(entry => 
-      filterByType.value.has(entry.type) && 
-      filterBySource.value.has(entry.source)
+    return entries.value.filter(entry =>
+      filterByType.value.has(entry.type) &&
+      filterBySource.value.has(entry.source) &&
+      (showNoticed.value || !entry.noticed)
     );
   });
 
@@ -125,26 +132,27 @@ export function useWarningLog(): UseWarningLogReturn {
   const entryCount = computed(() => entries.value.length);
 
   /**
-   * Count of warning-type entries
+   * Count of warning-type non-noticed entries
    */
-  const warningCount = computed(() => 
-    entries.value.filter(e => e.type === 'warning').length
+  const warningCount = computed(() =>
+    entries.value.filter(e => e.type === 'warning' && !e.noticed).length
   );
 
   /**
-   * Count of error-type entries
+   * Count of error-type non-noticed entries
    */
-  const errorCount = computed(() => 
-    entries.value.filter(e => e.type === 'error').length
+  const errorCount = computed(() =>
+    entries.value.filter(e => e.type === 'error' && !e.noticed).length
   );
 
   /**
-   * Add a new entry to the log
+   * Add a new entry to the log. Returns the entry id.
    */
-  function addEntry(entry: LogEntryInput): void {
+  function addEntry(entry: LogEntryInput): number {
+    const entryId = nextId++;
     const newEntry: LogEntry = {
       ...entry,
-      id: nextId++,
+      id: entryId,
       timestamp: new Date()
     };
 
@@ -155,27 +163,46 @@ export function useWarningLog(): UseWarningLogReturn {
     if (entries.value.length > MAX_ENTRIES) {
       entries.value = entries.value.slice(0, MAX_ENTRIES);
     }
+
+    return entryId;
   }
 
   /**
    * Add an info entry
    */
-  function addInfo(source: LogEntrySource, message: string, rowIndex?: number, details?: string): void {
-    addEntry({ type: 'info', source, message, rowIndex, details });
+  function addInfo(source: LogEntrySource, message: string, rowIndex?: number, details?: string): number {
+    return addEntry({ type: 'info', source, message, rowIndex, details });
   }
 
   /**
    * Add a warning entry
    */
-  function addWarning(source: LogEntrySource, message: string, rowIndex?: number, details?: string): void {
-    addEntry({ type: 'warning', source, message, rowIndex, details });
+  function addWarning(source: LogEntrySource, message: string, rowIndex?: number, details?: string): number {
+    return addEntry({ type: 'warning', source, message, rowIndex, details });
   }
 
   /**
    * Add an error entry
    */
-  function addError(source: LogEntrySource, message: string, rowIndex?: number, details?: string): void {
-    addEntry({ type: 'error', source, message, rowIndex, details });
+  function addError(source: LogEntrySource, message: string, rowIndex?: number, details?: string): number {
+    return addEntry({ type: 'error', source, message, rowIndex, details });
+  }
+
+  /**
+   * Mark a log entry as noticed
+   */
+  function noticeEntry(id: number): void {
+    const entry = entries.value.find(e => e.id === id);
+    if (entry) {
+      entry.noticed = true;
+    }
+  }
+
+  /**
+   * Un-notice a log entry and remove it from the log
+   */
+  function unnoticeEntry(id: number): void {
+    entries.value = entries.value.filter(e => e.id !== id);
   }
 
   /**
@@ -195,10 +222,13 @@ export function useWarningLog(): UseWarningLogReturn {
     clearLog,
     filterByType,
     filterBySource,
+    showNoticed,
     filteredEntries,
     entryCount,
     warningCount,
-    errorCount
+    errorCount,
+    noticeEntry,
+    unnoticeEntry
   };
 
   return instance;

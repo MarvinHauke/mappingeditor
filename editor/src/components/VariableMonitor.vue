@@ -35,6 +35,7 @@ const { variablesRight } = usePanelLayout()
 
 const emit = defineEmits<{
   expandedChange: [expanded: boolean]
+  scrollToRow: [rowIndex: number]
 }>()
 
 // Value display format
@@ -46,6 +47,11 @@ const VALUE_FORMAT_KEY = 'variable-value-format';
 type DisplayMode = 'values' | 'writers' | 'readers';
 const displayMode = ref<DisplayMode>('values');
 const DISPLAY_MODE_KEY = 'variable-display-mode';
+
+// Value source mode: 'current' (static analyzer) or 'debugging' (future virtual execution)
+type ValueSourceMode = 'current' | 'debugging';
+const valueSourceMode = ref<ValueSourceMode>('current');
+const VALUE_SOURCE_MODE_KEY = 'variable-monitor-mode';
 
 // Rows subsection state
 type RowsDisplayMode = 'values' | 'readers';
@@ -83,6 +89,11 @@ onMounted(() => {
     rowsDisplayMode.value = savedRowsMode as RowsDisplayMode;
   }
 
+  const savedSourceMode = localStorage.getItem(VALUE_SOURCE_MODE_KEY);
+  if (savedSourceMode && ['current', 'debugging'].includes(savedSourceMode)) {
+    valueSourceMode.value = savedSourceMode as ValueSourceMode;
+  }
+
   const savedHeight = localStorage.getItem(ROWS_HEIGHT_KEY);
   if (savedHeight !== null) {
     const height = parseInt(savedHeight, 10);
@@ -107,6 +118,10 @@ watch(rowsSubsectionExpanded, (val) => {
 
 watch(rowsDisplayMode, (val) => {
   localStorage.setItem(ROWS_DISPLAY_MODE_KEY, val);
+});
+
+watch(valueSourceMode, (val) => {
+  localStorage.setItem(VALUE_SOURCE_MODE_KEY, val);
 });
 
 watch(rowsHeight, (val) => {
@@ -171,6 +186,26 @@ function formatRowIndex(index: number): string {
   return index.toString();
 }
 
+// Get raw row indices for variable writers/readers (for clickable badges)
+function getVarRowIndices(varIndex: number): number[] {
+  if (displayMode.value === 'writers') {
+    return props.variableUsage[varIndex]?.writtenByRows ?? [];
+  } else if (displayMode.value === 'readers') {
+    return props.variableUsage[varIndex]?.readByRows ?? [];
+  }
+  return [];
+}
+
+// Get raw row reader indices for rows subsection
+function getRowReaderIndices(rowIndex: number): number[] {
+  return rowReadersMap.value.get(rowIndex) ?? [];
+}
+
+// Handle click on a row index — scroll to that row in the main table
+function handleRowNavigate(rowIndex: number): void {
+  emit('scrollToRow', rowIndex);
+}
+
 // Get display content based on mode
 function getDisplayContent(varIndex: number): string {
   if (displayMode.value === 'writers') {
@@ -180,6 +215,19 @@ function getDisplayContent(varIndex: number): string {
     const readers = props.variableUsage[varIndex]?.readByRows ?? [];
     return readers.length > 0 ? readers.map(formatRowIndex).join(', ') : '—';
   } else {
+    // Values mode: use current-values analysis when enabled
+    if (valueSourceMode.value === 'current') {
+      const usage = props.variableUsage[varIndex];
+      if (usage?.isWritten) {
+        if (usage.lastWriteValue !== null) {
+          // Known fader value
+          return getFormatPrefix(valueFormat.value) + formatValue(usage.lastWriteValue, valueFormat.value);
+        }
+        // Written by SetVar only (dynamic value)
+        return '?';
+      }
+      // Never written: show document initial value
+    }
     const variable = props.variables[varIndex];
     return getFormatPrefix(valueFormat.value) + formatValue(variable.value, valueFormat.value);
   }
@@ -224,14 +272,156 @@ function formatRowDestination(row: RowLike): string {
   return `${destType} ${destFunc}`;
 }
 
+// Constants for source type detection
+const EMPTY_KEY = 65535;
+const VAR_SOURCE_TYPE_KEY = 9;
+const CALC_SOURCE_TYPE_KEY = 10;
+
+/**
+ * Resolve a Calc/Skip operand byte to a numeric value.
+ * Constants 0-9 = literal, Variables 10-25 = variable's known value.
+ * Returns null if the operand's value is unknown.
+ */
+function resolveCalcOperand(byte: number): number | null {
+  if (byte >= 0 && byte <= 9) {
+    return byte; // Constant literal
+  }
+  if (byte >= 10 && byte <= 25) {
+    const varIdx = byte - 10;
+    const usage = props.variableUsage[varIdx];
+    if (usage?.lastWriteValue !== null && usage?.lastWriteValue !== undefined) {
+      return usage.lastWriteValue;
+    }
+    return null; // Variable value unknown
+  }
+  return null; // Row reference or other — unknown for static analysis
+}
+
+/**
+ * Evaluate a Calc operation given two operand values and function key.
+ * Returns the result as a string: number, "OVF", "Err", or "NaN".
+ */
+function evaluateCalc(funcKey: number, a: number | null, b: number | null): string {
+  if (a === null || b === null) return 'NaN';
+
+  let result: number;
+  const clamp = (v: number) => Math.max(0, Math.min(4095, v));
+
+  switch (funcKey) {
+    case 0: result = clamp(a + b); break;                     // ADD (clamped)
+    case 1: result = a + b; break;                             // ADD! (overflow)
+    case 2: result = clamp(a - b); break;                     // SUB (clamped)
+    case 3: result = a - b; break;                             // SUB! (overflow)
+    case 4: result = clamp(a * b); break;                     // MUL (clamped)
+    case 5: result = a * b; break;                             // MUL! (overflow)
+    case 6: result = clamp(Math.floor(a * b / 10)); break;   // MUL. (0.1, clamped)
+    case 7: result = Math.floor(a * b / 10); break;           // MUL: (0.1, overflow)
+    case 8:                                                     // DIV
+      if (b === 0) return 'Err';
+      result = clamp(Math.floor(a / b));
+      break;
+    case 9:                                                     // DIV. (0.1)
+      if (b === 0) return 'Err';
+      result = clamp(Math.floor(a * 10 / b));
+      break;
+    case 10:                                                    // DIV: (0.1, overflow)
+      if (b === 0) return 'Err';
+      result = Math.floor(a * 10 / b);
+      break;
+    case 11:                                                    // MOD
+      if (b === 0) return 'Err';
+      result = a % b;
+      break;
+    case 12: result = a & b; break;                            // BAND
+    case 13: result = a | b; break;                            // B OR
+    case 14: result = a ^ b; break;                            // BXOR
+    case 15: result = clamp(a << b); break;                   // LSFT
+    case 16: result = a >> b; break;                           // RSFT
+    case 17: result = (a && b) ? 1 : 0; break;               // LAND
+    case 18: result = (a || b) ? 1 : 0; break;               // L OR
+    case 19: result = ((a ? 1 : 0) ^ (b ? 1 : 0)); break;   // LXOR
+    case 20: result = (a < b) ? a : 0; break;                // IF <
+    case 21: result = (a <= b) ? a : 0; break;               // IF <=
+    case 22: result = (a > b) ? a : 0; break;                // IF >
+    case 23: result = (a >= b) ? a : 0; break;               // IF >=
+    case 24: result = (a === b) ? a : 0; break;              // IF =
+    case 25: result = (a !== b) ? a : 0; break;              // IF <>
+    case 39: result = Math.min(a, b); break;                  // MIN
+    case 40: result = Math.max(a, b); break;                  // MAX
+    case 41: result = Math.floor((a + b) / 2); break;        // AVRG
+    case 48:                                                    // MODS (signed modulo)
+      if (b === 0) return 'Err';
+      result = ((a % b) + b) % b;
+      break;
+    default:
+      // Stateful/dynamic operations (Flipflop, T&H, S&H, Count, Random, etc.)
+      return 'NaN';
+  }
+
+  // Check overflow for operations that can overflow
+  if (result < 0 || result > 4095) {
+    return 'OVF';
+  }
+
+  return result.toString();
+}
+
+/**
+ * Get source value for a row, statically determined where possible.
+ */
+function getRowSourceValue(row: RowLike): string {
+  const srcType = row.source.type.key;
+  const srcExtra = row.source.extra.keyOrValue;
+
+  // Empty row
+  if (srcType === EMPTY_KEY) return '—';
+
+  // Variable source
+  if (srcType === VAR_SOURCE_TYPE_KEY) {
+    if (srcExtra === EMPTY_KEY) return '—';
+    if (srcExtra >= 1 && srcExtra <= 4096) {
+      // Fader mode: value is extra - 1
+      return (srcExtra - 1).toString();
+    }
+    if (srcExtra === 0) {
+      // Read mode: value depends on the referenced variable
+      const varIdx = row.source.function.key;
+      if (varIdx >= 0 && varIdx <= 15) {
+        const usage = props.variableUsage[varIdx];
+        if (usage?.lastWriteValue !== null && usage?.lastWriteValue !== undefined) {
+          return usage.lastWriteValue.toString();
+        }
+        return '?';
+      }
+      return '?';
+    }
+  }
+
+  // Calc source
+  if (srcType === CALC_SOURCE_TYPE_KEY) {
+    const funcKey = row.source.function.key;
+    if (funcKey === EMPTY_KEY || srcExtra === EMPTY_KEY) return '—';
+
+    const byte1 = (srcExtra >> 8) & 0xFF;
+    const byte2 = srcExtra & 0xFF;
+    const a = resolveCalcOperand(byte1);
+    const b = resolveCalcOperand(byte2);
+    return evaluateCalc(funcKey, a, b);
+  }
+
+  // All other source types are live/external inputs
+  return '?';
+}
+
 // Get row display content based on mode
 function getRowDisplayContent(row: RowLike, rowIndex: number): string {
   if (rowsDisplayMode.value === 'readers') {
     const readers = rowReadersMap.value.get(rowIndex) ?? [];
     return readers.length > 0 ? readers.map(formatRowIndex).join(', ') : '—';
   } else {
-    // For values mode, we'll show the destination value
-    // For now, just show a placeholder (will be implemented with simulation engine)
+    if (valueSourceMode.value === 'current') {
+      return getRowSourceValue(row);
+    }
     return '—';
   }
 }
@@ -276,6 +466,28 @@ function stopResize(): void {
     <div class="variable-monitor-content">
       <!-- Toggle Controls Header (Fixed) -->
       <div class="variable-controls">
+      <!-- Value source mode toggle -->
+      <div class="control-group">
+        <span class="control-label">Mode:</span>
+        <div class="toggle-group">
+          <button
+            class="toggle-btn"
+            :class="{ active: valueSourceMode === 'current' }"
+            @click="valueSourceMode = 'current'"
+            title="Show values from static analysis"
+          >
+            Static Analyzer
+          </button>
+          <button
+            class="toggle-btn mode-disabled"
+            disabled
+            title="Requires Virtual Execution Engine (Phase 2)"
+          >
+            Debugging
+          </button>
+        </div>
+      </div>
+
       <!-- Format buttons row -->
       <div class="control-group">
         <span class="control-label">Format:</span>
@@ -367,7 +579,16 @@ function stopResize(): void {
         >
           <span class="variable-label">{{ leftLabels[idx] }}:</span>
           <span class="variable-value">
-            {{ getDisplayContent(useSingleColumn ? idx : idx) }}
+            <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(idx).length > 0">
+              <span
+                v-for="rowIdx in getVarRowIndices(idx)"
+                :key="rowIdx"
+                class="row-link"
+                @click.stop="handleRowNavigate(rowIdx)"
+                title="Click to scroll to row"
+              >R{{ formatRowIndex(rowIdx) }}</span>
+            </template>
+            <template v-else>{{ getDisplayContent(idx) }}</template>
           </span>
         </div>
       </div>
@@ -385,7 +606,16 @@ function stopResize(): void {
         >
           <span class="variable-label">{{ rightLabels[idx] }}:</span>
           <span class="variable-value">
-            {{ getDisplayContent(8 + idx) }}
+            <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(8 + idx).length > 0">
+              <span
+                v-for="rowIdx in getVarRowIndices(8 + idx)"
+                :key="rowIdx"
+                class="row-link"
+                @click.stop="handleRowNavigate(rowIdx)"
+                title="Click to scroll to row"
+              >R{{ formatRowIndex(rowIdx) }}</span>
+            </template>
+            <template v-else>{{ getDisplayContent(8 + idx) }}</template>
           </span>
         </div>
       </div>
@@ -427,9 +657,24 @@ function stopResize(): void {
           :key="idx"
           class="row-item"
         >
-          <span class="row-index">{{ formatRowIndex(idx) }}:</span>
+          <span class="row-index row-index-clickable" @click.stop="handleRowNavigate(idx)" title="Click to scroll to row">{{ formatRowIndex(idx) }}:</span>
           <span class="row-destination">{{ formatRowDestination(row) }}</span>
-          <span class="row-value">{{ getRowDisplayContent(row, idx) }}</span>
+          <span class="row-value" :class="{
+            'value-unknown': getRowDisplayContent(row, idx) === '?' || getRowDisplayContent(row, idx) === 'NaN',
+            'value-error': getRowDisplayContent(row, idx) === 'Err',
+            'value-overflow': getRowDisplayContent(row, idx) === 'OVF'
+          }">
+            <template v-if="rowsDisplayMode === 'readers' && getRowReaderIndices(idx).length > 0">
+              <span
+                v-for="rowIdx in getRowReaderIndices(idx)"
+                :key="rowIdx"
+                class="row-link"
+                @click.stop="handleRowNavigate(rowIdx)"
+                title="Click to scroll to row"
+              >R{{ formatRowIndex(rowIdx) }}</span>
+            </template>
+            <template v-else>{{ getRowDisplayContent(row, idx) }}</template>
+          </span>
         </div>
       </div>
     </div>
@@ -522,6 +767,11 @@ function stopResize(): void {
   background: rgba(52, 204, 153, 0.4);
   border-color: #34cc99;
   color: #34cc99;
+}
+
+.toggle-btn.mode-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* Variables Container - Scrollable, takes remaining space */
@@ -761,5 +1011,46 @@ function stopResize(): void {
   font-weight: 500;
   text-align: right;
   min-width: 40px;
+}
+
+.row-value.value-unknown {
+  color: rgba(241, 247, 0, 0.5);
+  font-style: italic;
+}
+
+.row-value.value-error {
+  color: #dc3545;
+  font-weight: bold;
+}
+
+.row-value.value-overflow {
+  color: #ffc107;
+  font-weight: bold;
+}
+
+/* Clickable row link badges (writers/readers mode) */
+.row-link {
+  font-size: 9px;
+  font-weight: bold;
+  color: #F1F700;
+  background: rgba(241, 247, 0, 0.2);
+  padding: 0 4px;
+  border-radius: 2px;
+  cursor: pointer;
+  display: inline-block;
+  margin: 0 1px;
+}
+
+.row-link:hover {
+  background: rgba(241, 247, 0, 0.4);
+}
+
+/* Row index in rows subsection — clickable with hover effect */
+.row-index-clickable {
+  cursor: pointer;
+}
+
+.row-index-clickable:hover {
+  color: #F1F700;
 }
 </style>

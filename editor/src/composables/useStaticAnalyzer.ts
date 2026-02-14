@@ -70,6 +70,7 @@ export type WarningType =
  * A warning detected by the static analyzer
  */
 export interface AnalyzerWarning {
+  id: string;
   type: WarningType;
   severity: WarningSeverity;
   rowIndex: number;
@@ -180,9 +181,10 @@ function getVariableIndexFromSetVarDest(row: RowLike): number {
 function getVariablesReadByRow(row: RowLike): number[] {
   const variables: number[] = [];
 
-  // Check Variable source type
+  // Check Variable source type - only count as read when extra is 0 (pass value mode)
+  // extra >= 1 means write/fader mode, EMPTY_KEY means unset
   const varSourceIdx = getVariableIndexFromVariableSource(row);
-  if (varSourceIdx !== -1) {
+  if (varSourceIdx !== -1 && row.source.extra.keyOrValue === 0) {
     variables.push(varSourceIdx);
   }
 
@@ -203,10 +205,30 @@ function getVariablesReadByRow(row: RowLike): number[] {
 }
 
 /**
- * Get the variable index written by a row (from SetVar destination)
+ * Get all variable indices written by a row.
+ * Detects writes from:
+ * - SetVar destination (type 8, function 0-15)
+ * - Variable source in write/fader mode (type 9, function 0-15, extra 1-4096)
  */
-function getVariableWrittenByRow(row: RowLike): number {
-  return getVariableIndexFromSetVarDest(row);
+function getVariablesWrittenByRow(row: RowLike): number[] {
+  const variables: number[] = [];
+
+  // SetVar destination writes
+  const setVarIdx = getVariableIndexFromSetVarDest(row);
+  if (setVarIdx !== -1) {
+    variables.push(setVarIdx);
+  }
+
+  // Variable source in write/fader mode (extra 1-4096 means "set variable to value")
+  const varSourceIdx = getVariableIndexFromVariableSource(row);
+  if (varSourceIdx !== -1) {
+    const extra = row.source.extra.keyOrValue;
+    if (extra >= 1 && extra <= 4096) {
+      variables.push(varSourceIdx);
+    }
+  }
+
+  return [...new Set(variables)];
 }
 
 /**
@@ -345,81 +367,189 @@ export function useStaticAnalyzer(
   const warnings = ref<RowWarningsMap>(new Map());
   const lastAnalyzedTimestamp = ref<number>(0);
 
+  // Noticed warnings state - persisted in localStorage
+  const NOTICED_STORAGE_KEY = 'analyzer-noticed-warnings';
+  const noticedWarningIds = ref<Set<string>>(loadNoticedIds());
+
+  function loadNoticedIds(): Set<string> {
+    try {
+      const stored = localStorage.getItem(NOTICED_STORAGE_KEY);
+      if (stored) {
+        return new Set(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return new Set();
+  }
+
+  function persistNoticedIds(): void {
+    localStorage.setItem(NOTICED_STORAGE_KEY, JSON.stringify([...noticedWarningIds.value]));
+  }
+
   /**
-   * Total count of all warnings
+   * Mark a warning as "noticed" — removes it from row display.
+   * Returns the warning object if found, undefined otherwise.
+   */
+  function noticeWarning(id: string): AnalyzerWarning | undefined {
+    // Find the warning across all rows
+    for (const rowWarnings of warnings.value.values()) {
+      const warning = rowWarnings.find(w => w.id === id);
+      if (warning) {
+        noticedWarningIds.value = new Set([...noticedWarningIds.value, id]);
+        persistNoticedIds();
+        return warning;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Un-notice a warning — restores it to row display.
+   */
+  function unnoticeWarning(id: string): void {
+    const newSet = new Set(noticedWarningIds.value);
+    newSet.delete(id);
+    noticedWarningIds.value = newSet;
+    persistNoticedIds();
+  }
+
+  /**
+   * Prune noticed IDs that no longer match any current warning
+   */
+  function pruneNoticedIds(): void {
+    const allWarningIds = new Set<string>();
+    for (const rowWarnings of warnings.value.values()) {
+      for (const w of rowWarnings) {
+        allWarningIds.add(w.id);
+      }
+    }
+    const pruned = new Set<string>();
+    for (const id of noticedWarningIds.value) {
+      if (allWarningIds.has(id)) {
+        pruned.add(id);
+      }
+    }
+    if (pruned.size !== noticedWarningIds.value.size) {
+      noticedWarningIds.value = pruned;
+      persistNoticedIds();
+    }
+  }
+
+  /**
+   * Total count of all non-noticed warnings
    */
   const warningCount = computed(() => {
     let count = 0;
     for (const rowWarnings of warnings.value.values()) {
-      count += rowWarnings.length;
+      count += rowWarnings.filter(w => !noticedWarningIds.value.has(w.id)).length;
     }
     return count;
   });
 
   /**
-   * Count of error-severity warnings
+   * Count of noticed warnings
+   */
+  const noticedCount = computed(() => {
+    return noticedWarningIds.value.size;
+  });
+
+  /**
+   * Count of error-severity non-noticed warnings
    */
   const errorCount = computed(() => {
     let count = 0;
     for (const rowWarnings of warnings.value.values()) {
-      count += rowWarnings.filter(w => w.severity === 'error').length;
+      count += rowWarnings.filter(w => w.severity === 'error' && !noticedWarningIds.value.has(w.id)).length;
     }
     return count;
   });
 
   /**
-   * Get warnings for a specific row
+   * Get non-noticed warnings for a specific row
    */
   function getRowWarnings(rowIndex: number): AnalyzerWarning[] {
-    return warnings.value.get(rowIndex) || [];
+    const rowWarnings = warnings.value.get(rowIndex) || [];
+    return rowWarnings.filter(w => !noticedWarningIds.value.has(w.id));
   }
 
   /**
-   * Check if a row has any warnings
+   * Check if a row has any non-noticed warnings
    */
   function rowHasWarnings(rowIndex: number): boolean {
-    const rowWarnings = warnings.value.get(rowIndex);
-    return rowWarnings !== undefined && rowWarnings.length > 0;
+    return getRowWarnings(rowIndex).length > 0;
   }
 
   /**
-   * Add a warning to the warnings map
+   * Add a warning to the warnings map, generating a deterministic ID
    */
-  function addWarning(warning: AnalyzerWarning): void {
+  function addWarning(warning: Omit<AnalyzerWarning, 'id'>): void {
     const rowWarnings = warnings.value.get(warning.rowIndex) || [];
-    rowWarnings.push(warning);
+    // Count existing warnings of same type for this row to create unique IDs
+    const sameTypeCount = rowWarnings.filter(w => w.type === warning.type).length;
+    const id = sameTypeCount > 0
+      ? `${warning.type}:${warning.rowIndex}:${sameTypeCount}`
+      : `${warning.type}:${warning.rowIndex}`;
+    const warningWithId: AnalyzerWarning = { ...warning, id };
+    rowWarnings.push(warningWithId);
     warnings.value.set(warning.rowIndex, rowWarnings);
   }
 
   /**
-   * Analyze for variables read before write
+   * Analyze for variables read before write.
+   *
+   * NerdSEQ mapping rows run in a continuous loop, so a variable set in a later
+   * row is available to earlier rows on the next cycle. This uses a two-pass approach:
+   * - Written by an earlier row → no warning
+   * - Written only by a later row → info (valid on next cycle, but order-dependent)
+   * - Never written by any row → warning (relies on initial value)
    */
   function analyzeVariableReadBeforeWrite(rows: RowLike[]): void {
-    const writtenVariables = new Set<number>();
+    // Pass 1: collect all variable writes across ALL rows
+    const writeMap = new Map<number, number[]>(); // varIndex → row indices that write it
+    for (const row of rows) {
+      if (isEmptyRow(row)) continue;
+      for (const varIdx of getVariablesWrittenByRow(row)) {
+        const writers = writeMap.get(varIdx) || [];
+        writers.push(row.index);
+        writeMap.set(varIdx, writers);
+      }
+    }
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+    // Pass 2: check each variable read
+    for (const row of rows) {
       if (isEmptyRow(row)) continue;
 
-      // Check what variables this row reads
       const varsRead = getVariablesReadByRow(row);
       for (const varIdx of varsRead) {
-        if (!writtenVariables.has(varIdx)) {
+        const writers = writeMap.get(varIdx);
+
+        if (!writers || writers.length === 0) {
+          // Never written by any row
           const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
           addWarning({
             type: 'variable-read-before-write',
             severity: 'warning',
             rowIndex: row.index,
-            message: `Variable ${VARIABLE_NAMES[varIdx]} used but never set in previous rows`,
-            details: `Variable ${VARIABLE_NAMES[varIdx]} is read in Row ${rowLabel} but no earlier row sets it. The variable will have its initial value (set in the Variables section or 0).`
+            message: `Variable ${VARIABLE_NAMES[varIdx]} used but never set by any row`,
+            details: `Variable ${VARIABLE_NAMES[varIdx]} is read in Row ${rowLabel} but no row sets it. The variable will have its initial value (set in the Variables section or 0).`
           });
+        } else {
+          const hasEarlierWrite = writers.some(w => w < row.index);
+          if (!hasEarlierWrite) {
+            // Only written by later rows — valid on next loop cycle, but worth noting
+            const rowLabel = formatRowIndex(row.index, displayRowIndexAsHex.value);
+            const writerLabels = writers.map(w => formatRowIndex(w, displayRowIndexAsHex.value)).join(', ');
+            addWarning({
+              type: 'variable-read-before-write',
+              severity: 'info',
+              rowIndex: row.index,
+              message: `Variable ${VARIABLE_NAMES[varIdx]} is read before being set in Row ${writerLabels}`,
+              details: `Variable ${VARIABLE_NAMES[varIdx]} is read in Row ${rowLabel} but only set later (Row ${writerLabels}). On the first cycle, the initial value will be used.`,
+              relatedRows: writers
+            });
+          }
         }
-      }
-
-      // Track what variable this row writes (if any)
-      const varWritten = getVariableWrittenByRow(row);
-      if (varWritten !== -1) {
-        writtenVariables.add(varWritten);
       }
     }
   }
@@ -435,9 +565,10 @@ export function useStaticAnalyzer(
     for (const row of rows) {
       if (isEmptyRow(row)) continue;
 
-      const varWritten = getVariableWrittenByRow(row);
-      if (varWritten !== -1 && !writtenVars.has(varWritten)) {
-        writtenVars.set(varWritten, row.index);
+      for (const varWritten of getVariablesWrittenByRow(row)) {
+        if (!writtenVars.has(varWritten)) {
+          writtenVars.set(varWritten, row.index);
+        }
       }
     }
 
@@ -643,6 +774,9 @@ export function useStaticAnalyzer(
 
     // Force reactivity update
     warnings.value = new Map(warnings.value);
+
+    // Prune noticed IDs that no longer match any current warning
+    pruneNoticedIds();
   }
 
   /**
@@ -657,12 +791,15 @@ export function useStaticAnalyzer(
     warnings,
     warningCount,
     errorCount,
+    noticedCount,
     lastAnalyzedTimestamp,
 
     // Methods
     analyzeDocument,
     getRowWarnings,
     rowHasWarnings,
-    clearWarnings
+    clearWarnings,
+    noticeWarning,
+    unnoticeWarning
   };
 }

@@ -163,6 +163,68 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 - Warning Log panel (`useWarningLog.ts`)
 - Add subfolding for warnings which contain several references.
 
+#### 1.2.1 "Noticed" Warning System ✅
+
+**Status:** ✅ **IMPLEMENTED** (2026-02-11)
+
+Allows users to acknowledge ("notice") individual analyzer warnings, removing them from the row view and archiving them in the Log Monitor.
+
+**How it works:**
+- Each analyzer warning has a deterministic ID (`type:rowIndex` or `type:rowIndex:n` for duplicates)
+- Checkmark button on each warning in RowCommentSection to acknowledge it
+- Noticed warnings are hidden from row display and badge counts
+- Noticed warnings appear in Log Monitor with reduced opacity and checkmark indicator
+- "N" filter button in Log Monitor toggles visibility of noticed entries
+- Click a noticed entry in Log Monitor to un-notice it (restores to row display)
+- Noticed state persists in localStorage (`analyzer-noticed-warnings`)
+- Auto-prunes noticed IDs when warnings are no longer generated after re-analysis
+
+**Files Modified:**
+- `useStaticAnalyzer.ts` — Warning IDs, noticed state set, filtering, pruning
+- `useWarningLog.ts` — `noticed` and `analyzerWarningId` fields, `showNoticed` filter, `noticeEntry`/`unnoticeEntry` methods
+- `RowCommentSection.vue` — Notice checkmark button per warning
+- `LogMonitor.vue` — "N" filter button, noticed entry styling, un-notice on click
+- `EditorApp.vue` — Wires `noticeWarning` and `unnoticeWarning` between components
+
+### Phase 1.2.2 - Variable Monitor Current Values ✅
+
+**Status:** ✅ **IMPLEMENTED** (2026-02-11)
+
+Shows statically-determined source values in the Variable Monitor instead of placeholders.
+
+**Mode Toggle:**
+- "Current Values" (active): Shows static analysis results
+- "Debugging" (greyed out, disabled): Placeholder for Phase 2 Virtual Execution Engine
+
+**Variables section behavior (Current Values mode):**
+- Variables written via fader: shows fader value (`extra - 1`)
+- Variables written only via SetVar (dynamic): shows "?"
+- Variables never written: shows document initial value
+
+**Rows section behavior (Current Values mode):**
+- Variable source fader (type 9, extra 1-4096): shows `extra - 1`
+- Variable source read (type 9, extra 0): shows referenced variable's known value, or "?"
+- Calc source (type 10): evaluates when operands are constants (0-9) or variables with known values
+  - "NaN" if any operand unknown
+  - "OVF" if result outside 0-4095
+  - "Err" for division by zero
+- Live/external inputs (CV, MIDI, etc.): shows "?"
+- Empty rows: shows "—"
+
+**`lastWriteValue` tracking in `useVariableUsage`:**
+- Fader writes store `extra - 1` as the known value
+- SetVar destination writes are dynamic, stored as `null`
+- Last writer (highest row index) determines the value
+
+**Files Modified:**
+- `useVariableUsage.ts` — Added `lastWriteValue` to `VariableUsageInfo`
+- `VariableMonitor.vue` — Mode toggle, `getRowSourceValue()`, Calc evaluation helper
+
+**Future enhancements:**
+- Edge case: multi-write variables (fader + SetVar to same variable) — resolve value precedence in Debugging mode
+- Calc chain evaluation depth — currently one level for variables, deeper chains deferred to Debugging mode
+- Debugging mode with Virtual Execution Engine (Phase 2)
+
 ### Phase 4.1-4.3 - Multi-Selection & Row Colors ✅
 
 - **Shift+Click** range selection
@@ -412,6 +474,73 @@ Add transport controls in header section:
 - Calculate tick interval: `tickInterval = 60000 / (BPM * 6)` ms
 - Syncs simulation to musical timing (6 ticks per step)
 - Display current tick count and cycle info
+
+### Phase 2 — Implementation Roadmap
+
+Detailed sub-phases for building the Virtual Execution Engine & Interactive Debugger.
+
+#### Phase 2.1: Execution Engine Core
+
+**Goal:** Create a standalone, testable execution engine that can evaluate all 70 mapping rows in sequence.
+
+**Key Files:**
+- `editor/src/engine/types.ts` — Shared types (`ExecutionState`, `RowResult`, `VariableState`, `InputSnapshot`)
+- `editor/src/engine/calcOperations.ts` — Pure functions for all Calc/Skip operations (reuse logic from `VariableMonitor.vue`'s `evaluateCalc`)
+- `editor/src/engine/executionEngine.ts` — Core `executeRow()` and `executeCycle()` functions; processes sources, evaluates conditions, writes destinations
+- `editor/src/engine/mockInputProvider.ts` — Generates mock data for CV, MIDI, Track, and other external source types
+
+**Scope:** Variable reads/writes, Calc arithmetic, Skip conditionals, SetVar destinations, basic MIDI CC source/destination. External/live sources use mock provider.
+
+#### Phase 2.2: Debugger Composable + Variable Monitor Integration
+
+**Goal:** Bridge the execution engine to the Vue UI via a composable, and show live execution values in the Variable Monitor.
+
+**Key Files:**
+- `editor/src/composables/useDebugger.ts` — Manages engine lifecycle (play/pause/stop/step), exposes reactive state (`currentRow`, `variableStates`, `rowResults`, `cycleCount`)
+- `editor/src/components/VariableMonitor.vue` — Enable the currently-disabled "Debugging" mode button; display live execution values from `useDebugger` instead of static analysis
+
+**Behavior:** When "Debugging" mode is active, variable values and row values update in real-time from the execution engine rather than static analysis.
+
+#### Phase 2.3: Transport Controls UI (DebuggerToolbar)
+
+**Goal:** Provide Play/Pause/Stop/Step controls and a speed slider for controlling simulation.
+
+**Key Files:**
+- `editor/src/components/DebuggerToolbar.vue` — Transport buttons (Play, Pause, Stop, Step Row, Step Cycle, Continue to breakpoint), logarithmic speed slider (1Hz–1kHz), BPM input for tick-synchronized execution
+- `editor/src/components/EditorApp.vue` — Mount toolbar, wire to `useDebugger`
+
+**Controls:** Play (Space), Pause (Space), Stop (Escape), Step Row (F10), Step Cycle (F11), Continue (F5). Speed slider with logarithmic scaling for slow-motion debugging.
+
+#### Phase 2.4: Mock Input Panel
+
+**Goal:** Allow users to configure mock input values for external sources (CV, MIDI, Triggers) during simulation.
+
+**Key Files:**
+- `editor/src/components/MockInputPanel.vue` — BasePanel-based UI with sliders/inputs for each mock source type
+- `editor/src/engine/mockInputProvider.ts` — Extended with configurable patterns (constant, ramp, random, sine)
+
+**Scope:** CV input faders, MIDI CC value inputs, trigger toggles, pattern generators for automated testing.
+
+#### Phase 2.5: Breakpoints
+
+**Goal:** Add breakpoint support to pause execution at specific rows or conditions.
+
+**Key Files:**
+- `editor/src/engine/types.ts` — `RowBreakpoint` type (unconditional, conditional, hit count)
+- `editor/src/composables/useDebugger.ts` — Breakpoint evaluation during `executeCycle()`
+- Row status column (`>` / `X`) — Click to set breakpoint type, visual shape indicators (circle/triangle/rectangle)
+
+**Breakpoint Types:** Unconditional (always pause), Conditional (pause when expression is true), Hit Count (pause after N executions).
+
+#### Phase 2.6: Execution History & Running Light
+
+**Goal:** Record execution history for replay/inspection, and show visual execution indicator on active row.
+
+**Key Files:**
+- `editor/src/engine/executionHistory.ts` — Ring buffer of last 100 cycle snapshots with full variable/row state
+- `editor/src/components/EditorApp.vue` — `.row-executing` CSS class applied to active row during simulation (yellow highlight, no comment expansion)
+
+**Features:** Timeline scrubber to rewind and inspect past states, diff view between cycles, export history as JSON.
 
 ---
 

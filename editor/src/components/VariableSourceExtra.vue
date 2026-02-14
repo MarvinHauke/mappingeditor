@@ -29,9 +29,11 @@ function checkChanged() {
         return
     }
 
-    varValue.value = EMPTY_KEY;
+    // Switch to fader/write mode with default value 0 (internal key = 1)
+    varValue.value = 0;
     disableNum.value = false;
-    model.value = new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+    const { abbr, description } = genVarSourceExtraDnA(1);
+    model.value = new SourceExtra(1, abbr, description);
 }
 
 function numChanged() {
@@ -81,8 +83,16 @@ onMounted(() => {
         varCheck.value.checked = false;
     }
 
-    disableNum.value = false
-    varValue.value = model.value.keyOrValue - 1;
+    disableNum.value = false;
+
+    // Handle EMPTY_KEY: treat as fader mode starting at 0
+    if (model.value.keyOrValue === EMPTY_KEY) {
+        varValue.value = 0;
+        const { abbr, description } = genVarSourceExtraDnA(1);
+        model.value = new SourceExtra(1, abbr, description);
+    } else {
+        varValue.value = model.value.keyOrValue - 1;
+    }
 });
 
 defineEmits(['update:modelValue']);
