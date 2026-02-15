@@ -459,6 +459,20 @@ function formatRowValue(valueStr: string): string {
   return valueStr;
 }
 
+/**
+ * Tooltip for special display values (?, NaN, OVF, Err).
+ * Returns undefined for normal numeric values (no tooltip needed).
+ */
+function getValueHint(value: string): string | undefined {
+  switch (value) {
+    case '?': return 'Value depends on live/runtime data and cannot be determined statically';
+    case 'NaN': return 'One or more operands could not be resolved for this calculation';
+    case 'OVF': return 'Arithmetic overflow: result is outside the 0–4095 range';
+    case 'Err': return 'Division by zero';
+    default: return undefined;
+  }
+}
+
 // Get row display content based on mode
 function getRowDisplayContent(row: RowLike, rowIndex: number): string {
   if (rowsDisplayMode.value === 'readers') {
@@ -680,7 +694,7 @@ function stopResize(): void {
           }"
         >
           <span class="variable-label">{{ leftLabels[idx] }}:</span>
-          <span class="variable-value">
+          <span class="variable-value" :title="getValueHint(getDisplayContent(idx))">
             <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(idx).length > 0">
               <span
                 v-for="rowIdx in getVarRowIndices(idx)"
@@ -707,7 +721,7 @@ function stopResize(): void {
           }"
         >
           <span class="variable-label">{{ rightLabels[idx] }}:</span>
-          <span class="variable-value">
+          <span class="variable-value" :title="getValueHint(getDisplayContent(8 + idx))">
             <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(8 + idx).length > 0">
               <span
                 v-for="rowIdx in getVarRowIndices(8 + idx)"
@@ -775,7 +789,7 @@ function stopResize(): void {
             'value-unknown': getRowDisplayContent(row, idx) === '?' || getRowDisplayContent(row, idx) === 'NaN',
             'value-error': getRowDisplayContent(row, idx) === 'Err',
             'value-overflow': getRowDisplayContent(row, idx) === 'OVF'
-          }">
+          }" :title="getValueHint(getRowDisplayContent(row, idx))">
             <template v-if="rowsDisplayMode === 'readers' && getRowReaderIndices(idx).length > 0">
               <span
                 v-for="rowIdx in getRowReaderIndices(idx)"
