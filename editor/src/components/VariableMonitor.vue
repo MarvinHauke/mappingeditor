@@ -105,7 +105,7 @@ onMounted(() => {
   const savedVariablesHeight = localStorage.getItem(VARIABLES_HEIGHT_KEY);
   if (savedVariablesHeight !== null) {
     const height = parseInt(savedVariablesHeight, 10);
-    if (!isNaN(height) && height >= 50 && height <= 600) {
+    if (!isNaN(height) && height >= 24 && height <= 600) {
       variablesHeight.value = height;
     }
   }
@@ -501,9 +501,9 @@ function handleVariablesResize(event: MouseEvent): void {
   const deltaY = event.clientY - resizeStartY2.value;
   const newHeight = resizeStartHeight2.value + deltaY;
 
-  // Allow resizing between 50px and the actual content height needed
+  // Allow resizing between 24px (approx one row) and the actual content height needed
   const maxHeight = getMaxVariablesHeight();
-  variablesHeight.value = Math.max(50, Math.min(maxHeight, newHeight));
+  variablesHeight.value = Math.max(24, Math.min(maxHeight, newHeight));
 }
 
 function stopVariablesResize(): void {
@@ -877,7 +877,7 @@ function stopResize(): void {
 .variables-container {
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 80px;
+  min-height: 24px;
   padding-right: 2px;
   flex-shrink: 0;
 }
