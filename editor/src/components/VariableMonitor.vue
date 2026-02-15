@@ -60,12 +60,13 @@ const rowsDisplayMode = ref<RowsDisplayMode>('values');
 const ROWS_SUBSECTION_EXPANDED_KEY = 'variable-rows-subsection-expanded';
 const ROWS_DISPLAY_MODE_KEY = 'variable-rows-display-mode';
 
-// Variables section height state
+// Variables section height state (flexible resizing)
 const variablesHeight = ref<number | null>(null);
 const VARIABLES_HEIGHT_KEY = 'variable-monitor-variables-height';
 const isResizingVariables = ref(false);
 const resizeStartY2 = ref(0);
 const resizeStartHeight2 = ref(0);
+const minVariablesHeightNeeded = ref(0); // Calculated based on content
 
 // Rows section height state (not whole panel)
 const rowsHeight = ref(200);
@@ -104,7 +105,7 @@ onMounted(() => {
   const savedVariablesHeight = localStorage.getItem(VARIABLES_HEIGHT_KEY);
   if (savedVariablesHeight !== null) {
     const height = parseInt(savedVariablesHeight, 10);
-    if (!isNaN(height) && height >= 80 && height <= 400) {
+    if (!isNaN(height) && height >= 50 && height <= 600) {
       variablesHeight.value = height;
     }
   }
@@ -153,6 +154,12 @@ const useSingleColumn = computed(() => {
   return valueFormat.value === 'binary';
 });
 
+// Detect if scrolling is needed in variables container
+const variablesNeedScroll = computed(() => {
+  // Will be set dynamically based on actual content height
+  return minVariablesHeightNeeded.value > 0;
+});
+
 // Split variables based on layout mode
 const leftColumn = computed(() => {
   return useSingleColumn.value ? props.variables : props.variables.slice(0, 8);
@@ -178,7 +185,7 @@ function formatValue(value: number, format: ValueFormat): string {
     case 'binary':
       return value.toString(2).padStart(12, '0'); // 12-bit binary
     case 'boolean':
-      return value === 0 ? '0' : '1';
+      return value === 0 ? 'false:0' : 'true:1';
     case 'decimal':
     default:
       return value.toString(); // 0-4095
@@ -428,6 +435,29 @@ function getRowSourceValue(row: RowLike): string {
   return '?';
 }
 
+// Format a numeric row value according to current display format
+function formatRowValue(valueStr: string): string {
+  // Handle special cases (?, —, OVF, Err, NaN)
+  if (valueStr === '?' || valueStr === '—' || valueStr === 'OVF' || valueStr === 'Err' || valueStr === 'NaN') {
+    return valueStr;
+  }
+
+  const value = parseInt(valueStr, 10);
+  if (isNaN(value)) return valueStr;
+
+  // Apply current format
+  if (valueFormat.value === 'hex') {
+    return value.toString(16).toUpperCase().padStart(3, '0');
+  } else if (valueFormat.value === 'binary') {
+    return value.toString(2).padStart(12, '0');
+  } else if (valueFormat.value === 'boolean') {
+    return value === 0 ? 'false:0' : 'true:1';
+  }
+
+  // Decimal (default)
+  return valueStr;
+}
+
 // Get row display content based on mode
 function getRowDisplayContent(row: RowLike, rowIndex: number): string {
   if (rowsDisplayMode.value === 'readers') {
@@ -435,10 +465,22 @@ function getRowDisplayContent(row: RowLike, rowIndex: number): string {
     return readers.length > 0 ? readers.map(formatRowIndex).join(', ') : '—';
   } else {
     if (valueSourceMode.value === 'current') {
-      return getRowSourceValue(row);
+      return formatRowValue(getRowSourceValue(row));
     }
     return '—';
   }
+}
+
+// Calculate the maximum height needed to show all variables without scrolling
+function getMaxVariablesHeight(): number {
+  const variablesContainer = document.querySelector('.variables-container') as HTMLElement;
+  if (!variablesContainer) return 600;
+
+  // Get the actual scrollHeight (total content height)
+  const scrollHeight = variablesContainer.scrollHeight;
+
+  // Return the scroll height as max, cap at 600px absolute max
+  return Math.min(scrollHeight, 600);
 }
 
 // Resize variables section
@@ -459,8 +501,9 @@ function handleVariablesResize(event: MouseEvent): void {
   const deltaY = event.clientY - resizeStartY2.value;
   const newHeight = resizeStartHeight2.value + deltaY;
 
-  // Constrain between min and max heights
-  variablesHeight.value = Math.max(80, Math.min(400, newHeight));
+  // Allow resizing between 50px and the actual content height needed
+  const maxHeight = getMaxVariablesHeight();
+  variablesHeight.value = Math.max(50, Math.min(maxHeight, newHeight));
 }
 
 function stopVariablesResize(): void {
@@ -956,14 +999,14 @@ function stopResize(): void {
 
 /* Variables resize handle - between variables and rows */
 .variables-resize-handle {
-  margin-bottom: 2px;
+  margin: 0;
 }
 
 /* Rows Subsection */
 .rows-subsection {
   display: flex;
   flex-direction: column;
-  margin-top: 8px;
+  margin-top: 0;
   flex-shrink: 0;
 }
 
@@ -973,10 +1016,11 @@ function stopResize(): void {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 4px 4px 6px 4px;
+  padding: 4px 4px 4px 4px;
   border-top: 1px solid rgba(52, 204, 153, 0.3);
   cursor: pointer;
   user-select: none;
+  margin: 0;
 }
 
 .rows-divider:hover .divider-title {
