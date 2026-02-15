@@ -5,6 +5,7 @@
 import type { Command, SerializedCommand, DeserializationContext } from './Command';
 import { SetRowColorCommand } from './SetRowColorCommand';
 import { SetRowCommentCommand } from './SetRowCommentCommand';
+import { useWarningLog } from '../composables/useWarningLog';
 
 /**
  * Deserialize a command from storage
@@ -20,11 +21,12 @@ export function deserializeCommand(
       case 'SetRowCommentCommand':
         return SetRowCommentCommand.fromJSON(serialized.payload, context);
       default:
-        console.warn(`Unknown command type: ${serialized.type}`);
+        useWarningLog().addDebug('command', `Unknown command type: ${serialized.type} — skipped`);
         return null;
     }
   } catch (error) {
-    console.error('Failed to deserialize command:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    useWarningLog().addDebug('command', `Failed to deserialize command: ${errorMsg}`);
     return null;
   }
 }

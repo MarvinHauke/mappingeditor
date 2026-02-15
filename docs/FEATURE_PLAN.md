@@ -163,6 +163,48 @@ A simulation and debugging system for the Mapping Editor that allows users to va
 - Warning Log panel (`useWarningLog.ts`)
 - Add subfolding for warnings which contain several references.
 
+### Phase 1.2.3 - LogMonitor Enhancements & Debug Log Tier ✅
+
+**Status:** ✅ **IMPLEMENTED** (2026-02-15)
+
+Two improvements shipped together:
+
+#### LogMonitor UI Improvements
+
+- **Child entry expansion**: Analyzer log entries now carry child entries (one per warning). A collapse/expand arrow appears when children exist. Multiple entries can be expanded simultaneously (migrated from single `expandedEntryId` to `expandedEntryIds: Set<number>`).
+- **Download button**: New `↓` button exports the full session log as a `.txt` file. Includes all entries (debug tier included) plus the undo history for the active slot.
+- **`runAnalysis()` wrapper in EditorApp**: Analyzer results are now posted as a single log entry with children, instead of individual per-warning entries. Triggered on file load and via the "Analyze" button.
+
+#### Debug Log Tier
+
+Adds a `'debug'` log type and routes 19 previously-invisible `console.*` calls through the logging system:
+
+- **`useWarningLog.ts`**: `'debug'` added to `LogEntryType`; `'midi'` and `'command'` added to `LogEntrySource`; `addDebug()` helper added; debug entries are excluded from `filteredEntries` (never shown in the monitor UI, but always included in the downloaded file).
+- **`useFileHandling.ts`** (8 calls): File load start/success → `addDebug`; parse errors → `addError` (visible in monitor).
+- **`useMidi.ts`** (2 calls): MIDI init success → `addDebug`; access denied → `addError` (visible in monitor).
+- **`useActionHistory.ts`** (7 calls): Command/undo/redo failures → `addError`; IndexedDB issues and lock-blocked operations → `addDebug`.
+- **`commands/index.ts`** (2 calls): Deserialization failures → `addDebug`.
+
+**What the downloaded log now includes:**
+
+```
+[15:00:01] ERROR   system    — Failed to parse .map file: Unexpected end of data
+[15:00:00] DEBUG   system    — Loading .map file: mapping.map (1502 bytes)
+[14:59:58] DEBUG   midi      — MIDI enabled: 2 input(s) found
+[14:59:55] DEBUG   command   — Cannot undo: Slot A is locked
+```
+
+DEBUG entries appear only in the downloaded file, never in the LogMonitor UI.
+
+**Files Modified:**
+- `useWarningLog.ts` — New type, source values, `addDebug()`, filter exclusion
+- `useFileHandling.ts` — 8 console calls replaced
+- `useMidi.ts` — 2 console calls replaced
+- `useActionHistory.ts` — 7 console calls replaced
+- `commands/index.ts` — 2 console calls replaced
+- `LogMonitor.vue` — Download button, child entry rendering, multi-expand, debug label in download format, `getTypeColor` for debug type
+- `EditorApp.vue` — `runAnalysis()` wrapper, `LogChildEntry` import
+
 #### 1.2.1 "Noticed" Warning System ✅
 
 **Status:** ✅ **IMPLEMENTED** (2026-02-11)

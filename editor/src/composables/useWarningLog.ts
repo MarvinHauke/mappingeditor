@@ -3,12 +3,22 @@ import { ref, computed, type ComputedRef, type Ref } from 'vue';
 /**
  * Log entry types
  */
-export type LogEntryType = 'info' | 'warning' | 'error';
+export type LogEntryType = 'info' | 'warning' | 'error' | 'debug';
 
 /**
  * Log entry sources
  */
-export type LogEntrySource = 'analyzer' | 'reference' | 'system';
+export type LogEntrySource = 'analyzer' | 'reference' | 'system' | 'midi' | 'command';
+
+/**
+ * A child entry within a summary log entry (no id/timestamp/noticed state)
+ */
+export interface LogChildEntry {
+  type: LogEntryType;
+  message: string;
+  rowIndex?: number;
+  details?: string;
+}
 
 /**
  * A log entry in the warning log
@@ -23,6 +33,7 @@ export interface LogEntry {
   details?: string;
   noticed?: boolean;
   analyzerWarningId?: string;
+  children?: LogChildEntry[];
 }
 
 /**
@@ -39,6 +50,7 @@ export interface UseWarningLogReturn {
   addInfo: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
   addWarning: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
   addError: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
+  addDebug: (source: LogEntrySource, message: string, rowIndex?: number, details?: string) => number;
   clearLog: () => void;
   filterByType: Ref<Set<LogEntryType>>;
   filterBySource: Ref<Set<LogEntrySource>>;
@@ -112,7 +124,7 @@ export function useWarningLog(): UseWarningLogReturn {
 
   // Active filters
   const filterByType = ref<Set<LogEntryType>>(new Set(['info', 'warning', 'error']));
-  const filterBySource = ref<Set<LogEntrySource>>(new Set(['analyzer', 'reference', 'system']));
+  const filterBySource = ref<Set<LogEntrySource>>(new Set(['analyzer', 'reference', 'system', 'midi', 'command']));
   const showNoticed = ref<boolean>(true);
 
   /**
@@ -120,6 +132,7 @@ export function useWarningLog(): UseWarningLogReturn {
    */
   const filteredEntries = computed(() => {
     return entries.value.filter(entry =>
+      entry.type !== 'debug' &&
       filterByType.value.has(entry.type) &&
       filterBySource.value.has(entry.source) &&
       (showNoticed.value || !entry.noticed)
@@ -189,6 +202,13 @@ export function useWarningLog(): UseWarningLogReturn {
   }
 
   /**
+   * Add a debug entry (stored in entries and downloadable, but never shown in the monitor UI)
+   */
+  function addDebug(source: LogEntrySource, message: string, rowIndex?: number, details?: string): number {
+    return addEntry({ type: 'debug', source, message, rowIndex, details });
+  }
+
+  /**
    * Mark a log entry as noticed
    */
   function noticeEntry(id: number): void {
@@ -219,6 +239,7 @@ export function useWarningLog(): UseWarningLogReturn {
     addInfo,
     addWarning,
     addError,
+    addDebug,
     clearLog,
     filterByType,
     filterBySource,
@@ -231,7 +252,7 @@ export function useWarningLog(): UseWarningLogReturn {
     unnoticeEntry
   };
 
-  return instance;
+  return instance!;
 }
 
 /**

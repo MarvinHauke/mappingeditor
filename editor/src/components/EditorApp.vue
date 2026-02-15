@@ -35,7 +35,7 @@ import ToastNotifications from './ToastNotifications.vue';
 import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
-import { useWarningLog } from '../composables/useWarningLog';
+import { useWarningLog, type LogChildEntry } from '../composables/useWarningLog';
 import { useMappingCache } from '../composables/useMappingCache';
 import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
 import { useVariableUsage } from '../composables/useVariableUsage';
@@ -598,11 +598,42 @@ function init() {
     }
   }
   // Run static analysis after loading
-  analyzeDocument();
+  runAnalysis();
 
   // Show toast if warnings found
   if (warningCount.value > 0) {
     showToast(`Analysis found ${warningCount.value} warning${warningCount.value !== 1 ? 's' : ''}`, 'warning', 4000);
+  }
+}
+
+function runAnalysis(): void {
+  analyzeDocument();
+
+  // Collect all current warnings as child entries
+  const children: LogChildEntry[] = [];
+  for (const rowWarnings of analyzerWarnings.value.values()) {
+    for (const warning of rowWarnings) {
+      children.push({
+        type: warning.severity === 'error' ? 'error'
+            : warning.severity === 'warning' ? 'warning'
+            : 'info',
+        message: warning.message,
+        rowIndex: warning.rowIndex,
+        details: warning.details,
+      });
+    }
+  }
+
+  if (children.length > 0) {
+    const hasErrors = children.some(c => c.type === 'error');
+    logAddEntry({
+      type: hasErrors ? 'error' : 'warning',
+      source: 'analyzer',
+      message: `Analysis: ${children.length} issue${children.length !== 1 ? 's' : ''} found`,
+      children,
+    });
+  } else {
+    logInfo('analyzer', 'Analysis complete — no issues found');
   }
 }
 
@@ -893,7 +924,7 @@ function downloadMap() {
         border-radius="none"
         class="position-relative analyze-btn"
         :class="{ 'analyze-warning': warningCount > 0 }"
-        @click="analyzeDocument"
+        @click="runAnalysis"
         title="Run static analysis to detect potential issues"
       >
         Analyze

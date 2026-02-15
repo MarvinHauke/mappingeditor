@@ -2,8 +2,9 @@
  * Action History Composable - Per-Slot Undo/Redo with IndexedDB Persistence
  */
 
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue';
+import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import type { CacheSlot } from './useMappingCache';
+import { useWarningLog } from './useWarningLog';
 import type { Command, CommandResult, CommandMetadata, SerializedCommand } from '../commands/Command';
 import type { DeserializationContext } from '../commands/Command';
 import { deserializeCommand } from '../commands';
@@ -128,7 +129,8 @@ async function saveHistoryToIndexedDB(
       };
     });
   } catch (error) {
-    console.error(`Failed to save undo history for Slot ${slot}:`, error);
+    const { addDebug } = useWarningLog();
+    addDebug('command', `Failed to save undo history for Slot ${slot}`);
   }
 }
 
@@ -177,7 +179,8 @@ async function loadHistoryFromIndexedDB(
 
     return { undoStack, redoStack };
   } catch (error) {
-    console.error(`Failed to load undo history for Slot ${slot}:`, error);
+    const { addDebug } = useWarningLog();
+    addDebug('command', `Failed to load undo history for Slot ${slot}`);
     return { undoStack: [], redoStack: [] };
   }
 }
@@ -316,10 +319,11 @@ export function useActionHistory(
 
       return { success: true };
     } catch (error) {
-      console.error('Command execution failed:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      useWarningLog().addError('command', `Command failed: ${errorMsg}`);
       return {
         success: false,
-        error: error instanceof Error ? error.message : String(error)
+        error: errorMsg
       };
     }
   }
@@ -330,7 +334,7 @@ export function useActionHistory(
   function undo(): void {
     if (!canUndo.value) return;
     if (isCurrentSlotLocked.value) {
-      console.warn(`Cannot undo: Slot ${activeSlot.value} is locked`);
+      useWarningLog().addDebug('command', `Cannot undo: Slot ${activeSlot.value} is locked`);
       return;
     }
 
@@ -348,7 +352,8 @@ export function useActionHistory(
         onUndo(cmd, activeSlot.value);
       }
     } catch (error) {
-      console.error('Undo failed:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      useWarningLog().addError('command', `Undo failed: ${errorMsg}`);
       // Re-add to undo stack on failure
       history.undoStack.push(cmd);
     }
@@ -360,7 +365,7 @@ export function useActionHistory(
   function redo(): void {
     if (!canRedo.value) return;
     if (isCurrentSlotLocked.value) {
-      console.warn(`Cannot redo: Slot ${activeSlot.value} is locked`);
+      useWarningLog().addDebug('command', `Cannot redo: Slot ${activeSlot.value} is locked`);
       return;
     }
 
@@ -378,7 +383,8 @@ export function useActionHistory(
         onRedo(cmd, activeSlot.value);
       }
     } catch (error) {
-      console.error('Redo failed:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      useWarningLog().addError('command', `Redo failed: ${errorMsg}`);
       // Re-add to redo stack on failure
       history.redoStack.push(cmd);
     }
@@ -429,6 +435,13 @@ export function useActionHistory(
     activeSlot: computed(() => activeSlot.value)
   };
 
+  return instance;
+}
+
+/**
+ * Get the current singleton instance without requiring options (read-only access)
+ */
+export function getActionHistory(): UseActionHistoryReturn | null {
   return instance;
 }
 

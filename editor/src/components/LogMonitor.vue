@@ -3,6 +3,7 @@ import { ref, computed } from 'vue';
 import BasePanel from './BasePanel.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
 import { usePanelLayout } from '../composables/usePanelLayout';
+import { getActionHistory } from '../composables/useActionHistory';
 
 const props = defineProps<{
   displayRowIndexAsHex: boolean;
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 }>();
 
 const {
+  entries,
   filteredEntries,
   filterByType,
   filterBySource,
@@ -28,8 +30,12 @@ const {
   unnoticeEntry
 } = useWarningLog();
 
-// Selected entry for expanded details view
-const expandedEntryId = ref<number | null>(null);
+// Selected entries for expanded details view (supports multiple expanded simultaneously)
+const expandedEntryIds = ref<Set<number>>(new Set());
+
+function isExpanded(entry: LogEntry): boolean {
+  return expandedEntryIds.value.has(entry.id);
+}
 
 // Dynamic sizing: stop automatic growth after 3 messages
 const MESSAGE_THRESHOLD = 3;
@@ -90,11 +96,12 @@ function toggleExpanded(entry: LogEntry): void {
     handleUnnotice(entry);
     return;
   }
-  if (expandedEntryId.value === entry.id) {
-    expandedEntryId.value = null;
+  if (expandedEntryIds.value.has(entry.id)) {
+    expandedEntryIds.value.delete(entry.id);
   } else {
-    expandedEntryId.value = entry.id;
+    expandedEntryIds.value.add(entry.id);
   }
+  expandedEntryIds.value = new Set(expandedEntryIds.value); // trigger reactivity
 }
 
 // Handle click on row number
@@ -128,7 +135,72 @@ function getTypeColor(type: LogEntryType): string {
     case 'info': return '#34cc99';
     case 'warning': return '#ffc107';
     case 'error': return '#dc3545';
+    case 'debug': return '#6c757d';
   }
+}
+
+function downloadLog(): void {
+  const lines: string[] = [
+    'NerdSEQ Mapping Editor \u2014 Session Log',
+    `Generated: ${new Date().toLocaleString()}`,
+    '='.repeat(40),
+    '',
+  ];
+
+  for (const entry of entries.value) {
+    const time = formatTime(entry.timestamp);
+    const type = entry.type === 'debug'
+      ? 'DEBUG  '
+      : entry.type.toUpperCase().padEnd(7);
+    const source = entry.source.padEnd(9);
+    const row = entry.rowIndex !== undefined ? ` R${formatRowIndex(entry.rowIndex)}` : '';
+    lines.push(`[${time}] ${type} ${source}${row} \u2014 ${entry.message}`);
+    if (entry.details) {
+      lines.push(`         ${entry.details}`);
+    }
+    if (entry.children) {
+      for (const child of entry.children) {
+        const childType = child.type.toUpperCase().padEnd(7);
+        const childRow = child.rowIndex !== undefined ? ` R${formatRowIndex(child.rowIndex)}` : '';
+        lines.push(`  >      ${childType}${childRow} \u2014 ${child.message}`);
+      }
+    }
+    lines.push('');
+  }
+
+  // Append undo history if available
+  const actionHistory = getActionHistory();
+  if (actionHistory) {
+    const historyItems = actionHistory.history.value;
+    const slot = actionHistory.activeSlot.value;
+    lines.push('='.repeat(40));
+    lines.push(`Undo History \u2014 Slot ${slot} (${historyItems.length} action${historyItems.length !== 1 ? 's' : ''})`);
+    lines.push('');
+    if (historyItems.length === 0) {
+      lines.push('  (empty)');
+    } else {
+      historyItems.forEach((item, index) => {
+        const time = new Date(item.timestamp).toLocaleTimeString('en-US', {
+          hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        const rows = item.affectedRows.length > 0
+          ? ` [R${item.affectedRows.map(r => formatRowIndex(r)).join(', R')}]`
+          : '';
+        lines.push(`  ${(index + 1).toString().padStart(2)}. [${time}] ${item.type}${rows} \u2014 ${item.description}`);
+      });
+    }
+    lines.push('');
+  }
+
+  const content = lines.join('\n');
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  link.href = url;
+  link.download = `nerdseq-log-${ts}.txt`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function onExpandedChange(expanded: boolean): void {
@@ -226,6 +298,14 @@ const panelTitle = computed(() => {
           </button>
         </div>
         <button
+          class="download-btn"
+          @click="downloadLog"
+          title="Download log + undo history as text file"
+          :disabled="entryCount === 0"
+        >
+          &#8595;
+        </button>
+        <button
           class="clear-btn"
           @click="clearLog"
           title="Clear all entries"
@@ -246,12 +326,17 @@ const panelTitle = computed(() => {
           v-for="entry in filteredEntries"
           :key="entry.id"
           class="log-entry"
-          :class="{ expanded: expandedEntryId === entry.id, noticed: entry.noticed }"
+          :class="{ expanded: isExpanded(entry), noticed: entry.noticed }"
           @click="toggleExpanded(entry)"
         >
           <div class="entry-header">
             <span class="type-indicator" :style="{ background: getTypeColor(entry.type) }"></span>
             <span v-if="entry.noticed" class="noticed-icon" title="Noticed — click to un-notice">&#10003;</span>
+            <span
+              v-if="entry.children && entry.children.length"
+              class="expand-arrow"
+              :class="{ expanded: isExpanded(entry) }"
+            >&#9654;</span>
             <span class="entry-time">{{ formatTime(entry.timestamp) }}</span>
             <span class="entry-source">{{ entry.source.charAt(0).toUpperCase() }}</span>
             <span
@@ -264,8 +349,29 @@ const panelTitle = computed(() => {
             </span>
           </div>
           <div class="entry-message">{{ entry.message }}</div>
-          <div v-if="expandedEntryId === entry.id && entry.details" class="entry-details">
+          <div v-if="isExpanded(entry) && entry.details" class="entry-details">
             {{ entry.details }}
+          </div>
+          <div
+            v-if="isExpanded(entry) && entry.children && entry.children.length"
+            class="entry-children"
+          >
+            <div
+              v-for="(child, idx) in entry.children"
+              :key="idx"
+              class="child-entry"
+            >
+              <span class="type-indicator" :style="{ background: getTypeColor(child.type) }"></span>
+              <span
+                v-if="child.rowIndex !== undefined"
+                class="entry-row"
+                @click.stop="handleRowClick(child.rowIndex)"
+                title="Click to scroll to row"
+              >
+                R{{ formatRowIndex(child.rowIndex) }}
+              </span>
+              <span class="child-message">{{ child.message }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -414,5 +520,59 @@ const panelTitle = computed(() => {
 .error-badge {
   background: #dc3545;
   color: #fff;
+}
+
+.expand-arrow {
+  font-size: 8px;
+  color: rgba(52, 204, 153, 0.7);
+  display: inline-block;
+  transition: transform 0.15s ease;
+  transform: rotate(0deg);
+  margin-right: 2px;
+}
+
+.expand-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.entry-children {
+  margin-top: 4px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(52, 204, 153, 0.2);
+}
+
+.child-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.child-message {
+  font-size: 9px;
+  color: rgba(52, 204, 153, 0.8);
+  line-height: 1.3;
+  word-break: break-word;
+  flex: 1;
+}
+
+.download-btn {
+  font-size: 14px;
+  padding: 2px 6px;
+  background: rgba(52, 204, 153, 0.1);
+  border: 1px solid rgba(52, 204, 153, 0.3);
+  color: #34cc99;
+  border-radius: 3px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.download-btn:hover:not(:disabled) {
+  background: rgba(52, 204, 153, 0.2);
+}
+
+.download-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>

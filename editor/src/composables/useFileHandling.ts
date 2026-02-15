@@ -1,5 +1,6 @@
 import type { Ref } from 'vue';
 import Ajv from 'ajv';
+import { useWarningLog } from './useWarningLog';
 import {
   DataModel, type MappingTuple, type MappingType,
   EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION
@@ -47,6 +48,8 @@ export function useFileHandling(options: UseFileHandlingOptions) {
     showToast
   } = options;
 
+  const { addDebug, addError } = useWarningLog();
+
   function readFile() {
     const file = fileInput.value?.files?.[0];
 
@@ -65,19 +68,20 @@ export function useFileHandling(options: UseFileHandlingOptions) {
         reader.onload = async function (e: any) {
           try {
             const fileData = new Uint8Array(e.target.result);
-            console.log(`Loading .map file: ${file.name}, size: ${fileData.length} bytes`);
+            addDebug('system', `Loading .map file: ${file.name} (${fileData.length} bytes)`);
             mappingDocument.value = MappingDocumentParser.parse(fileData);
             init();
             clearCurrentHistory(); // Clear undo history after loading new file
-            console.log('.map file loaded successfully');
+            addDebug('system', '.map file loaded successfully');
             showToast(`Loaded ${file.name} successfully`, 'success', 3000);
             // Clear file input to allow reloading the same file
             if (fileInput.value) {
               fileInput.value.value = '';
             }
           } catch (error) {
-            console.error('Error parsing .map file:', error);
-            alert(`Error loading .map file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes\n\nCheck console for details.`);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addError('system', `Failed to parse .map file: ${errorMsg}`);
+            alert(`Error loading .map file: ${errorMsg}\n\nFile: ${file.name}\nSize: ${e.target.result.byteLength} bytes`);
           }
         };
         break;
@@ -87,7 +91,7 @@ export function useFileHandling(options: UseFileHandlingOptions) {
         reader.onload = function (e: any) {
           try {
             const fileData = e.target.result;
-            console.log(`Loading .json file: ${file.name}, size: ${fileData.length} chars`);
+            addDebug('system', `Loading .json file: ${file.name} (${fileData.length} chars)`);
             const jsonData = JSON.parse(fileData);
 
             // Validate the JSON file against the schema
@@ -95,8 +99,9 @@ export function useFileHandling(options: UseFileHandlingOptions) {
             const validate = ajv().compile(schema);
             const isValid = validate(jsonData);
             if (!isValid) {
-              console.error('JSON Schema validation failed:', validate.errors);
-              alert(`Invalid JSON file structure!\n\nValidation errors:\n${validate.errors?.map(err => `• ${err.instancePath || 'root'}: ${err.message}`).join('\n')}\n\nCheck console for full details.`);
+              const validationDetails = validate.errors?.map(err => `• ${err.instancePath || 'root'}: ${err.message}`).join('\n');
+              addError('system', 'JSON schema validation failed', undefined, validationDetails);
+              alert(`Invalid JSON file structure!\n\nValidation errors:\n${validationDetails}`);
               return;
             }
 
@@ -224,18 +229,19 @@ export function useFileHandling(options: UseFileHandlingOptions) {
             mappingDocument.value = mappingDoc;
             init();
             clearCurrentHistory(); // Clear undo history after loading new file
-            console.log('.json file loaded successfully');
+            addDebug('system', '.json file loaded successfully');
             showToast(`Loaded ${file.name} successfully`, 'success', 3000);
             // Clear file input to allow reloading the same file
             if (fileInput.value) {
               fileInput.value.value = '';
             }
           } catch (error) {
-            console.error('Error parsing .json file:', error);
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            addError('system', `Failed to parse .json file: ${errorMsg}`);
             if (error instanceof SyntaxError) {
               alert(`JSON Parse Error: ${error.message}\n\nFile: ${file.name}\n\nThe file may be corrupted or not valid JSON.`);
             } else {
-              alert(`Error loading .json file: ${error instanceof Error ? error.message : String(error)}\n\nFile: ${file.name}\n\nCheck console for details.`);
+              alert(`Error loading .json file: ${errorMsg}\n\nFile: ${file.name}`);
             }
           }
         };
@@ -246,7 +252,7 @@ export function useFileHandling(options: UseFileHandlingOptions) {
     }
 
     reader.onerror = function (e: any) {
-      console.error('FileReader error:', e);
+      addError('system', 'FileReader error reading file');
       alert(`File reading error: ${e.target.error.name}\n\nFile: ${file.name}`);
     }
   }

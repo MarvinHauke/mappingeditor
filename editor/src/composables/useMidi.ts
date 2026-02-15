@@ -1,4 +1,5 @@
 import { ref, readonly } from 'vue'
+import { useWarningLog } from './useWarningLog'
 
 // Type Definitions
 export interface ParsedMidiMessage {
@@ -290,9 +291,10 @@ export function useMidi() {
         }
       }) as any
 
-      console.log('MIDI enabled:', inputs.value.length, 'input(s) found')
+      useWarningLog().addDebug('midi', `MIDI enabled: ${inputs.value.length} input(s) found`)
     } catch (error) {
-      console.error('MIDI access denied:', error)
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      useWarningLog().addError('midi', `MIDI access denied: ${errorMsg}`)
       throw new Error('MIDI access denied. Please grant permission in browser settings.')
     }
   }
