@@ -74,6 +74,7 @@ const ROWS_HEIGHT_KEY = 'variable-monitor-rows-height';
 const isResizing = ref(false);
 const resizeStartY = ref(0);
 const resizeStartHeight = ref(0);
+const maxRowsHeight = ref(0); // Calculated based on content
 
 // Load preferences from localStorage
 onMounted(() => {
@@ -113,7 +114,7 @@ onMounted(() => {
   const savedHeight = localStorage.getItem(ROWS_HEIGHT_KEY);
   if (savedHeight !== null) {
     const height = parseInt(savedHeight, 10);
-    if (!isNaN(height) && height >= 100 && height <= 800) {
+    if (!isNaN(height) && height >= 24 && height <= 800) {
       rowsHeight.value = height;
     }
   }
@@ -526,14 +527,26 @@ function startResize(event: MouseEvent): void {
   event.preventDefault();
 }
 
+function getMaxRowsHeight(): number {
+  const rowsContainer = document.querySelector('.rows-container') as HTMLElement;
+  if (!rowsContainer) return 800;
+
+  // Get the actual scrollHeight (total content height)
+  const scrollHeight = rowsContainer.scrollHeight;
+
+  // Return the scroll height as max, cap at 800px absolute max
+  return Math.min(scrollHeight, 800);
+}
+
 function handleResize(event: MouseEvent): void {
   if (!isResizing.value) return;
 
   const deltaY = event.clientY - resizeStartY.value;
   const newHeight = resizeStartHeight.value + deltaY;
 
-  // Constrain between min and max heights for rows section only
-  rowsHeight.value = Math.max(100, Math.min(800, newHeight));
+  // Allow resizing between 24px (one row) and the actual content height needed
+  const maxHeight = getMaxRowsHeight();
+  rowsHeight.value = Math.max(24, Math.min(maxHeight, newHeight));
 }
 
 function stopResize(): void {
@@ -1073,6 +1086,7 @@ function stopResize(): void {
   overflow-x: hidden;
   padding: 4px 2px 0 2px;
   flex-shrink: 0;
+  min-height: 24px;
 }
 
 
