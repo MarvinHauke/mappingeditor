@@ -8,6 +8,39 @@ import {
 } from '../modules/documentModel';
 import type { CachedMapping, CacheSlot } from './useMappingCache';
 
+// Pre-indexed lookup tables for O(1) type/function resolution during deserialization.
+// Built lazily on first use, then cached for the lifetime of the page.
+
+interface TypeIndex {
+  type: MappingType;
+  functions: Map<number, MappingTuple>;
+}
+
+function buildTypeIndex(types: MappingType[]): Map<number, TypeIndex> {
+  const map = new Map<number, TypeIndex>();
+  for (const t of types) {
+    const funcMap = new Map<number, MappingTuple>();
+    for (const f of t.functions) {
+      funcMap.set(f.key, f);
+    }
+    map.set(t.key, { type: t, functions: funcMap });
+  }
+  return map;
+}
+
+let _srcIndex: Map<number, TypeIndex> | null = null;
+let _destIndex: Map<number, TypeIndex> | null = null;
+
+function getSourceTypeIndex(): Map<number, TypeIndex> {
+  if (!_srcIndex) _srcIndex = buildTypeIndex(DataModel.sourceTypes as MappingType[]);
+  return _srcIndex;
+}
+
+function getDestTypeIndex(): Map<number, TypeIndex> {
+  if (!_destIndex) _destIndex = buildTypeIndex(DataModel.destinationTypes as MappingType[]);
+  return _destIndex;
+}
+
 interface MappingDocumentLike {
   header: {
     headerText: string;
@@ -117,18 +150,22 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
     doc.header.minorVersion = cached.document.header.minorVersion;
     doc.header.fileName = cached.document.header.fileName;
 
-    // Restore rows
+    // Restore rows using pre-indexed lookups for O(1) type/function resolution
+    const srcIndex = getSourceTypeIndex();
+    const destIndex = getDestTypeIndex();
+
     cached.document.rows.forEach((serialized, i) => {
       if (i < doc.rows.length) {
         const row = doc.rows[i];
 
         // Source
-        const sourceTypeData = DataModel.sourceTypes.find(st => st.key === serialized.sourceType);
-        if (sourceTypeData) {
-          row.source.type = new SourceType(sourceTypeData.key, sourceTypeData.abbr, sourceTypeData.description);
-          currentlySelectedSourceTypes.value[i] = sourceTypeData as MappingType;
+        const sourceEntry = srcIndex.get(serialized.sourceType);
+        if (sourceEntry) {
+          const st = sourceEntry.type;
+          row.source.type = new SourceType(st.key, st.abbr, st.description);
+          currentlySelectedSourceTypes.value[i] = st;
 
-          const sourceFuncData = sourceTypeData.functions.find((f: MappingTuple) => f.key === serialized.sourceFunction);
+          const sourceFuncData = sourceEntry.functions.get(serialized.sourceFunction);
           if (sourceFuncData) {
             row.source.function = new SourceFunction(sourceFuncData.key, sourceFuncData.abbr, sourceFuncData.description);
           }
@@ -137,12 +174,13 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
         }
 
         // Destination
-        const destTypeData = DataModel.destinationTypes.find(dt => dt.key === serialized.destinationType);
-        if (destTypeData) {
-          row.destination.type = new DestinationType(destTypeData.key, destTypeData.abbr, destTypeData.description);
-          currentlySelectedDestinationTypes.value[i] = destTypeData as MappingType;
+        const destEntry = destIndex.get(serialized.destinationType);
+        if (destEntry) {
+          const dt = destEntry.type;
+          row.destination.type = new DestinationType(dt.key, dt.abbr, dt.description);
+          currentlySelectedDestinationTypes.value[i] = dt;
 
-          const destFuncData = destTypeData.functions.find((f: MappingTuple) => f.key === serialized.destinationFunction);
+          const destFuncData = destEntry.functions.get(serialized.destinationFunction);
           if (destFuncData) {
             row.destination.function = new DestinationFunction(destFuncData.key, destFuncData.abbr, destFuncData.description);
           }
