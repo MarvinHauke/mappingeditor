@@ -4,6 +4,10 @@ import BasePanel from './BasePanel.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
 import { usePanelLayout } from '../composables/usePanelLayout';
 
+const props = defineProps<{
+  displayRowIndexAsHex: boolean;
+}>();
+
 const { logRight } = usePanelLayout();
 
 const emit = defineEmits<{
@@ -98,6 +102,14 @@ function handleRowClick(rowIndex: number | undefined): void {
   if (rowIndex !== undefined) {
     emit('scrollToRow', rowIndex);
   }
+}
+
+// Format row index based on hex/dec preference
+function formatRowIndex(index: number): string {
+  if (props.displayRowIndexAsHex) {
+    return index.toString(16).toUpperCase().padStart(2, '0');
+  }
+  return index.toString();
 }
 
 // Format timestamp as HH:MM:SS
@@ -248,7 +260,7 @@ const panelTitle = computed(() => {
               @click.stop="handleRowClick(entry.rowIndex)"
               title="Click to scroll to row"
             >
-              R{{ entry.rowIndex }}
+              R{{ formatRowIndex(entry.rowIndex) }}
             </span>
           </div>
           <div class="entry-message">{{ entry.message }}</div>

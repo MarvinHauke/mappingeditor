@@ -861,6 +861,7 @@ function downloadMap() {
   <!-- Log Monitor (docked to left of Variable Monitor) -->
   <LogMonitor
     v-if="showLogMonitor"
+    :display-row-index-as-hex="displayRowIndexAsHex"
     @expanded-change="logMonitorExpanded = $event"
     @scroll-to-row="handleScrollToRow"
     @unnotice-warning="handleUnnoticeWarning"

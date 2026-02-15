@@ -60,6 +60,13 @@ const rowsDisplayMode = ref<RowsDisplayMode>('values');
 const ROWS_SUBSECTION_EXPANDED_KEY = 'variable-rows-subsection-expanded';
 const ROWS_DISPLAY_MODE_KEY = 'variable-rows-display-mode';
 
+// Variables section height state
+const variablesHeight = ref<number | null>(null);
+const VARIABLES_HEIGHT_KEY = 'variable-monitor-variables-height';
+const isResizingVariables = ref(false);
+const resizeStartY2 = ref(0);
+const resizeStartHeight2 = ref(0);
+
 // Rows section height state (not whole panel)
 const rowsHeight = ref(200);
 const ROWS_HEIGHT_KEY = 'variable-monitor-rows-height';
@@ -92,6 +99,14 @@ onMounted(() => {
   const savedSourceMode = localStorage.getItem(VALUE_SOURCE_MODE_KEY);
   if (savedSourceMode && ['current', 'debugging'].includes(savedSourceMode)) {
     valueSourceMode.value = savedSourceMode as ValueSourceMode;
+  }
+
+  const savedVariablesHeight = localStorage.getItem(VARIABLES_HEIGHT_KEY);
+  if (savedVariablesHeight !== null) {
+    const height = parseInt(savedVariablesHeight, 10);
+    if (!isNaN(height) && height >= 80 && height <= 400) {
+      variablesHeight.value = height;
+    }
   }
 
   const savedHeight = localStorage.getItem(ROWS_HEIGHT_KEY);
@@ -426,7 +441,38 @@ function getRowDisplayContent(row: RowLike, rowIndex: number): string {
   }
 }
 
-// Resize handlers
+// Resize variables section
+function startVariablesResize(event: MouseEvent): void {
+  isResizingVariables.value = true;
+  resizeStartY2.value = event.clientY;
+  const variablesContainer = document.querySelector('.variables-container') as HTMLElement;
+  resizeStartHeight2.value = variablesContainer?.offsetHeight || 200;
+
+  document.addEventListener('mousemove', handleVariablesResize);
+  document.addEventListener('mouseup', stopVariablesResize);
+  event.preventDefault();
+}
+
+function handleVariablesResize(event: MouseEvent): void {
+  if (!isResizingVariables.value) return;
+
+  const deltaY = event.clientY - resizeStartY2.value;
+  const newHeight = resizeStartHeight2.value + deltaY;
+
+  // Constrain between min and max heights
+  variablesHeight.value = Math.max(80, Math.min(400, newHeight));
+}
+
+function stopVariablesResize(): void {
+  if (isResizingVariables.value) {
+    localStorage.setItem(VARIABLES_HEIGHT_KEY, String(variablesHeight.value));
+  }
+  isResizingVariables.value = false;
+  document.removeEventListener('mousemove', handleVariablesResize);
+  document.removeEventListener('mouseup', stopVariablesResize);
+}
+
+// Resize rows section
 function startResize(event: MouseEvent): void {
   isResizing.value = true;
   resizeStartY.value = event.clientY;
@@ -564,7 +610,7 @@ function stopResize(): void {
     </div>
 
     <!-- Variables Grid Container (Scrollable) -->
-    <div class="variables-container panel-scrollable">
+    <div class="variables-container panel-scrollable" :style="variablesHeight ? { height: variablesHeight + 'px' } : {}">
       <div class="variables-grid" :class="{ 'single-column': useSingleColumn }">
         <div class="variables-column">
         <div
@@ -620,6 +666,16 @@ function stopResize(): void {
         </div>
       </div>
     </div>
+    </div>
+
+    <!-- Resize Handle - Between Variables and Rows Subsection -->
+    <div
+      v-if="rows && rows.length > 0"
+      class="resize-handle variables-resize-handle"
+      @mousedown="startVariablesResize"
+      title="Drag to resize variables section"
+    >
+      <div class="resize-indicator"></div>
     </div>
 
     <!-- Rows Subsection (Collapsible) -->
@@ -774,13 +830,13 @@ function stopResize(): void {
   cursor: not-allowed;
 }
 
-/* Variables Container - Scrollable, takes remaining space */
+/* Variables Container - Scrollable */
 .variables-container {
-  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 0;
+  min-height: 80px;
   padding-right: 2px;
+  flex-shrink: 0;
 }
 
 
@@ -896,6 +952,11 @@ function stopResize(): void {
 
 .resize-handle:hover .resize-indicator {
   background: #34cc99;
+}
+
+/* Variables resize handle - between variables and rows */
+.variables-resize-handle {
+  margin-bottom: 2px;
 }
 
 /* Rows Subsection */
