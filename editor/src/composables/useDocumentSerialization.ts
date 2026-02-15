@@ -1,4 +1,4 @@
-import type { Ref, ComputedRef } from 'vue';
+import { nextTick, type Ref, type ComputedRef } from 'vue';
 import {
   DataModel, type MappingTuple, type MappingType
 } from '../modules/dataModel';
@@ -37,16 +37,15 @@ export interface UseDocumentSerializationOptions {
   analyzeDocument: () => void;
   reset: () => void;
   logInfo: (...args: any[]) => void;
-  logError: (...args: any[]) => void;
   // From useMappingCache
   activeSlot: Ref<CacheSlot>;
   isCurrentLocked: ComputedRef<boolean>;
-  saveToActiveSlot: (data: CachedMapping) => Promise<void>;
-  switchToA: () => Promise<void>;
-  switchToB: () => Promise<void>;
+  saveToActiveSlot: (data: CachedMapping) => void;
+  switchToA: () => void;
+  switchToB: () => void;
   toggleLockA: () => void;
   toggleLockB: () => void;
-  loadFromSlot: (slot: CacheSlot) => Promise<CachedMapping | null>;
+  loadFromSlot: (slot: CacheSlot) => CachedMapping | null;
 }
 
 export function useDocumentSerialization(options: UseDocumentSerializationOptions) {
@@ -60,7 +59,6 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
     analyzeDocument,
     reset,
     logInfo,
-    logError,
     activeSlot,
     isCurrentLocked,
     saveToActiveSlot,
@@ -70,6 +68,10 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
     toggleLockB,
     loadFromSlot
   } = options;
+
+  // Suppresses spurious scheduleCacheSave calls triggered by reactive watches
+  // during deserialization (slot switch or initial load)
+  let isDeserializing = false;
 
   // Save current document to cache (debounced)
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -106,6 +108,7 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
   }
 
   function deserializeToDocument(cached: CachedMapping): void {
+    isDeserializing = true;
     const doc = new MappingDocument();
 
     // Restore header
@@ -184,25 +187,25 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
 
     // Run analysis
     analyzeDocument();
+
+    // Reset flag after Vue processes the reactive updates
+    nextTick(() => { isDeserializing = false; });
   }
 
   function scheduleCacheSave(): void {
+    if (isDeserializing) return;
     if (isCurrentLocked.value) return;
 
     if (saveTimeout) {
       clearTimeout(saveTimeout);
     }
 
-    saveTimeout = setTimeout(async () => {
-      try {
-        await saveToActiveSlot(serializeDocument());
-      } catch (error) {
-        console.error('Failed to save to cache:', error);
-      }
+    saveTimeout = setTimeout(() => {
+      saveToActiveSlot(serializeDocument());
     }, 1000);
   }
 
-  async function handleSlotSwitch(slot: 'A' | 'B'): Promise<void> {
+  function handleSlotSwitch(slot: 'A' | 'B'): void {
     // If clicking on already active slot, toggle lock
     if (activeSlot.value === slot) {
       if (slot === 'A') {
@@ -213,36 +216,33 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
       return;
     }
 
+    // Cancel any pending debounced save (it would target the wrong slot)
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+      saveTimeout = null;
+    }
+
     // Save current to active slot first (if not locked)
     if (!isCurrentLocked.value) {
-      try {
-        await saveToActiveSlot(serializeDocument());
-      } catch (error) {
-        console.error('Failed to save before switch:', error);
-      }
+      saveToActiveSlot(serializeDocument());
     }
 
     // Switch slot
     if (slot === 'A') {
-      await switchToA();
+      switchToA();
     } else {
-      await switchToB();
+      switchToB();
     }
 
     // Load from new slot
-    try {
-      const cached = await loadFromSlot(slot);
-      if (cached) {
-        deserializeToDocument(cached);
-        logInfo('system', `Loaded mapping from slot ${slot}`);
-      } else {
-        // No data in slot, reset to empty
-        reset();
-        logInfo('system', `Slot ${slot} is empty`);
-      }
-    } catch (error) {
-      console.error('Failed to load from slot:', error);
-      logError('system', 'Failed to load cached mapping');
+    const cached = loadFromSlot(slot);
+    if (cached) {
+      deserializeToDocument(cached);
+      logInfo('system', `Loaded mapping from slot ${slot === 'A' ? '1' : '2'}`);
+    } else {
+      // No data in slot, reset to empty
+      reset();
+      logInfo('system', `Slot ${slot === 'A' ? '1' : '2'} is empty`);
     }
   }
 

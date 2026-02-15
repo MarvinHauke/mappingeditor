@@ -105,6 +105,12 @@ withDefaults(defineProps<MenuButtonProps>(), {
   opacity: 0.7;
 }
 
+.menu-btn--slot.menu-btn--locked:not(.menu-btn--active) {
+  border-color: #dc3545;
+  border-style: solid;
+  opacity: 0.75;
+}
+
 .menu-btn--slot.menu-btn--active.menu-btn--locked {
   box-shadow: 0 0 8px 2px #dc3545, inset 0 0 4px rgba(220, 53, 69, 0.3);
   border-color: #dc3545;

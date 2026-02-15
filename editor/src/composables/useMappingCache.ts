@@ -55,12 +55,12 @@ export interface UseMappingCacheReturn {
   isCurrentLocked: ComputedRef<boolean>;
   hasDataA: Ref<boolean>;
   hasDataB: Ref<boolean>;
-  switchToA: () => Promise<void>;
-  switchToB: () => Promise<void>;
+  switchToA: () => void;
+  switchToB: () => void;
   toggleLockA: () => void;
   toggleLockB: () => void;
-  saveToActiveSlot: (data: CachedMapping) => Promise<void>;
-  loadFromSlot: (slot: CacheSlot) => Promise<CachedMapping | null>;
+  saveToActiveSlot: (data: CachedMapping) => void;
+  loadFromSlot: (slot: CacheSlot) => CachedMapping | null;
   clearSlot: (slot: CacheSlot) => Promise<void>;
 }
 
@@ -74,10 +74,16 @@ const LOCK_A_KEY = 'nerdseq-cache-lock-a';
 const LOCK_B_KEY = 'nerdseq-cache-lock-b';
 const ACTIVE_SLOT_KEY = 'nerdseq-cache-active-slot';
 
+// Persistent DB connection (avoids ~5-15ms open overhead per operation)
+let cachedDb: IDBDatabase | null = null;
+
 /**
- * Open the IndexedDB database
+ * Open the IndexedDB database, reusing a cached connection when available
  */
 function openDatabase(): Promise<IDBDatabase> {
+  if (cachedDb) {
+    return Promise.resolve(cachedDb);
+  }
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -86,7 +92,13 @@ function openDatabase(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => {
-      resolve(request.result);
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        cachedDb = null;
+      };
+      cachedDb = db;
+      resolve(db);
     };
 
     request.onupgradeneeded = (event) => {
@@ -115,10 +127,6 @@ async function saveToIndexedDB(key: string, data: CachedMapping): Promise<void> 
     request.onsuccess = () => {
       resolve();
     };
-
-    transaction.oncomplete = () => {
-      db.close();
-    };
   });
 }
 
@@ -138,10 +146,6 @@ async function loadFromIndexedDB(key: string): Promise<CachedMapping | null> {
 
     request.onsuccess = () => {
       resolve(request.result || null);
-    };
-
-    transaction.oncomplete = () => {
-      db.close();
     };
   });
 }
@@ -163,23 +167,29 @@ async function deleteFromIndexedDB(key: string): Promise<void> {
     request.onsuccess = () => {
       resolve();
     };
-
-    transaction.oncomplete = () => {
-      db.close();
-    };
   });
 }
 
+// In-memory slot cache — both slots loaded on init, zero IndexedDB reads during switching
+const slotCache: Record<CacheSlot, CachedMapping | null> = { A: null, B: null };
+let slotCacheInitialized = false;
+
 /**
- * Check if a slot has data
+ * Load both slots from IndexedDB into memory (called once on init)
  */
-async function checkSlotHasData(slot: CacheSlot): Promise<boolean> {
+async function initSlotCache(): Promise<void> {
+  if (slotCacheInitialized) return;
   try {
-    const data = await loadFromIndexedDB(`slot-${slot}`);
-    return data !== null;
+    const [dataA, dataB] = await Promise.all([
+      loadFromIndexedDB('slot-A'),
+      loadFromIndexedDB('slot-B')
+    ]);
+    slotCache.A = dataA;
+    slotCache.B = dataB;
   } catch {
-    return false;
+    // Slots stay null on error — same as empty
   }
+  slotCacheInitialized = true;
 }
 
 // Singleton instance
@@ -206,9 +216,11 @@ export function useMappingCache(): UseMappingCacheReturn {
   const hasDataA = ref(false);
   const hasDataB = ref(false);
 
-  // Check initial slot data
-  checkSlotHasData('A').then(has => { hasDataA.value = has; });
-  checkSlotHasData('B').then(has => { hasDataB.value = has; });
+  // Load both slots into memory on init
+  initSlotCache().then(() => {
+    hasDataA.value = slotCache.A !== null;
+    hasDataB.value = slotCache.B !== null;
+  });
 
   // Persist lock states
   watch(isLockedA, (val) => {
@@ -231,67 +243,72 @@ export function useMappingCache(): UseMappingCacheReturn {
   });
 
   /**
-   * Switch to slot A
+   * Switch to slot 1
    */
-  async function switchToA(): Promise<void> {
+  function switchToA(): void {
     activeSlot.value = 'A';
   }
 
   /**
-   * Switch to slot B
+   * Switch to slot 2
    */
-  async function switchToB(): Promise<void> {
+  function switchToB(): void {
     activeSlot.value = 'B';
   }
 
   /**
-   * Toggle lock on slot A
+   * Toggle lock on slot 1
    */
   function toggleLockA(): void {
     isLockedA.value = !isLockedA.value;
   }
 
   /**
-   * Toggle lock on slot B
+   * Toggle lock on slot 2
    */
   function toggleLockB(): void {
     isLockedB.value = !isLockedB.value;
   }
 
   /**
-   * Save data to the active slot
+   * Save data to the active slot (memory-first, IndexedDB in background)
    */
-  async function saveToActiveSlot(data: CachedMapping): Promise<void> {
-    const key = `slot-${activeSlot.value}`;
-    await saveToIndexedDB(key, data);
-    
-    if (activeSlot.value === 'A') {
+  function saveToActiveSlot(data: CachedMapping): void {
+    const slot = activeSlot.value;
+    slotCache[slot] = data;
+
+    if (slot === 'A') {
       hasDataA.value = true;
     } else {
       hasDataB.value = true;
     }
+
+    // Persist to IndexedDB in background
+    saveToIndexedDB(`slot-${slot}`, data).catch(err => {
+      console.error('Background IndexedDB save failed:', err);
+    });
   }
 
   /**
-   * Load data from a specific slot
+   * Load data from a specific slot (returns from memory)
    */
-  async function loadFromSlot(slot: CacheSlot): Promise<CachedMapping | null> {
-    const key = `slot-${slot}`;
-    return await loadFromIndexedDB(key);
+  function loadFromSlot(slot: CacheSlot): CachedMapping | null {
+    return slotCache[slot];
   }
 
   /**
    * Clear a specific slot
    */
   async function clearSlot(slot: CacheSlot): Promise<void> {
-    const key = `slot-${slot}`;
-    await deleteFromIndexedDB(key);
-    
+    slotCache[slot] = null;
+
     if (slot === 'A') {
       hasDataA.value = false;
     } else {
       hasDataB.value = false;
     }
+
+    await deleteFromIndexedDB(`slot-${slot}`);
   }
 
   // Create and store instance
@@ -319,4 +336,11 @@ export function useMappingCache(): UseMappingCacheReturn {
  */
 export function resetMappingCache(): void {
   instance = null;
+  slotCache.A = null;
+  slotCache.B = null;
+  slotCacheInitialized = false;
+  if (cachedDb) {
+    cachedDb.close();
+    cachedDb = null;
+  }
 }

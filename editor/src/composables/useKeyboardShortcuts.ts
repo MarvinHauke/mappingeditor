@@ -5,7 +5,6 @@ export interface UseKeyboardShortcutsOptions {
   // State refs
   selectedRowIndices: Ref<Set<number>>;
   sortedSelectedIndices: ComputedRef<number[]>;
-  activeSlot: Ref<'A' | 'B'>;
   isCurrentLocked: ComputedRef<boolean>;
   pasteAutoAdvance: Ref<PasteAutoAdvanceMode>;
   hasCopiedRow: Ref<boolean>;
@@ -30,7 +29,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
   const {
     selectedRowIndices,
     sortedSelectedIndices,
-    activeSlot,
     isCurrentLocked,
     pasteAutoAdvance,
     hasCopiedRow,
@@ -56,17 +54,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions) {
       return;
     }
 
-    // Slot switching shortcuts (1 = Slot A, 2 = Slot B)
+    // Slot switching shortcuts (1 = Slot 1, 2 = Slot 2; press again to toggle lock)
     if (event.key === '1' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-      if (activeSlot.value !== 'A') {
-        handleSlotSwitch('A');
-      }
+      handleSlotSwitch('A');
       event.preventDefault();
       return;
     } else if (event.key === '2' && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-      if (activeSlot.value !== 'B') {
-        handleSlotSwitch('B');
-      }
+      handleSlotSwitch('B');
       event.preventDefault();
       return;
     }

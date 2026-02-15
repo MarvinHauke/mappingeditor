@@ -212,13 +212,13 @@ const {
   isLockedB,
   context: actionHistoryContext,
   onExecute: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot}] ${cmd.getDescription()}`);
+    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] ${cmd.getDescription()}`);
   },
   onUndo: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot}] Undid: ${cmd.getDescription()}`);
+    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] Undid: ${cmd.getDescription()}`);
   },
   onRedo: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot}] Redid: ${cmd.getDescription()}`);
+    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] Redid: ${cmd.getDescription()}`);
   }
 });
 
@@ -238,7 +238,6 @@ const {
   analyzeDocument,
   reset,
   logInfo,
-  logError,
   activeSlot,
   isCurrentLocked,
   saveToActiveSlot,
@@ -515,7 +514,6 @@ function getRowBackgroundColor(rowIndex: number): string | undefined {
 useKeyboardShortcuts({
   selectedRowIndices,
   sortedSelectedIndices,
-  activeSlot,
   isCurrentLocked,
   pasteAutoAdvance,
   hasCopiedRow,
@@ -558,7 +556,7 @@ watch(rowComments, () => scheduleCacheSave(), { deep: true });
 // Watch for slot switching (history automatically switches with activeSlot)
 watch(activeSlot, (newSlot, oldSlot) => {
   if (newSlot !== oldSlot) {
-    logInfo('system', `Switched to Slot ${newSlot} (undo history preserved)`);
+    logInfo('system', `Switched to Slot ${newSlot === 'A' ? '1' : '2'} (undo history preserved)`);
   }
 });
 
@@ -945,7 +943,7 @@ function downloadMap() {
         :disabled="!canUndo"
         @click="undo"
         :title="undoDescription
-          ? `Undo [Slot ${activeSlot}]: ${undoDescription}`
+          ? `Undo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${undoDescription}`
           : 'Nothing to undo'"
       >
         ↶ Undo
@@ -956,7 +954,7 @@ function downloadMap() {
         :disabled="!canRedo"
         @click="redo"
         :title="redoDescription
-          ? `Redo [Slot ${activeSlot}]: ${redoDescription}`
+          ? `Redo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${redoDescription}`
           : 'Nothing to redo'"
       >
         ↷ Redo
@@ -966,22 +964,22 @@ function downloadMap() {
       <MenuButton
         variant="slot"
         :active="activeSlot === 'A'"
-        :locked="activeSlot === 'A' && isLockedA"
+        :locked="isLockedA"
         :has-data="hasDataA"
         @click="handleSlotSwitch('A')"
-        :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock' : 'Click to lock') : 'Switch to slot A'"
+        :title="activeSlot === 'A' ? (isLockedA ? 'Click to unlock [1]' : 'Click to lock [1]') : (isLockedA ? 'Switch to slot 1 (locked) [1]' : 'Switch to slot 1 [1]')"
       >
-        A
+        1
       </MenuButton>
       <MenuButton
         variant="slot"
         :active="activeSlot === 'B'"
-        :locked="activeSlot === 'B' && isLockedB"
+        :locked="isLockedB"
         :has-data="hasDataB"
         @click="handleSlotSwitch('B')"
-        :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock' : 'Click to lock') : 'Switch to slot B'"
+        :title="activeSlot === 'B' ? (isLockedB ? 'Click to unlock [2]' : 'Click to lock [2]') : (isLockedB ? 'Switch to slot 2 (locked) [2]' : 'Switch to slot 2 [2]')"
       >
-        B
+        2
       </MenuButton>
       <input
         type="text"

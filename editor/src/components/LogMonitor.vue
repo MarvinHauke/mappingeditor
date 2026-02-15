@@ -174,7 +174,7 @@ function downloadLog(): void {
     const historyItems = actionHistory.history.value;
     const slot = actionHistory.activeSlot.value;
     lines.push('='.repeat(40));
-    lines.push(`Undo History \u2014 Slot ${slot} (${historyItems.length} action${historyItems.length !== 1 ? 's' : ''})`);
+    lines.push(`Undo History \u2014 Slot ${slot === 'A' ? '1' : '2'} (${historyItems.length} action${historyItems.length !== 1 ? 's' : ''})`);
     lines.push('');
     if (historyItems.length === 0) {
       lines.push('  (empty)');
