@@ -23,6 +23,18 @@ import {
   DestinationFunction,
   DestinationExtra
 } from '../modules/documentModel';
+import type { Command, CommandResult } from '../commands/Command';
+import {
+  BatchCommand,
+  ClearRowCommand,
+  PasteRowCommand,
+  PasteSourceCommand,
+  PasteDestinationCommand,
+  MoveRowsCommand,
+  captureRowSnapshot,
+  captureSourceSnapshot,
+  captureDestinationSnapshot
+} from '../commands';
 
 // Types for structural matching
 export type RowLike = {
@@ -123,6 +135,7 @@ export interface UseClipboardOptions {
   currentlySelectedSourceTypes: Ref<MappingType[]>;
   currentlySelectedDestinationTypes: Ref<MappingType[]>;
   rowComments?: Ref<Record<number, string>>;  // Optional: for swapping comments with rows
+  executeCommand?: (cmd: Command) => CommandResult; // Optional: for undo/redo support
 }
 
 // Result type for move operations including reference warnings
@@ -272,6 +285,7 @@ export interface UseClipboardReturn {
  */
 export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   const { mappingDocument, currentlySelectedSourceTypes, currentlySelectedDestinationTypes } = options;
+  const execCmd = options.executeCommand;
 
   // Internal clipboard state
   const copiedRowData = ref<MappingRow | null>(null);
@@ -303,6 +317,37 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     const targetRow = findRow(rowIndex);
     if (!targetRow) return;
 
+    if (execCmd && options.rowComments) {
+      const src = copiedRowData.value.source;
+      const dst = copiedRowData.value.destination;
+      const pasteData = {
+        rowIndex,
+        source: {
+          typeKey: src.type.key, typeAbbr: src.type.abbr, typeDesc: src.type.description,
+          funcKey: src.function.key, funcAbbr: src.function.abbr, funcDesc: src.function.description,
+          extraKey: src.extra.keyOrValue, extraAbbr: src.extra.abbr, extraDesc: src.extra.description,
+          selectedTypeKey: src.type.key
+        },
+        destination: {
+          typeKey: dst.type.key, typeAbbr: dst.type.abbr, typeDesc: dst.type.description,
+          funcKey: dst.function.key, funcAbbr: dst.function.abbr, funcDesc: dst.function.description,
+          extraKey: dst.extra.keyOrValue, extraAbbr: dst.extra.abbr, extraDesc: dst.extra.description,
+          selectedTypeKey: dst.type.key
+        },
+        comment: null
+      };
+      const cmd = new PasteRowCommand(
+        rowIndex,
+        pasteData,
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        options.rowComments.value as Record<number, string>,
+        currentlySelectedSourceTypes.value,
+        currentlySelectedDestinationTypes.value
+      );
+      execCmd(cmd);
+      return;
+    }
+
     const clonedData = deepCloneRow(copiedRowData.value);
     clonedData.index = rowIndex;
 
@@ -316,6 +361,20 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   }
 
   function clearRow(rowIndex: number): void {
+    if (execCmd && options.rowComments) {
+      const targetRow = findRow(rowIndex);
+      if (!targetRow) return;
+      const cmd = new ClearRowCommand(
+        rowIndex,
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        options.rowComments.value as Record<number, string>,
+        currentlySelectedSourceTypes.value,
+        currentlySelectedDestinationTypes.value
+      );
+      execCmd(cmd);
+      return;
+    }
+
     const targetRow = findRow(rowIndex);
     if (!targetRow) return;
 
@@ -337,6 +396,24 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     if (!copiedSourceData.value) return;
     const targetRow = findRow(rowIndex);
     if (!targetRow) return;
+
+    if (execCmd) {
+      const src = copiedSourceData.value;
+      const pasteData = {
+        typeKey: src.type.key, typeAbbr: src.type.abbr, typeDesc: src.type.description,
+        funcKey: src.function.key, funcAbbr: src.function.abbr, funcDesc: src.function.description,
+        extraKey: src.extra.keyOrValue, extraAbbr: src.extra.abbr, extraDesc: src.extra.description,
+        selectedTypeKey: src.type.key
+      };
+      const cmd = new PasteSourceCommand(
+        rowIndex,
+        pasteData,
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        currentlySelectedSourceTypes.value
+      );
+      execCmd(cmd);
+      return;
+    }
 
     targetRow.source = deepCloneSource(copiedSourceData.value);
     currentlySelectedSourceTypes.value[rowIndex] =
@@ -362,6 +439,24 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
     if (!copiedDestinationData.value) return;
     const targetRow = findRow(rowIndex);
     if (!targetRow) return;
+
+    if (execCmd) {
+      const dst = copiedDestinationData.value;
+      const pasteData = {
+        typeKey: dst.type.key, typeAbbr: dst.type.abbr, typeDesc: dst.type.description,
+        funcKey: dst.function.key, funcAbbr: dst.function.abbr, funcDesc: dst.function.description,
+        extraKey: dst.extra.keyOrValue, extraAbbr: dst.extra.abbr, extraDesc: dst.extra.description,
+        selectedTypeKey: dst.type.key
+      };
+      const cmd = new PasteDestinationCommand(
+        rowIndex,
+        pasteData,
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        currentlySelectedDestinationTypes.value
+      );
+      execCmd(cmd);
+      return;
+    }
 
     targetRow.destination = deepCloneDestination(copiedDestinationData.value);
     currentlySelectedDestinationTypes.value[rowIndex] =
@@ -389,6 +484,47 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   function pasteRows(startIndex: number): void {
     if (copiedRowsData.value.length === 0) return;
 
+    if (execCmd && options.rowComments) {
+      const cmds: import('../commands/Command').Command[] = [];
+      const maxRows = mappingDocument.value.rows.length;
+      for (let i = 0; i < copiedRowsData.value.length; i++) {
+        const targetIndex = startIndex + i;
+        if (targetIndex >= maxRows) break;
+        const src = copiedRowsData.value[i].source;
+        const dst = copiedRowsData.value[i].destination;
+        const pasteData = {
+          rowIndex: targetIndex,
+          source: {
+            typeKey: src.type.key, typeAbbr: src.type.abbr, typeDesc: src.type.description,
+            funcKey: src.function.key, funcAbbr: src.function.abbr, funcDesc: src.function.description,
+            extraKey: src.extra.keyOrValue, extraAbbr: src.extra.abbr, extraDesc: src.extra.description,
+            selectedTypeKey: src.type.key
+          },
+          destination: {
+            typeKey: dst.type.key, typeAbbr: dst.type.abbr, typeDesc: dst.type.description,
+            funcKey: dst.function.key, funcAbbr: dst.function.abbr, funcDesc: dst.function.description,
+            extraKey: dst.extra.keyOrValue, extraAbbr: dst.extra.abbr, extraDesc: dst.extra.description,
+            selectedTypeKey: dst.type.key
+          },
+          comment: null
+        };
+        cmds.push(new PasteRowCommand(
+          targetIndex,
+          pasteData,
+          mappingDocument.value as import('../modules/documentModel').MappingDocument,
+          options.rowComments.value as Record<number, string>,
+          currentlySelectedSourceTypes.value,
+          currentlySelectedDestinationTypes.value
+        ));
+      }
+      if (cmds.length === 1) {
+        execCmd(cmds[0]);
+      } else if (cmds.length > 1) {
+        execCmd(new BatchCommand(cmds, `Paste ${cmds.length} rows`));
+      }
+      return;
+    }
+
     const maxRows = mappingDocument.value.rows.length;
     for (let i = 0; i < copiedRowsData.value.length; i++) {
       const targetIndex = startIndex + i;
@@ -409,6 +545,21 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   }
 
   function clearRows(rowIndices: number[]): void {
+    if (execCmd && options.rowComments) {
+      const cmds = rowIndices.map(idx => new ClearRowCommand(
+        idx,
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        options.rowComments!.value as Record<number, string>,
+        currentlySelectedSourceTypes.value,
+        currentlySelectedDestinationTypes.value
+      ));
+      if (cmds.length === 1) {
+        execCmd(cmds[0]);
+      } else if (cmds.length > 1) {
+        execCmd(new BatchCommand(cmds, `Clear ${cmds.length} rows`));
+      }
+      return;
+    }
     for (const idx of rowIndices) {
       clearRow(idx);
     }
@@ -494,10 +645,34 @@ export function useClipboard(options: UseClipboardOptions): UseClipboardReturn {
   }
 
   function moveRowsUp(rowIndices: number[]): MoveRowsResult {
+    if (execCmd && options.rowComments) {
+      const cmd = new MoveRowsCommand(
+        rowIndices,
+        'up',
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        options.rowComments.value as Record<number, string>,
+        currentlySelectedSourceTypes.value,
+        currentlySelectedDestinationTypes.value
+      );
+      execCmd(cmd);
+      return cmd.lastResult;
+    }
     return moveRows(rowIndices, 'up');
   }
 
   function moveRowsDown(rowIndices: number[]): MoveRowsResult {
+    if (execCmd && options.rowComments) {
+      const cmd = new MoveRowsCommand(
+        rowIndices,
+        'down',
+        mappingDocument.value as import('../modules/documentModel').MappingDocument,
+        options.rowComments.value as Record<number, string>,
+        currentlySelectedSourceTypes.value,
+        currentlySelectedDestinationTypes.value
+      );
+      execCmd(cmd);
+      return cmd.lastResult;
+    }
     return moveRows(rowIndices, 'down');
   }
 

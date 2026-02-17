@@ -233,9 +233,14 @@ This plan combines strategic refactoring with forward-looking infrastructure. Th
 
 **IMPLEMENTED:** `useActionHistory.ts` composable exists with full command pattern support, per-slot undo/redo, and IndexedDB persistence.
 
+**RECENT (2026-02-17):** Added `pushCommand()` API and debounced extra update handlers:
+- `pushCommand(cmd)` — pushes a pre-executed command to undo stack without calling `execute()`. Used for debounced/coalesced operations where the mutation was applied incrementally.
+- `handleSourceExtraUpdate()` and `handleDestExtraUpdate()` in `EditorApp.vue` now debounce rapid fader changes (400ms idle) into single undo entries, preventing history flooding during slider drags.
+- `VariableSourceExtra.vue` now watches model prop changes to sync fader position on undo/redo.
+
 **NEXT STEPS:** The foundation is in place. Focus shifts to:
 1. Audit existing implementation for coverage gaps
-2. Extend to additional operations as needed
+2. Extend debounce pattern to other high-frequency inputs if needed
 3. Add UI components (undo/redo buttons, history panel)
 
 ### Goal
@@ -1988,6 +1993,9 @@ Each component updated independently for safe rollback.
 - [x] useActionHistory composable created with command pattern
 - [x] Per-slot undo/redo with IndexedDB persistence
 - [x] Foundation for undo/redo in place
+- [x] `pushCommand()` API for pre-applied mutations (debounced fader drags)
+- [x] Debounced extra update handlers prevent history flooding
+- [x] VariableSourceExtra syncs fader position on undo/redo via model watcher
 - [ ] UI components (undo/redo buttons, history panel)
 - [ ] Complete integration audit
 
@@ -2275,6 +2283,8 @@ Cache the `IDBDatabase` instance as a module-level variable. `openDatabase()` re
 ---
 
 ## Last Updated
+
+**2026-02-17** — Phase 3.5 update: Added `pushCommand()` API to `useActionHistory.ts` for debounced/coalesced operations. Debounced `handleSourceExtraUpdate` and `handleDestExtraUpdate` in EditorApp.vue (400ms coalescing) to prevent undo history flooding from fader drags. Added model watcher in `VariableSourceExtra.vue` so fader position syncs on undo/redo.
 
 **2026-02-15** — Added Phase 8 (Slot-Switch Performance): in-memory slot cache, post-load save suppression, persistent DB connection. Expected to reduce slot switch latency from ~200ms to ~50ms.
 

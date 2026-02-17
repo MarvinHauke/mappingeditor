@@ -46,7 +46,11 @@ import { useKeyboardShortcuts } from '../composables/useKeyboardShortcuts';
 import { useAutoAdvance } from '../composables/useAutoAdvance';
 import { useDocumentSerialization } from '../composables/useDocumentSerialization';
 import { useFileHandling } from '../composables/useFileHandling';
-import { SetRowColorCommand, SetRowCommentCommand } from '../commands';
+import {
+  SetRowColorCommand, SetRowCommentCommand,
+  SetVariableValueCommand, SetSourceCommand, SetDestinationCommand,
+  type SourceSnapshot, type DestinationSnapshot
+} from '../commands';
 import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
@@ -124,34 +128,6 @@ const lastLearnedMidiMessage = ref<string | null>(null);
 
 const { isSupported: midiSupported } = useMidi();
 
-// Clipboard functionality via composable
-const {
-  hasCopiedRow,
-  hasCopiedSource,
-  hasCopiedDestination,
-  hasCopiedRows,
-  copyRow,
-  pasteRow,
-  clearRow,
-  copyRows,
-  pasteRows,
-  cutRows,
-  clearRows,
-  moveRowsUp,
-  moveRowsDown,
-  copySource,
-  pasteSource,
-  clearSource,
-  copyDestination,
-  pasteDestination,
-  clearDestination
-} = useClipboard({
-  mappingDocument,
-  currentlySelectedSourceTypes,
-  currentlySelectedDestinationTypes,
-  rowComments  // Pass rowComments so they swap with rows
-});
-
 // Static Logic Analyzer
 const {
   warnings: analyzerWarnings,
@@ -194,7 +170,10 @@ const {
 // Action History (Undo/Redo) with per-slot support
 const actionHistoryContext: DeserializationContext = {
   rowColors: rowColors.value,
-  rowComments: rowComments.value
+  rowComments: rowComments.value,
+  mappingDocument: mappingDocument.value,
+  currentlySelectedSourceTypes: currentlySelectedSourceTypes.value,
+  currentlySelectedDestTypes: currentlySelectedDestinationTypes.value
 };
 
 const {
@@ -202,7 +181,10 @@ const {
   canRedo,
   undoDescription,
   redoDescription,
+  history: undoHistory,
+  redoHistory,
   executeCommand,
+  pushCommand,
   undo,
   redo,
   clearCurrentHistory
@@ -212,14 +194,43 @@ const {
   isLockedB,
   context: actionHistoryContext,
   onExecute: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] ${cmd.getDescription()}`);
+    logInfo('command', `[Slot ${slot === 'A' ? '1' : '2'}] ${cmd.getDescription()}`);
   },
   onUndo: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] Undid: ${cmd.getDescription()}`);
+    logInfo('command', `[Slot ${slot === 'A' ? '1' : '2'}] Undid: ${cmd.getDescription()}`);
   },
   onRedo: (cmd, slot) => {
-    logInfo('system', `[Slot ${slot === 'A' ? '1' : '2'}] Redid: ${cmd.getDescription()}`);
+    logInfo('command', `[Slot ${slot === 'A' ? '1' : '2'}] Redid: ${cmd.getDescription()}`);
   }
+});
+
+// Clipboard functionality via composable
+const {
+  hasCopiedRow,
+  hasCopiedSource,
+  hasCopiedDestination,
+  hasCopiedRows,
+  copyRow,
+  pasteRow,
+  clearRow,
+  copyRows,
+  pasteRows,
+  cutRows,
+  clearRows,
+  moveRowsUp,
+  moveRowsDown,
+  copySource,
+  pasteSource,
+  clearSource,
+  copyDestination,
+  pasteDestination,
+  clearDestination
+} = useClipboard({
+  mappingDocument,
+  currentlySelectedSourceTypes,
+  currentlySelectedDestinationTypes,
+  rowComments,  // Pass rowComments so they swap with rows
+  executeCommand  // Enable undo/redo for clipboard operations
 });
 
 // Document serialization & cache management
@@ -323,7 +334,8 @@ function handleMidiLearnComplete(currentRowIndex: number): void {
 // Variable slider handler
 function updateVariableValue(variableIndex: number, value: number): void {
   if (variableIndex >= 0 && variableIndex < mappingDocument.value.variables.length) {
-    mappingDocument.value.variables[variableIndex].value = value;
+    const cmd = new SetVariableValueCommand(variableIndex, value, mappingDocument.value);
+    executeCommand(cmd);
     scheduleCacheSave();
   }
 }
@@ -639,28 +651,35 @@ function sourceTypeSelectionChanged(event: Event, rowIndex: number) {
   const sourceTypeSelectElement = event.target as HTMLSelectElement;
   const selectedSourceTypeKey = parseInt(sourceTypeSelectElement.value);
   const selectedSourceType = DataModel.sourceTypes.find(x => x.key === selectedSourceTypeKey) as MappingType;
-  currentlySelectedSourceTypes.value[rowIndex] = selectedSourceType;
-  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  const newSourceType = new SourceType(selectedSourceTypeKey, selectedSourceType.abbr, selectedSourceType.description);
-  const newSourceFunction = new SourceFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-  const newSourceExtra = new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-  row.source = new Source(newSourceType, newSourceFunction, newSourceExtra);
+  const newSnapshot: SourceSnapshot = {
+    typeKey: selectedSourceTypeKey, typeAbbr: selectedSourceType.abbr, typeDesc: selectedSourceType.description,
+    funcKey: EMPTY_KEY, funcAbbr: EMPTY_ABBR, funcDesc: EMPTY_DESCRIPTION,
+    extraKey: EMPTY_KEY, extraAbbr: EMPTY_ABBR, extraDesc: EMPTY_DESCRIPTION,
+    selectedTypeKey: selectedSourceTypeKey
+  };
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+    `Set source type for row ${rowIndex + 1}`));
 }
 
 function sourceFunctionSelectionChanged(event: Event, rowIndex: number) {
   const sourceFunctionSelectElement = event.target as HTMLSelectElement;
   const selectedSourceFunctionKey = parseInt(sourceFunctionSelectElement.value);
   const selectedSourceFunction = currentlySelectedSourceTypes.value[rowIndex].functions.find(x => x.key === selectedSourceFunctionKey) as MappingTuple;
-  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow
-  row.source.function = new SourceFunction(selectedSourceFunctionKey, selectedSourceFunction.abbr, selectedSourceFunction.description);
-  // For Variable source, default to fader value 0 (internal key 1) so the variable is
-  // immediately trackable in the Variable Monitor. Other source types use EMPTY_KEY.
+  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  // For Variable source, default to fader value (key 1) so the variable is immediately trackable
+  let extraKey = EMPTY_KEY, extraAbbr = EMPTY_ABBR, extraDesc = EMPTY_DESCRIPTION;
   if (row.source.type.key === VAR_SOURCE_TYPE_KEY) {
-    const { abbr, description } = genVarSourceExtraDnA(1);
-    row.source.extra = new SourceExtra(1, abbr, description);
-  } else {
-    row.source.extra = new SourceExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+    const varExtra = genVarSourceExtraDnA(1);
+    extraKey = 1; extraAbbr = varExtra.abbr; extraDesc = varExtra.description;
   }
+  const newSnapshot: SourceSnapshot = {
+    typeKey: row.source.type.key, typeAbbr: row.source.type.abbr, typeDesc: row.source.type.description,
+    funcKey: selectedSourceFunctionKey, funcAbbr: selectedSourceFunction.abbr, funcDesc: selectedSourceFunction.description,
+    extraKey, extraAbbr, extraDesc,
+    selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
+  };
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+    `Set source function for row ${rowIndex + 1}`));
 }
 
 enum SourceExtraVariant {
@@ -691,19 +710,81 @@ function sourceExtraSelectionChanged(event: Event, rowIndex: number, extraVarian
   }
 
   const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  row.source.extra = new SourceExtra(selectedSourceExtraKey, selectedSourceExtra.abbr, selectedSourceExtra.description);
+  const newSnapshot: SourceSnapshot = {
+    typeKey: row.source.type.key, typeAbbr: row.source.type.abbr, typeDesc: row.source.type.description,
+    funcKey: row.source.function.key, funcAbbr: row.source.function.abbr, funcDesc: row.source.function.description,
+    extraKey: selectedSourceExtraKey, extraAbbr: selectedSourceExtra.abbr, extraDesc: selectedSourceExtra.description,
+    selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
+  };
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+    `Set source extra for row ${rowIndex + 1}`));
+}
+
+// Debounced source extra state — coalesces rapid fader changes into a single undo entry
+const pendingSourceExtra = ref<{
+  rowIndex: number;
+  oldSnapshot: SourceSnapshot;
+  timer: ReturnType<typeof setTimeout>;
+} | null>(null);
+
+// Handle source extra update from extra components (e.g. CalcSkipSourceExtra, NrpnSourceExtra, etc.)
+// Uses debounce to coalesce rapid fader drags into a single undo entry.
+function handleSourceExtraUpdate(rowIndex: number, newExtra: SourceExtra): void {
+  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  if (!row) return;
+
+  // Capture old state or reuse from existing pending drag
+  let oldSnap: SourceSnapshot;
+  if (pendingSourceExtra.value && pendingSourceExtra.value.rowIndex === rowIndex) {
+    oldSnap = pendingSourceExtra.value.oldSnapshot;
+    clearTimeout(pendingSourceExtra.value.timer);
+  } else {
+    oldSnap = {
+      typeKey: row.source.type.key, typeAbbr: row.source.type.abbr, typeDesc: row.source.type.description,
+      funcKey: row.source.function.key, funcAbbr: row.source.function.abbr, funcDesc: row.source.function.description,
+      extraKey: row.source.extra.keyOrValue, extraAbbr: row.source.extra.abbr, extraDesc: row.source.extra.description,
+      selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
+    };
+  }
+
+  // Apply immediately for responsive UI
+  row.source.extra = newExtra;
+
+  // Schedule commit after 400ms idle
+  const timer = setTimeout(() => {
+    const finalSnapshot: SourceSnapshot = {
+      typeKey: row.source.type.key, typeAbbr: row.source.type.abbr, typeDesc: row.source.type.description,
+      funcKey: row.source.function.key, funcAbbr: row.source.function.abbr, funcDesc: row.source.function.description,
+      extraKey: row.source.extra.keyOrValue, extraAbbr: row.source.extra.abbr, extraDesc: row.source.extra.description,
+      selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
+    };
+    // Skip if value didn't actually change
+    if (oldSnap.extraKey === finalSnapshot.extraKey) {
+      pendingSourceExtra.value = null;
+      return;
+    }
+    // Create command with correct old→new snapshots (already applied, so use pushCommand)
+    const cmd = new SetSourceCommand(rowIndex, finalSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value);
+    (cmd as any).oldSnapshot = oldSnap;
+    pushCommand(cmd);
+    pendingSourceExtra.value = null;
+  }, 400);
+
+  pendingSourceExtra.value = { rowIndex, oldSnapshot: oldSnap, timer };
 }
 
 function destinationTypeSelectionChanged(event: Event, rowIndex: number) {
   const destinationTypeSelectElement = event.target as HTMLSelectElement;
   const selectedDestinationTypeKey = parseInt(destinationTypeSelectElement.value);
   const selectedDestinationType = DataModel.destinationTypes.find(x => x.key === selectedDestinationTypeKey) as MappingType;
-  currentlySelectedDestinationTypes.value[rowIndex] = selectedDestinationType;
-  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  const newDestinationType = new DestinationType(selectedDestinationTypeKey, selectedDestinationType.abbr, selectedDestinationType.description);
-  const newDestinationFunction = new DestinationFunction(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-  const newDestinationExtra = new DestinationExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
-  row.destination = new Destination(newDestinationType, newDestinationFunction, newDestinationExtra);
+  const newSnapshot: DestinationSnapshot = {
+    typeKey: selectedDestinationTypeKey, typeAbbr: selectedDestinationType.abbr, typeDesc: selectedDestinationType.description,
+    funcKey: EMPTY_KEY, funcAbbr: EMPTY_ABBR, funcDesc: EMPTY_DESCRIPTION,
+    extraKey: EMPTY_KEY, extraAbbr: EMPTY_ABBR, extraDesc: EMPTY_DESCRIPTION,
+    selectedTypeKey: selectedDestinationTypeKey
+  };
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+    `Set destination type for row ${rowIndex + 1}`));
 }
 
 function destinationFunctionSelectionChanged(event: Event, rowIndex: number, isInit: boolean = false) {
@@ -711,8 +792,15 @@ function destinationFunctionSelectionChanged(event: Event, rowIndex: number, isI
   const selectedDestinationFunctionKey = parseInt(destinationFunctionSelectElement.value);
   const selectedDestinationFunction = currentlySelectedDestinationTypes.value[rowIndex].functions.find(x => x.key === selectedDestinationFunctionKey) as MappingTuple;
   const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  row.destination.function = new DestinationFunction(selectedDestinationFunctionKey, selectedDestinationFunction.abbr, selectedDestinationFunction.description);
-  row.destination.extra = new DestinationExtra(EMPTY_KEY, EMPTY_ABBR, EMPTY_DESCRIPTION);
+  const newSnapshot: DestinationSnapshot = {
+    typeKey: row.destination.type.key, typeAbbr: row.destination.type.abbr, typeDesc: row.destination.type.description,
+    funcKey: selectedDestinationFunctionKey, funcAbbr: selectedDestinationFunction.abbr, funcDesc: selectedDestinationFunction.description,
+    extraKey: EMPTY_KEY, extraAbbr: EMPTY_ABBR, extraDesc: EMPTY_DESCRIPTION,
+    selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
+  };
+  void isInit;
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+    `Set destination function for row ${rowIndex + 1}`));
 }
 
 enum DestinationExtraVariant {
@@ -765,7 +853,68 @@ function destinationExtraSelectionChanged(event: Event, rowIndex: number, isInit
       break;
   }
   const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
-  row.destination.extra = new DestinationExtra(selectedDestinationExtraKey, selectedDestinationExtra.abbr, selectedDestinationExtra.description);
+  const newSnapshot: DestinationSnapshot = {
+    typeKey: row.destination.type.key, typeAbbr: row.destination.type.abbr, typeDesc: row.destination.type.description,
+    funcKey: row.destination.function.key, funcAbbr: row.destination.function.abbr, funcDesc: row.destination.function.description,
+    extraKey: selectedDestinationExtraKey, extraAbbr: selectedDestinationExtra.abbr, extraDesc: selectedDestinationExtra.description,
+    selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
+  };
+  void isInit;
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+    `Set destination extra for row ${rowIndex + 1}`));
+}
+
+// Debounced destination extra state — coalesces rapid fader changes into a single undo entry
+const pendingDestExtra = ref<{
+  rowIndex: number;
+  oldSnapshot: DestinationSnapshot;
+  timer: ReturnType<typeof setTimeout>;
+} | null>(null);
+
+// Handle destination extra update from extra components (e.g. MidiCcDestinationExtra, DualDestinationExtra, etc.)
+// Uses debounce to coalesce rapid fader drags into a single undo entry.
+function handleDestExtraUpdate(rowIndex: number, newExtra: DestinationExtra): void {
+  const row = mappingDocument.value.rows.find(x => x.index === rowIndex) as MappingRow;
+  if (!row) return;
+
+  // Capture old state or reuse from existing pending drag
+  let oldSnap: DestinationSnapshot;
+  if (pendingDestExtra.value && pendingDestExtra.value.rowIndex === rowIndex) {
+    oldSnap = pendingDestExtra.value.oldSnapshot;
+    clearTimeout(pendingDestExtra.value.timer);
+  } else {
+    oldSnap = {
+      typeKey: row.destination.type.key, typeAbbr: row.destination.type.abbr, typeDesc: row.destination.type.description,
+      funcKey: row.destination.function.key, funcAbbr: row.destination.function.abbr, funcDesc: row.destination.function.description,
+      extraKey: row.destination.extra.keyOrValue, extraAbbr: row.destination.extra.abbr, extraDesc: row.destination.extra.description,
+      selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
+    };
+  }
+
+  // Apply immediately for responsive UI
+  row.destination.extra = newExtra;
+
+  // Schedule commit after 400ms idle
+  const timer = setTimeout(() => {
+    const finalSnapshot: DestinationSnapshot = {
+      typeKey: row.destination.type.key, typeAbbr: row.destination.type.abbr, typeDesc: row.destination.type.description,
+      funcKey: row.destination.function.key, funcAbbr: row.destination.function.abbr, funcDesc: row.destination.function.description,
+      extraKey: row.destination.extra.keyOrValue, extraAbbr: row.destination.extra.abbr, extraDesc: row.destination.extra.description,
+      selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
+    };
+    // Skip if value didn't actually change
+    if (oldSnap.extraKey === finalSnapshot.extraKey) {
+      pendingDestExtra.value = null;
+      return;
+    }
+    // Create command with correct old→new snapshots (already applied, so use pushCommand)
+    const cmd = new SetDestinationCommand(rowIndex, finalSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value);
+    (cmd as any).oldSnapshot = oldSnap;
+    pushCommand(cmd);
+    pendingDestExtra.value = null;
+  }, 400);
+
+  pendingDestExtra.value = { rowIndex, oldSnapshot: oldSnap, timer };
 }
 
 function downloadFile(blob: Blob, fileName: string) {
@@ -891,6 +1040,15 @@ function downloadMap() {
   <LogMonitor
     v-if="showLogMonitor"
     :display-row-index-as-hex="displayRowIndexAsHex"
+    :undo-history="undoHistory"
+    :redo-history="redoHistory"
+    :can-undo="canUndo"
+    :can-redo="canRedo"
+    :undo-description="undoDescription"
+    :redo-description="redoDescription"
+    :active-slot="activeSlot"
+    @undo="undo"
+    @redo="redo"
     @expanded-change="logMonitorExpanded = $event"
     @scroll-to-row="handleScrollToRow"
     @unnotice-warning="handleUnnoticeWarning"
@@ -934,30 +1092,6 @@ function downloadMap() {
           {{ warningCount }}
           <span class="visually-hidden">warnings</span>
         </span>
-      </MenuButton>
-
-      <!-- Undo/Redo buttons -->
-      <MenuButton
-        variant="primary"
-        border-radius="none"
-        :disabled="!canUndo"
-        @click="undo"
-        :title="undoDescription
-          ? `Undo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${undoDescription}`
-          : 'Nothing to undo'"
-      >
-        ↶ Undo
-      </MenuButton>
-      <MenuButton
-        variant="primary"
-        border-radius="none"
-        :disabled="!canRedo"
-        @click="redo"
-        :title="redoDescription
-          ? `Redo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${redoDescription}`
-          : 'Nothing to redo'"
-      >
-        ↷ Redo
       </MenuButton>
 
       <!-- A/B Cache Toggle and Filename -->
@@ -1086,7 +1220,8 @@ function downloadMap() {
           <!-- MIDI Learn for MIDI source types when LRN function selected -->
           <MidiLearnExtra
             v-else-if="[5, 6, 7].includes(row.source.type.key) && row.source.function.key === 48"
-            v-model="row.source.extra as SourceExtra"
+            :model-value="row.source.extra as SourceExtra"
+            @update:model-value="(v) => handleSourceExtraUpdate(row.index, v as SourceExtra)"
             mode="source"
             :source-type="row.source.type.key"
             :is-locked="isCurrentLocked"
@@ -1097,18 +1232,24 @@ function downloadMap() {
           />
 
           <!-- Calc or Skip Source Type -->
-          <CalcSkipSourceExtra v-model="row.source.extra as SourceExtra"
+          <CalcSkipSourceExtra
+            :model-value="row.source.extra as SourceExtra"
+            @update:model-value="(v) => handleSourceExtraUpdate(row.index, v as SourceExtra)"
             v-else-if="row.source.type.key === CALC_SOURCE_TYPE_KEY || row.source.type.key === SKIP_SOURCE_TYPE_KEY"
             :display-row-index-as-hex="displayRowIndexAsHex"
             :is-locked="isCurrentLocked" />
 
           <!-- NRPN Source Type -->
-          <NrpnSourceExtra v-model="row.source.extra as SourceExtra"
+          <NrpnSourceExtra
+            :model-value="row.source.extra as SourceExtra"
+            @update:model-value="(v) => handleSourceExtraUpdate(row.index, v as SourceExtra)"
             v-else-if="row.source.type.key === MIDI_NRPN_SOURCE_TYPE_KEY"
             :is-locked="isCurrentLocked" />
 
           <!-- Variable Source Type -->
-          <VariableSourceExtra v-model="row.source.extra as SourceExtra"
+          <VariableSourceExtra
+            :model-value="row.source.extra as SourceExtra"
+            @update:model-value="(v) => handleSourceExtraUpdate(row.index, v as SourceExtra)"
             v-else-if="row.source.type.key === VAR_SOURCE_TYPE_KEY"
             :is-locked="isCurrentLocked"
             :incoming-value="getVariableSourceIncomingValue(row)" />
@@ -1210,7 +1351,8 @@ function downloadMap() {
           <!-- MIDI Learn for MIDI CC destination when LRN function selected -->
           <MidiLearnExtra
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key === MIDI_LEARN_FUNCTION_KEY"
-            v-model="row.destination.extra as DestinationExtra"
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             mode="destination"
             :is-locked="isCurrentLocked"
             :auto-start="midiLearnAutoStartRow === row.index"
@@ -1220,54 +1362,72 @@ function downloadMap() {
           />
 
           <!-- Midi CC Destination Type -->
-          <MidiCcDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <MidiCcDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === MIDI_CC_DESTINATION_TYPE_KEY && row.destination.function.key !== MIDI_LEARN_FUNCTION_KEY"
             :midi-cc-extras="currentlySelectedDestinationTypes[row.index]?.extras"
             :is-locked="isCurrentLocked" />
 
           <!-- Skip Destination Type -->
-          <SkipDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <SkipDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY"
             :display-row-index-as-hex="displayRowIndexAsHex"
             :is-locked="isCurrentLocked" />
 
           <!-- Variable Destination Type -->
-          <VariableDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VariableDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === SETVAR_DESTINATION_TYPE_KEY"
             :is-locked="isCurrentLocked" />
 
           <!-- DUAL Destination Type -->
-          <DualDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <DualDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === DUAL_DESTINATION_TYPE_KEY"
             :dual-extras="currentlySelectedDestinationTypes[row.index]?.extras"
             :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Shader Select -->
-          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VisuDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_SELECT_FUNCTION_KEY"
             :visu-extras="visuShaderSelectExtras"
             :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Shader Functions -->
-          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VisuDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_SHADER_FUNCTIONS_FUNCTION_KEY"
             :visu-extras="visuShaderFunctionsExtras"
             :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Modulators -->
-          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VisuDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_MODULATORS_FUNCTION_KEY"
             :visu-extras="visuModulatorsExtras"
             :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - Envelopes -->
-          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VisuDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_ENVELOPES_FUNCTION_KEY"
             :visu-extras="visuEnvelopesExtras"
             :is-locked="isCurrentLocked" />
 
           <!-- VISU Destination Type - LFOs -->
-          <VisuDestinationExtra v-model="row.destination.extra as DestinationExtra"
+          <VisuDestinationExtra
+            :model-value="row.destination.extra as DestinationExtra"
+            @update:model-value="(v) => handleDestExtraUpdate(row.index, v as DestinationExtra)"
             v-else-if="row.destination.type.key === VISU_DESTINATION_TYPE_KEY && row.destination.function.key === VISU_LFOS_FUNCTION_KEY"
             :visu-extras="visuLfosExtras"
             :is-locked="isCurrentLocked" />
@@ -1356,7 +1516,7 @@ function downloadMap() {
           :destination-skip-active="row.destination.type.key === SKIP_DESTINATION_TYPE_KEY && row.destination.function.key !== EMPTY_KEY && Math.floor(row.destination.function.key / 6) + 1 > 0"
           :is-locked="isCurrentLocked"
           :model-value="rowComments[row.index] || ''"
-          @update:model-value="(val) => rowComments[row.index] = val"
+          @update:model-value="(val) => executeCommand(new SetRowCommentCommand(row.index, val, rowComments))"
           @copy-source="copySource"
           @paste-source="handlePasteSource"
           @clear-source="clearSource"

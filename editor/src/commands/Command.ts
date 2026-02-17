@@ -2,6 +2,9 @@
  * Base command interface for undo/redo system
  */
 
+import type { MappingDocument } from '../modules/documentModel';
+import type { MappingType } from '../modules/dataModel';
+
 export interface CommandMetadata {
   timestamp: number;
   type: string;
@@ -56,5 +59,8 @@ export interface SerializedCommand {
 export interface DeserializationContext {
   rowColors: Map<number, string>;
   rowComments: Record<number, string>;
-  // Additional context will be added as more commands are implemented
+  // Extended context for Phase 3 commands
+  mappingDocument?: MappingDocument;
+  currentlySelectedSourceTypes?: MappingType[];
+  currentlySelectedDestTypes?: MappingType[];
 }

@@ -386,8 +386,15 @@ Replaced number input in `VariableSourceExtra.vue` with interactive horizontal f
 
 **Actual Effort:** ~6 hours (including styling iterations)
 
+**Undo/Redo Integration:** ✅ **IMPLEMENTED** (2026-02-17)
+
+- ✅ Added `watch` on model prop to sync `varValue` on external changes (undo/redo)
+- ✅ Debounced fader commands: rapid drags coalesce into single undo entry (400ms idle)
+- ✅ New `pushCommand()` API in `useActionHistory` for pre-applied mutations
+- ✅ Fader visually restores on Ctrl+Z / Ctrl+Y
+
 **Future Enhancement:**
-- Integrate with undo/redo system (`SetVariableValueCommand`)
+- Integrate with undo/redo system (`SetVariableValueCommand`) for global variable values
 
 ### 1.6 Global Mapping Documentation ✅ (revision needed)
 
@@ -1104,7 +1111,8 @@ interface Command {
 const {
   canUndo,    // Reflects active slot + lock state
   canRedo,
-  executeCommand,  // Operates on active slot
+  executeCommand,  // Operates on active slot (calls cmd.execute())
+  pushCommand,     // Push pre-executed command (no execute, for debounced ops)
   undo,
   redo,
   clearCurrentHistory
@@ -1114,6 +1122,17 @@ const {
   isLockedB,
   context: { mappingDocument, rowColors, ... }
 });
+```
+
+**`pushCommand` Pattern (for debounced/coalesced operations):**
+
+Used when mutations are applied incrementally (e.g., fader drags at 60fps) and we want a single undo entry capturing the full before→after delta. The caller applies mutations directly, then after a debounce period creates a command with the correct old/new snapshots and pushes it without re-executing.
+
+```typescript
+// 1. Capture old state before mutation
+// 2. Apply new value directly (responsive UI)
+// 3. After 400ms idle, create command with old→final snapshots
+// 4. pushCommand(cmd) — adds to undo stack without calling execute()
 ```
 
 **UI Elements:**

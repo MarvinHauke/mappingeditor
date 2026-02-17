@@ -48,9 +48,11 @@ export interface UseActionHistoryReturn {
   undoDescription: ComputedRef<string | null>;
   redoDescription: ComputedRef<string | null>;
   history: ComputedRef<CommandMetadata[]>;
+  redoHistory: ComputedRef<CommandMetadata[]>;
 
   // Operations (operate on ACTIVE slot)
   executeCommand: (cmd: Command) => CommandResult;
+  pushCommand: (cmd: Command) => CommandResult;
   undo: () => void;
   redo: () => void;
 
@@ -267,6 +269,10 @@ export function useActionHistory(
     getActiveHistory().undoStack.map(cmd => cmd.getMetadata())
   );
 
+  const redoHistory = computed(() =>
+    getActiveHistory().redoStack.map(cmd => cmd.getMetadata())
+  );
+
   const totalActions = computed(() => getActiveHistory().undoStack.length);
   const currentPosition = computed(() => getActiveHistory().undoStack.length);
 
@@ -326,6 +332,37 @@ export function useActionHistory(
         error: errorMsg
       };
     }
+  }
+
+  /**
+   * Push a pre-executed command to the undo stack without calling execute().
+   * Used for debounced/coalesced operations (e.g. fader drags) where the mutation
+   * was applied incrementally and we just want to record the before→after delta.
+   */
+  function pushCommand(cmd: Command): CommandResult {
+    if (isCurrentSlotLocked.value) {
+      return {
+        success: false,
+        error: `Slot ${activeSlot.value} is locked`
+      };
+    }
+
+    const history = getActiveHistory();
+
+    history.undoStack.push(cmd);
+    history.redoStack = [];
+
+    if (history.undoStack.length > maxStackSize) {
+      history.undoStack.shift();
+    }
+
+    scheduleSave(activeSlot.value);
+
+    if (onExecute) {
+      onExecute(cmd, activeSlot.value);
+    }
+
+    return { success: true };
   }
 
   /**
@@ -424,9 +461,11 @@ export function useActionHistory(
     undoDescription,
     redoDescription,
     history,
+    redoHistory,
     totalActions,
     currentPosition,
     executeCommand,
+    pushCommand,
     undo,
     redo,
     clearSlotHistory,
@@ -435,7 +474,7 @@ export function useActionHistory(
     activeSlot: computed(() => activeSlot.value)
   };
 
-  return instance;
+  return instance!;
 }
 
 /**

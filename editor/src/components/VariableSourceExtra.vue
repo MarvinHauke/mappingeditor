@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineModel, nextTick, onMounted, ref } from 'vue';
+import { defineModel, nextTick, onMounted, ref, watch } from 'vue';
 import { EMPTY_ABBR, EMPTY_DESCRIPTION, EMPTY_KEY, genNrpnSourceExtraDnA, genVarSourceExtraDnA } from '../modules/dataModel';
 import { SourceExtra } from '../modules/documentModel';
 
@@ -93,6 +93,24 @@ onMounted(() => {
     } else {
         varValue.value = model.value.keyOrValue - 1;
     }
+});
+
+// Sync local state when model changes externally (e.g. undo/redo)
+watch(() => model.value?.keyOrValue, (newKey) => {
+  if (newKey === undefined) return;
+  if (newKey === 0) {
+    disableNum.value = true;
+    varValue.value = EMPTY_KEY;
+    if (varCheck.value) varCheck.value.checked = true;
+  } else if (newKey === EMPTY_KEY) {
+    varValue.value = 0;
+    disableNum.value = false;
+    if (varCheck.value) varCheck.value.checked = false;
+  } else {
+    varValue.value = newKey - 1;
+    disableNum.value = false;
+    if (varCheck.value) varCheck.value.checked = false;
+  }
 });
 
 defineEmits(['update:modelValue']);

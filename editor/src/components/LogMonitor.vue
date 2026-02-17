@@ -3,10 +3,17 @@ import { ref, computed } from 'vue';
 import BasePanel from './BasePanel.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
 import { usePanelLayout } from '../composables/usePanelLayout';
-import { getActionHistory } from '../composables/useActionHistory';
+import type { CommandMetadata } from '../commands/Command';
 
 const props = defineProps<{
   displayRowIndexAsHex: boolean;
+  undoHistory: CommandMetadata[];
+  redoHistory: CommandMetadata[];
+  canUndo: boolean;
+  canRedo: boolean;
+  undoDescription: string | null;
+  redoDescription: string | null;
+  activeSlot: 'A' | 'B';
 }>();
 
 const { logRight } = usePanelLayout();
@@ -15,6 +22,8 @@ const emit = defineEmits<{
   (e: 'expandedChange', expanded: boolean): void;
   (e: 'scrollToRow', rowIndex: number): void;
   (e: 'unnoticeWarning', analyzerWarningId: string): void;
+  (e: 'undo'): void;
+  (e: 'redo'): void;
 }>();
 
 const {
@@ -30,6 +39,9 @@ const {
   unnoticeEntry
 } = useWarningLog();
 
+// View toggle: 'log' or 'history'
+const activeView = ref<'log' | 'history'>('log');
+
 // Selected entries for expanded details view (supports multiple expanded simultaneously)
 const expandedEntryIds = ref<Set<number>>(new Set());
 
@@ -39,7 +51,10 @@ function isExpanded(entry: LogEntry): boolean {
 
 // Dynamic sizing: stop automatic growth after 3 messages
 const MESSAGE_THRESHOLD = 3;
-const shouldLockHeight = computed(() => filteredEntries.value.length > MESSAGE_THRESHOLD);
+const shouldLockHeight = computed(() => {
+  if (activeView.value === 'history') return true;
+  return filteredEntries.value.length > MESSAGE_THRESHOLD;
+});
 
 // Entries list style - lock automatic growth when threshold exceeded
 const entriesListStyle = computed(() => {
@@ -121,11 +136,20 @@ function formatRowIndex(index: number): string {
 
 // Format timestamp as HH:MM:SS
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString('en-US', { 
-    hour12: false, 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    second: '2-digit' 
+  return date.toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+function formatTimestamp(ts: number): string {
+  return new Date(ts).toLocaleTimeString('en-US', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
   });
 }
 
@@ -168,29 +192,43 @@ function downloadLog(): void {
     lines.push('');
   }
 
-  // Append undo history if available
-  const actionHistory = getActionHistory();
-  if (actionHistory) {
-    const historyItems = actionHistory.history.value;
-    const slot = actionHistory.activeSlot.value;
-    lines.push('='.repeat(40));
-    lines.push(`Undo History \u2014 Slot ${slot === 'A' ? '1' : '2'} (${historyItems.length} action${historyItems.length !== 1 ? 's' : ''})`);
-    lines.push('');
-    if (historyItems.length === 0) {
-      lines.push('  (empty)');
-    } else {
-      historyItems.forEach((item, index) => {
-        const time = new Date(item.timestamp).toLocaleTimeString('en-US', {
-          hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit'
-        });
-        const rows = item.affectedRows.length > 0
-          ? ` [R${item.affectedRows.map(r => formatRowIndex(r)).join(', R')}]`
-          : '';
-        lines.push(`  ${(index + 1).toString().padStart(2)}. [${time}] ${item.type}${rows} \u2014 ${item.description}`);
-      });
-    }
-    lines.push('');
+  // Append undo history
+  const slot = props.activeSlot;
+  const slotLabel = slot === 'A' ? '1' : '2';
+  const historyItems = props.undoHistory;
+  lines.push('='.repeat(40));
+  lines.push(`Undo History \u2014 Slot ${slotLabel} (${historyItems.length} action${historyItems.length !== 1 ? 's' : ''})`);
+  lines.push('');
+  if (historyItems.length === 0) {
+    lines.push('  (empty)');
+  } else {
+    historyItems.forEach((item, index) => {
+      const time = formatTimestamp(item.timestamp);
+      const rows = item.affectedRows.length > 0
+        ? ` [R${item.affectedRows.map(r => formatRowIndex(r)).join(', R')}]`
+        : '';
+      lines.push(`  ${(index + 1).toString().padStart(2)}. [${time}] ${item.type}${rows} \u2014 ${item.description}`);
+    });
   }
+  lines.push('');
+
+  // Append redo history
+  const redoItems = props.redoHistory;
+  lines.push('='.repeat(40));
+  lines.push(`Redo Stack \u2014 Slot ${slotLabel} (${redoItems.length} action${redoItems.length !== 1 ? 's' : ''} available to redo)`);
+  lines.push('');
+  if (redoItems.length === 0) {
+    lines.push('  (empty)');
+  } else {
+    redoItems.forEach((item, index) => {
+      const time = formatTimestamp(item.timestamp);
+      const rows = item.affectedRows.length > 0
+        ? ` [R${item.affectedRows.map(r => formatRowIndex(r)).join(', R')}]`
+        : '';
+      lines.push(`  ${(index + 1).toString().padStart(2)}. [${time}] ${item.type}${rows} \u2014 ${item.description}`);
+    });
+  }
+  lines.push('');
 
   const content = lines.join('\n');
   const blob = new Blob([content], { type: 'text/plain' });
@@ -212,6 +250,9 @@ const panelTitle = computed(() => {
   if (entryCount.value === 0) return 'Log Monitor';
   return `Logs (${entryCount.value})`;
 });
+
+// Reversed undo history: most recent at top
+const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
 </script>
 
 <template>
@@ -224,7 +265,7 @@ const panelTitle = computed(() => {
     :resizable="shouldLockHeight"
     :min-height="150"
     :max-height="800"
-    :default-height="150"
+    :default-height="activeView === 'history' ? 280 : 150"
     @expanded-change="onExpandedChange"
   >
     <template #header-extra>
@@ -235,146 +276,253 @@ const panelTitle = computed(() => {
     </template>
 
     <div class="log-content">
-      <!-- Filter bar -->
-      <div class="filter-bar">
-        <div class="filter-group">
-          <button
-            class="filter-btn"
-            :class="{ active: filterByType.has('info') }"
-            @click="toggleTypeFilter('info')"
-            title="Toggle info entries"
-          >
-            <span class="type-dot" style="background: #34cc99"></span>
-          </button>
-          <button
-            class="filter-btn"
-            :class="{ active: filterByType.has('warning') }"
-            @click="toggleTypeFilter('warning')"
-            title="Toggle warning entries"
-          >
-            <span class="type-dot" style="background: #ffc107"></span>
-          </button>
-          <button
-            class="filter-btn"
-            :class="{ active: filterByType.has('error') }"
-            @click="toggleTypeFilter('error')"
-            title="Toggle error entries"
-          >
-            <span class="type-dot" style="background: #dc3545"></span>
-          </button>
-        </div>
-        <div class="filter-group">
-          <button
-            class="filter-btn source-btn"
-            :class="{ active: filterBySource.has('analyzer') }"
-            @click="toggleSourceFilter('analyzer')"
-            title="Toggle analyzer entries"
-          >
-            A
-          </button>
-          <button
-            class="filter-btn source-btn"
-            :class="{ active: filterBySource.has('reference') }"
-            @click="toggleSourceFilter('reference')"
-            title="Toggle reference entries"
-          >
-            R
-          </button>
-          <button
-            class="filter-btn source-btn"
-            :class="{ active: filterBySource.has('system') }"
-            @click="toggleSourceFilter('system')"
-            title="Toggle system entries"
-          >
-            S
-          </button>
-          <button
-            class="filter-btn source-btn noticed-filter-btn"
-            :class="{ active: showNoticed }"
-            @click="toggleNoticedFilter"
-            title="Toggle noticed entries"
-          >
-            N
-          </button>
-        </div>
+      <!-- View toggle tabs -->
+      <div class="view-tabs">
         <button
-          class="download-btn"
-          @click="downloadLog"
-          title="Download log + undo history as text file"
-          :disabled="entryCount === 0"
+          class="view-tab"
+          :class="{ active: activeView === 'log' }"
+          @click="activeView = 'log'"
         >
-          &#8595;
+          Log
         </button>
         <button
-          class="clear-btn"
-          @click="clearLog"
-          title="Clear all entries"
-          :disabled="entryCount === 0"
+          class="view-tab"
+          :class="{ active: activeView === 'history' }"
+          @click="activeView = 'history'"
         >
-          Clear
+          History
+          <span v-if="undoHistory.length > 0" class="history-count">{{ undoHistory.length }}</span>
         </button>
       </div>
 
-      <!-- Entries list -->
-      <div class="entries-list panel-scrollable" :style="entriesListStyle">
-        <div v-if="filteredEntries.length === 0" class="empty-state">
-          <span v-if="entryCount === 0">No log entries</span>
-          <span v-else>No entries match filters</span>
+      <!-- LOG VIEW -->
+      <template v-if="activeView === 'log'">
+        <!-- Filter bar -->
+        <div class="filter-bar">
+          <div class="filter-group">
+            <button
+              class="filter-btn"
+              :class="{ active: filterByType.has('info') }"
+              @click="toggleTypeFilter('info')"
+              title="Toggle info entries"
+            >
+              <span class="type-dot" style="background: #34cc99"></span>
+            </button>
+            <button
+              class="filter-btn"
+              :class="{ active: filterByType.has('warning') }"
+              @click="toggleTypeFilter('warning')"
+              title="Toggle warning entries"
+            >
+              <span class="type-dot" style="background: #ffc107"></span>
+            </button>
+            <button
+              class="filter-btn"
+              :class="{ active: filterByType.has('error') }"
+              @click="toggleTypeFilter('error')"
+              title="Toggle error entries"
+            >
+              <span class="type-dot" style="background: #dc3545"></span>
+            </button>
+          </div>
+          <div class="filter-group">
+            <button
+              class="filter-btn source-btn"
+              :class="{ active: filterBySource.has('analyzer') }"
+              @click="toggleSourceFilter('analyzer')"
+              title="Toggle analyzer entries"
+            >
+              A
+            </button>
+            <button
+              class="filter-btn source-btn"
+              :class="{ active: filterBySource.has('reference') }"
+              @click="toggleSourceFilter('reference')"
+              title="Toggle reference entries"
+            >
+              R
+            </button>
+            <button
+              class="filter-btn source-btn"
+              :class="{ active: filterBySource.has('system') }"
+              @click="toggleSourceFilter('system')"
+              title="Toggle system entries"
+            >
+              S
+            </button>
+            <button
+              class="filter-btn source-btn command-filter-btn"
+              :class="{ active: filterBySource.has('command') }"
+              @click="toggleSourceFilter('command')"
+              title="Toggle command entries"
+            >
+              C
+            </button>
+            <button
+              class="filter-btn source-btn noticed-filter-btn"
+              :class="{ active: showNoticed }"
+              @click="toggleNoticedFilter"
+              title="Toggle noticed entries"
+            >
+              N
+            </button>
+          </div>
+          <button
+            class="download-btn"
+            @click="downloadLog"
+            title="Download log + undo/redo history as text file"
+          >
+            &#8595;
+          </button>
+          <button
+            class="clear-btn"
+            @click="clearLog"
+            title="Clear all entries"
+            :disabled="entryCount === 0"
+          >
+            Clear
+          </button>
         </div>
 
-        <div
-          v-for="entry in filteredEntries"
-          :key="entry.id"
-          class="log-entry"
-          :class="{ expanded: isExpanded(entry), noticed: entry.noticed }"
-          @click="toggleExpanded(entry)"
-        >
-          <div class="entry-header">
-            <span class="type-indicator" :style="{ background: getTypeColor(entry.type) }"></span>
-            <span v-if="entry.noticed" class="noticed-icon" title="Noticed — click to un-notice">&#10003;</span>
-            <span
-              v-if="entry.children && entry.children.length"
-              class="expand-arrow"
-              :class="{ expanded: isExpanded(entry) }"
-            >&#9654;</span>
-            <span class="entry-time">{{ formatTime(entry.timestamp) }}</span>
-            <span class="entry-source">{{ entry.source.charAt(0).toUpperCase() }}</span>
-            <span
-              v-if="entry.rowIndex !== undefined"
-              class="entry-row"
-              @click.stop="handleRowClick(entry.rowIndex)"
-              title="Click to scroll to row"
-            >
-              R{{ formatRowIndex(entry.rowIndex) }}
-            </span>
+        <!-- Entries list -->
+        <div class="entries-list panel-scrollable" :style="entriesListStyle">
+          <div v-if="filteredEntries.length === 0" class="empty-state">
+            <span v-if="entryCount === 0">No log entries</span>
+            <span v-else>No entries match filters</span>
           </div>
-          <div class="entry-message">{{ entry.message }}</div>
-          <div v-if="isExpanded(entry) && entry.details" class="entry-details">
-            {{ entry.details }}
-          </div>
+
           <div
-            v-if="isExpanded(entry) && entry.children && entry.children.length"
-            class="entry-children"
+            v-for="entry in filteredEntries"
+            :key="entry.id"
+            class="log-entry"
+            :class="{ expanded: isExpanded(entry), noticed: entry.noticed }"
+            @click="toggleExpanded(entry)"
           >
-            <div
-              v-for="(child, idx) in entry.children"
-              :key="idx"
-              class="child-entry"
-            >
-              <span class="type-indicator" :style="{ background: getTypeColor(child.type) }"></span>
+            <div class="entry-header">
+              <span class="type-indicator" :style="{ background: getTypeColor(entry.type) }"></span>
+              <span v-if="entry.noticed" class="noticed-icon" title="Noticed — click to un-notice">&#10003;</span>
               <span
-                v-if="child.rowIndex !== undefined"
+                v-if="entry.children && entry.children.length"
+                class="expand-arrow"
+                :class="{ expanded: isExpanded(entry) }"
+              >&#9654;</span>
+              <span class="entry-time">{{ formatTime(entry.timestamp) }}</span>
+              <span class="entry-source">{{ entry.source.charAt(0).toUpperCase() }}</span>
+              <span
+                v-if="entry.rowIndex !== undefined"
                 class="entry-row"
-                @click.stop="handleRowClick(child.rowIndex)"
+                @click.stop="handleRowClick(entry.rowIndex)"
                 title="Click to scroll to row"
               >
-                R{{ formatRowIndex(child.rowIndex) }}
+                R{{ formatRowIndex(entry.rowIndex) }}
               </span>
-              <span class="child-message">{{ child.message }}</span>
+            </div>
+            <div class="entry-message">{{ entry.message }}</div>
+            <div v-if="isExpanded(entry) && entry.details" class="entry-details">
+              {{ entry.details }}
+            </div>
+            <div
+              v-if="isExpanded(entry) && entry.children && entry.children.length"
+              class="entry-children"
+            >
+              <div
+                v-for="(child, idx) in entry.children"
+                :key="idx"
+                class="child-entry"
+              >
+                <span class="type-indicator" :style="{ background: getTypeColor(child.type) }"></span>
+                <span
+                  v-if="child.rowIndex !== undefined"
+                  class="entry-row"
+                  @click.stop="handleRowClick(child.rowIndex)"
+                  title="Click to scroll to row"
+                >
+                  R{{ formatRowIndex(child.rowIndex) }}
+                </span>
+                <span class="child-message">{{ child.message }}</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
+
+      <!-- HISTORY VIEW -->
+      <template v-else>
+        <!-- Undo/Redo action buttons -->
+        <div class="history-actions">
+          <button
+            class="history-btn undo-btn"
+            :disabled="!canUndo"
+            :title="undoDescription ? `Undo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${undoDescription}` : `Nothing to undo`"
+            @click="emit('undo')"
+          >
+            ↶ Undo
+          </button>
+          <button
+            class="history-btn redo-btn"
+            :disabled="!canRedo"
+            :title="redoDescription ? `Redo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${redoDescription}` : `Nothing to redo`"
+            @click="emit('redo')"
+          >
+            ↷ Redo
+          </button>
+          <span class="slot-label">Slot {{ activeSlot === 'A' ? '1' : '2' }}</span>
+          <button
+            class="download-btn"
+            @click="downloadLog"
+            title="Download log + undo/redo history as text file"
+            style="margin-left: auto;"
+          >
+            &#8595;
+          </button>
+        </div>
+
+        <!-- History stack -->
+        <div class="entries-list panel-scrollable history-list" :style="entriesListStyle">
+          <!-- Undo stack: most recent at top -->
+          <div v-if="undoHistoryReversed.length === 0 && redoHistory.length === 0" class="empty-state">
+            No history for this slot
+          </div>
+
+          <div
+            v-for="(item, idx) in undoHistoryReversed"
+            :key="'u-' + idx"
+            class="history-entry"
+          >
+            <span class="history-index">{{ undoHistory.length - idx }}</span>
+            <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
+            <span class="history-desc">{{ item.description }}</span>
+            <span
+              v-if="item.affectedRows.length > 0"
+              class="history-rows"
+            >
+              R{{ item.affectedRows.map(r => formatRowIndex(r)).join(' R') }}
+            </span>
+          </div>
+
+          <!-- Redo stack divider -->
+          <div v-if="redoHistory.length > 0" class="redo-divider">
+            <span>&#8595; redo available ({{ redoHistory.length }})</span>
+          </div>
+
+          <!-- Redo stack: next redo at top -->
+          <div
+            v-for="(item, idx) in redoHistory"
+            :key="'r-' + idx"
+            class="history-entry redo-entry"
+          >
+            <span class="history-index">{{ idx + 1 }}</span>
+            <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
+            <span class="history-desc">{{ item.description }}</span>
+            <span
+              v-if="item.affectedRows.length > 0"
+              class="history-rows"
+            >
+              R{{ item.affectedRows.map(r => formatRowIndex(r)).join(' R') }}
+            </span>
+          </div>
+        </div>
+      </template>
     </div>
   </BasePanel>
 </template>
@@ -386,6 +534,148 @@ const panelTitle = computed(() => {
   flex: 1;
   min-height: 0;
   overflow: visible;
+}
+
+/* View tabs */
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.view-tab {
+  flex: 1;
+  padding: 2px 6px;
+  background: rgba(52, 204, 153, 0.05);
+  border: 1px solid rgba(52, 204, 153, 0.2);
+  color: rgba(52, 204, 153, 0.6);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.view-tab:hover {
+  background: rgba(52, 204, 153, 0.1);
+  color: #34cc99;
+}
+
+.view-tab.active {
+  background: rgba(52, 204, 153, 0.15);
+  border-color: rgba(52, 204, 153, 0.5);
+  color: #34cc99;
+}
+
+.history-count {
+  font-size: 9px;
+  background: rgba(52, 204, 153, 0.3);
+  padding: 0 4px;
+  border-radius: 8px;
+  font-weight: bold;
+}
+
+/* History view */
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.history-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid rgba(52, 204, 153, 0.4);
+  background: rgba(52, 204, 153, 0.1);
+  color: #34cc99;
+  transition: all 0.15s ease;
+}
+
+.history-btn:hover:not(:disabled) {
+  background: rgba(52, 204, 153, 0.2);
+}
+
+.history-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.slot-label {
+  font-size: 9px;
+  color: rgba(52, 204, 153, 0.6);
+  font-weight: bold;
+  padding: 0 4px;
+}
+
+.history-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.history-entry {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  margin-bottom: 1px;
+  background: rgba(52, 204, 153, 0.05);
+  border-left: 2px solid rgba(52, 204, 153, 0.3);
+  border-radius: 0 2px 2px 0;
+}
+
+.history-entry.redo-entry {
+  opacity: 0.5;
+  border-left-color: rgba(52, 204, 153, 0.15);
+  font-style: italic;
+}
+
+.history-index {
+  font-size: 9px;
+  color: rgba(52, 204, 153, 0.5);
+  font-family: monospace;
+  min-width: 16px;
+  text-align: right;
+}
+
+.history-time {
+  font-size: 9px;
+  color: rgba(52, 204, 153, 0.6);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.history-desc {
+  font-size: 10px;
+  color: #34cc99;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-rows {
+  font-size: 9px;
+  color: #F1F700;
+  background: rgba(241, 247, 0, 0.15);
+  padding: 0 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+.redo-divider {
+  text-align: center;
+  font-size: 9px;
+  color: rgba(52, 204, 153, 0.4);
+  padding: 4px 0;
+  margin: 2px 0;
+  border-top: 1px dashed rgba(52, 204, 153, 0.2);
+  border-bottom: 1px dashed rgba(52, 204, 153, 0.2);
 }
 
 .entries-list {
@@ -498,6 +788,11 @@ const panelTitle = computed(() => {
   border-color: rgba(52, 204, 153, 0.5) !important;
 }
 
+.command-filter-btn {
+  color: #7ec8e3 !important;
+  border-color: rgba(126, 200, 227, 0.5) !important;
+}
+
 .badge-container {
   display: flex;
   align-items: center;
@@ -572,6 +867,76 @@ const panelTitle = computed(() => {
 }
 
 .download-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Filter bar (shared with log view) */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  gap: 2px;
+}
+
+.filter-btn {
+  padding: 2px 5px;
+  background: rgba(52, 204, 153, 0.05);
+  border: 1px solid rgba(52, 204, 153, 0.2);
+  color: rgba(52, 204, 153, 0.6);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+  background: rgba(52, 204, 153, 0.1);
+}
+
+.filter-btn.active {
+  background: rgba(52, 204, 153, 0.15);
+  border-color: rgba(52, 204, 153, 0.5);
+  color: #34cc99;
+}
+
+.type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.source-btn {
+  font-weight: bold;
+  min-width: 16px;
+  justify-content: center;
+}
+
+.clear-btn {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  color: #dc3545;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background: rgba(220, 53, 69, 0.2);
+}
+
+.clear-btn:disabled {
   opacity: 0.4;
   cursor: default;
 }
