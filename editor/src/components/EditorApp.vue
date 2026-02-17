@@ -928,7 +928,7 @@ function downloadMap() {
         Analyze
         <span
           v-if="warningCount > 0"
-          class="position-absolute top-0 start-100 translate-middle badge rounded-pill"
+          class="position-absolute top-0 end-0 translate-middle-y badge rounded-pill"
           :class="errorCount > 0 ? 'bg-danger' : 'bg-warning text-dark'"
         >
           {{ warningCount }}
