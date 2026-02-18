@@ -41,7 +41,7 @@ const {
 } = useWarningLog();
 
 // View toggle: 'log' or 'history'
-const activeView = ref<'log' | 'history'>('log');
+const activeView = ref<'log' | 'history'>('history');
 
 // Selected entries for expanded details view (supports multiple expanded simultaneously)
 const expandedEntryIds = ref<Set<number>>(new Set());
