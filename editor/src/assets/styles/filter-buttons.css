@@ -25,25 +25,30 @@
 }
 
 .filter-btn {
-  width: 20px;
-  height: 20px;
-  border: 1px solid #34cc99;
-  background: #000;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 2px 5px;
+  background: rgba(52, 204, 153, 0.05);
+  border: 1px solid rgba(52, 204, 153, 0.2);
+  color: rgba(52, 204, 153, 0.6);
+  border-radius: 3px;
   cursor: pointer;
+  font-size: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   transition: all 0.15s ease;
-  opacity: 0.4;
-  padding: 0;
-}
-
-.filter-btn.active {
-  opacity: 1;
 }
 
 .filter-btn:hover {
-  border-color: #F1F700;
+  background: rgba(52, 204, 153, 0.1);
+}
+
+.filter-btn.active {
+  background: rgba(52, 204, 153, 0.15);
+  border-color: rgba(52, 204, 153, 0.5);
+  color: #34cc99;
 }
 
 .filter-btn.source-btn {
@@ -53,9 +58,10 @@
 }
 
 .type-dot {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
+  display: inline-block;
 }
 
 .clear-btn {

@@ -835,10 +835,10 @@ function stopResize(): void {
   flex-direction: column;
   gap: 5px;
   padding: 5px 4px 7px 4px;
-  border-bottom: 1px solid rgba(52, 204, 153, 0.3);
+  border-bottom: 1px solid #34cc99;
   margin-bottom: 5px;
   flex-shrink: 0;
-  background-color: #000;
+  background: rgba(52, 204, 153, 0.1);
 }
 
 .control-label {

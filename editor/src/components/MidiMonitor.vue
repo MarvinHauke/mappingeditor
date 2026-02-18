@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useMidi, type ParsedMidiMessage } from '../composables/useMidi'
 import BasePanel from './BasePanel.vue'
+import ClearButton from './ClearButton.vue'
 import { usePanelLayout } from '../composables/usePanelLayout'
 
 const emit = defineEmits<{
@@ -167,7 +168,7 @@ onMounted(async () => {
             <span class="type-dot" style="background: #95e1d3"></span>
           </button>
         </div>
-        <button class="clear-btn" @click="clearHistory" title="Clear all messages">Clear</button>
+        <ClearButton @click="clearHistory" title="Clear all messages" />
       </div>
 
       <!-- Messages -->

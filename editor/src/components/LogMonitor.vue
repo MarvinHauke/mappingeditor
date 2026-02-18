@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import BasePanel from './BasePanel.vue';
 import RowRefBadge from './RowRefBadge.vue';
+import ClearButton from './ClearButton.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
 import { usePanelLayout } from '../composables/usePanelLayout';
 import type { CommandMetadata } from '../commands/Command';
@@ -385,19 +386,13 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
           </div>
           <button
             class="download-btn"
+            style="margin-left: auto"
             @click="downloadLog"
             title="Download log + undo/redo history as text file"
           >
             &#8595;
           </button>
-          <button
-            class="clear-btn"
-            @click="clearLog"
-            title="Clear all entries"
-            :disabled="entryCount === 0"
-          >
-            Clear
-          </button>
+          <ClearButton @click="clearLog" title="Clear all entries" :disabled="entryCount === 0" />
         </div>
 
         <!-- Entries list -->
@@ -466,7 +461,7 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
           <button
             class="history-btn undo-btn"
             :disabled="!canUndo"
-            :title="undoDescription ? `Undo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${undoDescription}` : `Nothing to undo`"
+            :title="undoDescription ? `Undo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${undoDescription} (Ctrl/⌘+Z)` : `Nothing to undo (Ctrl/⌘+Z)`"
             @click="emit('undo')"
           >
             ↶ Undo
@@ -474,20 +469,13 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
           <button
             class="history-btn redo-btn"
             :disabled="!canRedo"
-            :title="redoDescription ? `Redo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${redoDescription}` : `Nothing to redo`"
+            :title="redoDescription ? `Redo [Slot ${activeSlot === 'A' ? '1' : '2'}]: ${redoDescription} (Ctrl/⌘+Y)` : `Nothing to redo (Ctrl/⌘+Y)`"
             @click="emit('redo')"
           >
             ↷ Redo
           </button>
           <span class="slot-label" style="margin-left: auto;">Slot {{ activeSlot === 'A' ? '1' : '2' }}</span>
-          <button
-            class="clear-btn"
-            @click="historyHidden = true"
-            title="Hide history entries (undo/redo still works)"
-            :disabled="historyHidden || (undoHistory.length === 0 && redoHistory.length === 0)"
-          >
-            Clear
-          </button>
+          <ClearButton @click="historyHidden = true" title="Hide history entries (undo/redo still works)" :disabled="historyHidden || (undoHistory.length === 0 && redoHistory.length === 0)" />
         </div>
 
         <!-- History stack -->
@@ -565,7 +553,6 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
 .view-tabs {
   display: flex;
   gap: 2px;
-  margin-bottom: 4px;
 }
 
 .view-tab {
@@ -609,10 +596,13 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
   align-items: center;
   gap: 4px;
   margin-bottom: 4px;
+  padding: 4px;
+  background: rgba(52, 204, 153, 0.1);
+  border-bottom: 1px solid #34cc99;
 }
 
 .history-btn {
-  padding: 3px 8px;
+  padding: 2px 8px;
   font-size: 11px;
   border-radius: 3px;
   cursor: pointer;
@@ -889,41 +879,6 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
   flex-wrap: wrap;
 }
 
-.filter-group {
-  display: flex;
-  gap: 2px;
-}
-
-.filter-btn {
-  padding: 2px 5px;
-  background: rgba(52, 204, 153, 0.05);
-  border: 1px solid rgba(52, 204, 153, 0.2);
-  color: rgba(52, 204, 153, 0.6);
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 9px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  transition: all 0.15s ease;
-}
-
-.filter-btn:hover {
-  background: rgba(52, 204, 153, 0.1);
-}
-
-.filter-btn.active {
-  background: rgba(52, 204, 153, 0.15);
-  border-color: rgba(52, 204, 153, 0.5);
-  color: #34cc99;
-}
-
-.type-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-}
 
 .source-btn {
   font-weight: bold;
@@ -931,22 +886,4 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
   justify-content: center;
 }
 
-.clear-btn {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: rgba(220, 53, 69, 0.1);
-  border: 1px solid rgba(220, 53, 69, 0.3);
-  color: #dc3545;
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.clear-btn:hover:not(:disabled) {
-  background: rgba(220, 53, 69, 0.2);
-}
-
-.clear-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
 </style>
