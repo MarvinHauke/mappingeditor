@@ -205,6 +205,12 @@ DEBUG entries appear only in the downloaded file, never in the LogMonitor UI.
 - `LogMonitor.vue` — Download button, child entry rendering, multi-expand, debug label in download format, `getTypeColor` for debug type
 - `EditorApp.vue` — `runAnalysis()` wrapper, `LogChildEntry` import
 
+#### Log Entry Source: `'reference'` (stub only)
+
+The `'reference'` source is declared in `useWarningLog.ts` (`LogEntrySource` union) and has a filter button ("R") in LogMonitor. It was reserved for `rowReferenceService.ts` warnings — e.g. definition-order violations after row moves ("Row 5 references Row 8, but Row 8 is now defined after Row 5"). However, no code currently calls `addWarning('reference', ...)` or any other log function with this source. The `rowReferenceService` returns `RowReferenceWarning` objects directly to callers but does not route them through the logging system. The "R" filter button in LogMonitor is currently a no-op.
+
+**TODO:** Wire `updateRowReferences()` warnings through `useWarningLog` with source `'reference'`, or remove the unused source and filter button if row-reference logging is no longer planned.
+
 #### 1.2.1 "Noticed" Warning System ✅
 
 **Status:** ✅ **IMPLEMENTED** (2026-02-11)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onMounted } from 'vue'
 import BasePanel from './BasePanel.vue'
+import RowRefBadge from './RowRefBadge.vue'
 import type { VariableUsageInfo } from '@/composables/useVariableUsage'
 import { buildRowReadersMap } from '@/services/rowReferenceService'
 import { usePanelLayout } from '../composables/usePanelLayout'
@@ -696,13 +697,13 @@ function stopResize(): void {
           <span class="variable-label">{{ leftLabels[idx] }}:</span>
           <span class="variable-value" :title="getValueHint(getDisplayContent(idx))">
             <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(idx).length > 0">
-              <span
+              <RowRefBadge
                 v-for="rowIdx in getVarRowIndices(idx)"
                 :key="rowIdx"
-                class="row-link"
-                @click.stop="handleRowNavigate(rowIdx)"
-                title="Click to scroll to row"
-              >R{{ formatRowIndex(rowIdx) }}</span>
+                :row-index="rowIdx"
+                :display-as-hex="displayRowIndexAsHex"
+                @click="handleRowNavigate($event)"
+              />
             </template>
             <template v-else>{{ getDisplayContent(idx) }}</template>
           </span>
@@ -723,13 +724,13 @@ function stopResize(): void {
           <span class="variable-label">{{ rightLabels[idx] }}:</span>
           <span class="variable-value" :title="getValueHint(getDisplayContent(8 + idx))">
             <template v-if="(displayMode === 'writers' || displayMode === 'readers') && getVarRowIndices(8 + idx).length > 0">
-              <span
+              <RowRefBadge
                 v-for="rowIdx in getVarRowIndices(8 + idx)"
                 :key="rowIdx"
-                class="row-link"
-                @click.stop="handleRowNavigate(rowIdx)"
-                title="Click to scroll to row"
-              >R{{ formatRowIndex(rowIdx) }}</span>
+                :row-index="rowIdx"
+                :display-as-hex="displayRowIndexAsHex"
+                @click="handleRowNavigate($event)"
+              />
             </template>
             <template v-else>{{ getDisplayContent(8 + idx) }}</template>
           </span>
@@ -791,13 +792,13 @@ function stopResize(): void {
             'value-overflow': getRowDisplayContent(row, idx) === 'OVF'
           }" :title="getValueHint(getRowDisplayContent(row, idx))">
             <template v-if="rowsDisplayMode === 'readers' && getRowReaderIndices(idx).length > 0">
-              <span
+              <RowRefBadge
                 v-for="rowIdx in getRowReaderIndices(idx)"
                 :key="rowIdx"
-                class="row-link"
-                @click.stop="handleRowNavigate(rowIdx)"
-                title="Click to scroll to row"
-              >R{{ formatRowIndex(rowIdx) }}</span>
+                :row-index="rowIdx"
+                :display-as-hex="displayRowIndexAsHex"
+                @click="handleRowNavigate($event)"
+              />
             </template>
             <template v-else>{{ getRowDisplayContent(row, idx) }}</template>
           </span>
@@ -1125,7 +1126,7 @@ function stopResize(): void {
   font-weight: bold;
   color: #34cc99;
   font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   min-width: 18px;
 }
 
@@ -1161,22 +1162,6 @@ function stopResize(): void {
   font-weight: bold;
 }
 
-/* Clickable row link badges (writers/readers mode) */
-.row-link {
-  font-size: 9px;
-  font-weight: bold;
-  color: #F1F700;
-  background: rgba(241, 247, 0, 0.2);
-  padding: 0 4px;
-  border-radius: 2px;
-  cursor: pointer;
-  display: inline-block;
-  margin: 0 1px;
-}
-
-.row-link:hover {
-  background: rgba(241, 247, 0, 0.4);
-}
 
 /* Row index in rows subsection — clickable with hover effect */
 .row-index-clickable {

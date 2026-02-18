@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import BasePanel from './BasePanel.vue';
+import RowRefBadge from './RowRefBadge.vue';
 import { useWarningLog, type LogEntry, type LogEntryType, type LogEntrySource } from '../composables/useWarningLog';
 import { usePanelLayout } from '../composables/usePanelLayout';
 import type { CommandMetadata } from '../commands/Command';
@@ -253,6 +254,21 @@ const panelTitle = computed(() => {
 
 // Reversed undo history: most recent at top
 const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
+
+// History hidden state (visual only — does not destroy undo/redo stacks)
+const historyHidden = ref(false);
+
+// Reset hidden state when switching slots
+watch(() => props.activeSlot, () => {
+  historyHidden.value = false;
+});
+
+// Auto-unhide when new actions arrive
+watch(() => props.undoHistory.length, (newLen, oldLen) => {
+  if (newLen > oldLen) {
+    historyHidden.value = false;
+  }
+});
 </script>
 
 <template>
@@ -408,14 +424,13 @@ const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
               >&#9654;</span>
               <span class="entry-time">{{ formatTime(entry.timestamp) }}</span>
               <span class="entry-source">{{ entry.source.charAt(0).toUpperCase() }}</span>
-              <span
+              <RowRefBadge
                 v-if="entry.rowIndex !== undefined"
-                class="entry-row"
-                @click.stop="handleRowClick(entry.rowIndex)"
-                title="Click to scroll to row"
-              >
-                R{{ formatRowIndex(entry.rowIndex) }}
-              </span>
+                :row-index="entry.rowIndex"
+                :display-as-hex="displayRowIndexAsHex"
+                style="margin-left: auto"
+                @click="handleRowClick($event)"
+              />
             </div>
             <div class="entry-message">{{ entry.message }}</div>
             <div v-if="isExpanded(entry) && entry.details" class="entry-details">
@@ -431,14 +446,12 @@ const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
                 class="child-entry"
               >
                 <span class="type-indicator" :style="{ background: getTypeColor(child.type) }"></span>
-                <span
+                <RowRefBadge
                   v-if="child.rowIndex !== undefined"
-                  class="entry-row"
-                  @click.stop="handleRowClick(child.rowIndex)"
-                  title="Click to scroll to row"
-                >
-                  R{{ formatRowIndex(child.rowIndex) }}
-                </span>
+                  :row-index="child.rowIndex"
+                  :display-as-hex="displayRowIndexAsHex"
+                  @click="handleRowClick($event)"
+                />
                 <span class="child-message">{{ child.message }}</span>
               </div>
             </div>
@@ -466,61 +479,73 @@ const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
           >
             ↷ Redo
           </button>
-          <span class="slot-label">Slot {{ activeSlot === 'A' ? '1' : '2' }}</span>
+          <span class="slot-label" style="margin-left: auto;">Slot {{ activeSlot === 'A' ? '1' : '2' }}</span>
           <button
-            class="download-btn"
-            @click="downloadLog"
-            title="Download log + undo/redo history as text file"
-            style="margin-left: auto;"
+            class="clear-btn"
+            @click="historyHidden = true"
+            title="Hide history entries (undo/redo still works)"
+            :disabled="historyHidden || (undoHistory.length === 0 && redoHistory.length === 0)"
           >
-            &#8595;
+            Clear
           </button>
         </div>
 
         <!-- History stack -->
         <div class="entries-list panel-scrollable history-list" :style="entriesListStyle">
-          <!-- Undo stack: most recent at top -->
-          <div v-if="undoHistoryReversed.length === 0 && redoHistory.length === 0" class="empty-state">
-            No history for this slot
+          <div v-if="historyHidden" class="empty-state">
+            History hidden
           </div>
 
-          <div
-            v-for="(item, idx) in undoHistoryReversed"
-            :key="'u-' + idx"
-            class="history-entry"
-          >
-            <span class="history-index">{{ undoHistory.length - idx }}</span>
-            <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
-            <span class="history-desc">{{ item.description }}</span>
-            <span
-              v-if="item.affectedRows.length > 0"
-              class="history-rows"
+          <template v-else>
+            <!-- Undo stack: most recent at top -->
+            <div v-if="undoHistoryReversed.length === 0 && redoHistory.length === 0" class="empty-state">
+              No history for this slot
+            </div>
+
+            <div
+              v-for="(item, idx) in undoHistoryReversed"
+              :key="'u-' + idx"
+              class="history-entry"
             >
-              R{{ item.affectedRows.map(r => formatRowIndex(r)).join(' R') }}
-            </span>
-          </div>
+              <span class="history-index">{{ undoHistory.length - idx }}</span>
+              <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
+              <span class="history-desc">{{ item.description }}</span>
+              <span v-if="item.affectedRows.length > 0" class="history-rows-container">
+                <RowRefBadge
+                  v-for="rowIdx in item.affectedRows"
+                  :key="rowIdx"
+                  :row-index="rowIdx"
+                  :display-as-hex="displayRowIndexAsHex"
+                  @click="handleRowClick($event)"
+                />
+              </span>
+            </div>
 
-          <!-- Redo stack divider -->
-          <div v-if="redoHistory.length > 0" class="redo-divider">
-            <span>&#8595; redo available ({{ redoHistory.length }})</span>
-          </div>
+            <!-- Redo stack divider -->
+            <div v-if="redoHistory.length > 0" class="redo-divider">
+              <span>&#8595; redo available ({{ redoHistory.length }})</span>
+            </div>
 
-          <!-- Redo stack: next redo at top -->
-          <div
-            v-for="(item, idx) in redoHistory"
-            :key="'r-' + idx"
-            class="history-entry redo-entry"
-          >
-            <span class="history-index">{{ idx + 1 }}</span>
-            <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
-            <span class="history-desc">{{ item.description }}</span>
-            <span
-              v-if="item.affectedRows.length > 0"
-              class="history-rows"
+            <!-- Redo stack: next redo at top -->
+            <div
+              v-for="(item, idx) in redoHistory"
+              :key="'r-' + idx"
+              class="history-entry redo-entry"
             >
-              R{{ item.affectedRows.map(r => formatRowIndex(r)).join(' R') }}
-            </span>
-          </div>
+              <span class="history-index">{{ idx + 1 }}</span>
+              <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
+              <span class="history-desc">{{ item.description }}</span>
+              <span v-if="item.affectedRows.length > 0" class="history-rows-container">
+                <RowRefBadge
+                  v-for="rowIdx in item.affectedRows"
+                  :key="rowIdx"
+                  :row-index="rowIdx"
+                  :display-as-hex="displayRowIndexAsHex"
+                  @click="handleRowClick($event)"
+                />
+              </span>
+            </div>
+          </template>
         </div>
       </template>
     </div>
@@ -659,12 +684,10 @@ const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
   white-space: nowrap;
 }
 
-.history-rows {
-  font-size: 9px;
-  color: #F1F700;
-  background: rgba(241, 247, 0, 0.15);
-  padding: 0 4px;
-  border-radius: 2px;
+.history-rows-container {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
   white-space: nowrap;
 }
 
@@ -735,20 +758,6 @@ const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
   border-radius: 2px;
 }
 
-.entry-row {
-  font-size: 9px;
-  font-weight: bold;
-  color: #F1F700;
-  background: rgba(241, 247, 0, 0.2);
-  padding: 0 4px;
-  border-radius: 2px;
-  cursor: pointer;
-  margin-left: auto;
-}
-
-.entry-row:hover {
-  background: rgba(241, 247, 0, 0.4);
-}
 
 .entry-message {
   font-size: 10px;
