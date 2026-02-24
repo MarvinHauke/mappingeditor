@@ -55,6 +55,8 @@ import { MIDI_LEARN_FUNCTION_KEY } from '../constants/midi';
 import { COLOR_PALETTE } from '../constants/colors';
 
 const mappingDocument = ref<MappingDocument>(new MappingDocument());
+// Vue's UnwrapRef<T> strips private class fields; this accessor restores the correct MappingDocument type for commands
+const doc = (): MappingDocument => mappingDocument.value as unknown as MappingDocument;
 const fileInput = ref<HTMLInputElement | null>(null);
 
 // Skip analysis composable
@@ -171,7 +173,7 @@ const {
 const actionHistoryContext: DeserializationContext = {
   rowColors: rowColors.value,
   rowComments: rowComments.value,
-  mappingDocument: mappingDocument.value,
+  mappingDocument: doc(),
   currentlySelectedSourceTypes: currentlySelectedSourceTypes.value,
   currentlySelectedDestTypes: currentlySelectedDestinationTypes.value
 };
@@ -334,7 +336,7 @@ function handleMidiLearnComplete(currentRowIndex: number): void {
 // Variable slider handler
 function updateVariableValue(variableIndex: number, value: number): void {
   if (variableIndex >= 0 && variableIndex < mappingDocument.value.variables.length) {
-    const cmd = new SetVariableValueCommand(variableIndex, value, mappingDocument.value);
+    const cmd = new SetVariableValueCommand(variableIndex, value, doc());
     executeCommand(cmd);
     scheduleCacheSave();
   }
@@ -657,7 +659,7 @@ function sourceTypeSelectionChanged(event: Event, rowIndex: number) {
     extraKey: EMPTY_KEY, extraAbbr: EMPTY_ABBR, extraDesc: EMPTY_DESCRIPTION,
     selectedTypeKey: selectedSourceTypeKey
   };
-  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, doc(), currentlySelectedSourceTypes.value,
     `Set source type for row ${rowIndex + 1}`));
 }
 
@@ -678,7 +680,7 @@ function sourceFunctionSelectionChanged(event: Event, rowIndex: number) {
     extraKey, extraAbbr, extraDesc,
     selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
   };
-  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, doc(), currentlySelectedSourceTypes.value,
     `Set source function for row ${rowIndex + 1}`));
 }
 
@@ -716,7 +718,7 @@ function sourceExtraSelectionChanged(event: Event, rowIndex: number, extraVarian
     extraKey: selectedSourceExtraKey, extraAbbr: selectedSourceExtra.abbr, extraDesc: selectedSourceExtra.description,
     selectedTypeKey: currentlySelectedSourceTypes.value[rowIndex]?.key ?? EMPTY_KEY
   };
-  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value,
+  executeCommand(new SetSourceCommand(rowIndex, newSnapshot, doc(), currentlySelectedSourceTypes.value,
     `Set source extra for row ${rowIndex + 1}`));
 }
 
@@ -764,7 +766,7 @@ function handleSourceExtraUpdate(rowIndex: number, newExtra: SourceExtra): void 
       return;
     }
     // Create command with correct old→new snapshots (already applied, so use pushCommand)
-    const cmd = new SetSourceCommand(rowIndex, finalSnapshot, mappingDocument.value, currentlySelectedSourceTypes.value);
+    const cmd = new SetSourceCommand(rowIndex, finalSnapshot, doc(), currentlySelectedSourceTypes.value);
     (cmd as any).oldSnapshot = oldSnap;
     pushCommand(cmd);
     pendingSourceExtra.value = null;
@@ -783,7 +785,7 @@ function destinationTypeSelectionChanged(event: Event, rowIndex: number) {
     extraKey: EMPTY_KEY, extraAbbr: EMPTY_ABBR, extraDesc: EMPTY_DESCRIPTION,
     selectedTypeKey: selectedDestinationTypeKey
   };
-  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, doc(), currentlySelectedDestinationTypes.value,
     `Set destination type for row ${rowIndex + 1}`));
 }
 
@@ -799,7 +801,7 @@ function destinationFunctionSelectionChanged(event: Event, rowIndex: number, isI
     selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
   };
   void isInit;
-  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, doc(), currentlySelectedDestinationTypes.value,
     `Set destination function for row ${rowIndex + 1}`));
 }
 
@@ -860,7 +862,7 @@ function destinationExtraSelectionChanged(event: Event, rowIndex: number, isInit
     selectedTypeKey: currentlySelectedDestinationTypes.value[rowIndex]?.key ?? EMPTY_KEY
   };
   void isInit;
-  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value,
+  executeCommand(new SetDestinationCommand(rowIndex, newSnapshot, doc(), currentlySelectedDestinationTypes.value,
     `Set destination extra for row ${rowIndex + 1}`));
 }
 
@@ -908,7 +910,7 @@ function handleDestExtraUpdate(rowIndex: number, newExtra: DestinationExtra): vo
       return;
     }
     // Create command with correct old→new snapshots (already applied, so use pushCommand)
-    const cmd = new SetDestinationCommand(rowIndex, finalSnapshot, mappingDocument.value, currentlySelectedDestinationTypes.value);
+    const cmd = new SetDestinationCommand(rowIndex, finalSnapshot, doc(), currentlySelectedDestinationTypes.value);
     (cmd as any).oldSnapshot = oldSnap;
     pushCommand(cmd);
     pendingDestExtra.value = null;
