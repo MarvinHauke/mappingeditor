@@ -106,6 +106,11 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
   // during deserialization (slot switch or initial load)
   let isDeserializing = false;
 
+  // Set to true once a real document has been loaded. Guards against overwriting
+  // cached slot data with the empty initial document during the startup race window
+  // (i.e. if the user clicks a slot button before auto-restore completes).
+  let documentHasData = false;
+
   // Save current document to cache (debounced)
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -141,6 +146,7 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
   }
 
   function deserializeToDocument(cached: CachedMapping): void {
+    documentHasData = true;
     isDeserializing = true;
     const doc = new MappingDocument();
 
@@ -260,8 +266,11 @@ export function useDocumentSerialization(options: UseDocumentSerializationOption
       saveTimeout = null;
     }
 
-    // Save current to active slot first (if not locked)
-    if (!isCurrentLocked.value) {
+    // Save current to active slot first (if not locked).
+    // Skip if no real document has been loaded yet and the slot already has data —
+    // this prevents overwriting good cached data with the empty initial document
+    // during the startup race window before auto-restore completes.
+    if (!isCurrentLocked.value && (documentHasData || !loadFromSlot(activeSlot.value))) {
       saveToActiveSlot(serializeDocument());
     }
 

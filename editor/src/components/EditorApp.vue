@@ -36,7 +36,7 @@ import { useMidi } from '../composables/useMidi';
 import { useClipboard } from '../composables/useClipboard';
 import { useStaticAnalyzer } from '../composables/useStaticAnalyzer';
 import { useWarningLog, type LogChildEntry } from '../composables/useWarningLog';
-import { useMappingCache } from '../composables/useMappingCache';
+import { useMappingCache, waitForCacheReady } from '../composables/useMappingCache';
 import { useActionHistory, type DeserializationContext } from '../composables/useActionHistory';
 import { useVariableUsage } from '../composables/useVariableUsage';
 import { useSkipAnalysis } from '../composables/useSkipAnalysis';
@@ -546,9 +546,17 @@ useKeyboardShortcuts({
   advanceToNextRow
 });
 
-onMounted(() => {
+onMounted(async () => {
   // Load row index display preference from localStorage
   initDisplayPreferences();
+
+  // Auto-restore the active slot from IndexedDB cache
+  await waitForCacheReady();
+  const cached = loadFromSlot(activeSlot.value);
+  if (cached) {
+    deserializeToDocument(cached);
+    logInfo('system', `Auto-restored Slot ${activeSlot.value === 'A' ? '1' : '2'} from cache`);
+  }
 });
 
 // Re-run analysis when row index display format changes

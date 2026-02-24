@@ -173,6 +173,7 @@ async function deleteFromIndexedDB(key: string): Promise<void> {
 // In-memory slot cache — both slots loaded on init, zero IndexedDB reads during switching
 const slotCache: Record<CacheSlot, CachedMapping | null> = { A: null, B: null };
 let slotCacheInitialized = false;
+let cacheInitPromise: Promise<void> | null = null;
 
 /**
  * Load both slots from IndexedDB into memory (called once on init)
@@ -216,8 +217,11 @@ export function useMappingCache(): UseMappingCacheReturn {
   const hasDataA = ref(false);
   const hasDataB = ref(false);
 
-  // Load both slots into memory on init
-  initSlotCache().then(() => {
+  // Load both slots into memory on init (shared promise so multiple callers get the same init)
+  if (!cacheInitPromise) {
+    cacheInitPromise = initSlotCache();
+  }
+  cacheInitPromise.then(() => {
     hasDataA.value = slotCache.A !== null;
     hasDataB.value = slotCache.B !== null;
   });
@@ -332,6 +336,15 @@ export function useMappingCache(): UseMappingCacheReturn {
 }
 
 /**
+ * Returns a Promise that resolves once the initial IndexedDB load (both slots) has completed.
+ * Safe to call before useMappingCache() has been invoked — returns an already-resolved
+ * Promise in that case.
+ */
+export function waitForCacheReady(): Promise<void> {
+  return cacheInitPromise ?? Promise.resolve();
+}
+
+/**
  * Reset the singleton instance (for testing)
  */
 export function resetMappingCache(): void {
@@ -339,6 +352,7 @@ export function resetMappingCache(): void {
   slotCache.A = null;
   slotCache.B = null;
   slotCacheInitialized = false;
+  cacheInitPromise = null;
   if (cachedDb) {
     cachedDb.close();
     cachedDb = null;

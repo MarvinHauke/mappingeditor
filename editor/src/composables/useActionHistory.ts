@@ -218,14 +218,15 @@ export function useActionHistory(
     B: { undoStack: [], redoStack: [] }
   });
 
-  // Load persisted history on initialization
+  // Commands deserialized from IndexedDB would capture the initial empty MappingDocument
+  // in their constructor (via context.mappingDocument), producing stale references that
+  // silently mutate the wrong object on undo/redo. Start with empty stacks instead.
+  // Within-session history (including across slot switches) works correctly via the
+  // in-memory slotHistories ref.
   async function initialize() {
-    const historyA = await loadHistoryFromIndexedDB('A', context);
-    const historyB = await loadHistoryFromIndexedDB('B', context);
-
     slotHistories.value = {
-      A: historyA,
-      B: historyB
+      A: { undoStack: [], redoStack: [] },
+      B: { undoStack: [], redoStack: [] }
     };
   }
 
