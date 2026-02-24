@@ -1,56 +1,68 @@
 # NerdSEQ Mapping Editor
 
-Web editor for the NerdSEQ Mappings
+NerdSEQ is a Eurorack hardware sequencer by XOR Electronics. Its Mappings system is a flexible routing layer that connects CV inputs, MIDI, triggers, I²C, internal variables, and more — letting you wire almost any signal to almost any destination on the hardware.
 
-## 📁 Project Structure
+This editor lets you create, edit, and export `.MAP` files visually in a browser, without needing the hardware in front of you. Load an existing file, make changes, and export it back to the binary format the NerdSEQ expects.
 
-- **`/editor`** - Main mapping editor application (Vue.js)
-- **`/tests`** - Comprehensive test files and generators
-- **`/docs`** - Documentation and file format specifications
-- **`/examples`** - Example mapping files
-- **`/viewers`** - Standalone mapping file viewers
+## Features
 
-## 🧪 Testing
-
-Comprehensive test files are available in the `/tests` directory:
-
-- **Complete feature coverage** - Tests all 15 source and 17 destination types
-- **Edge case validation** - Parameter boundary and range testing
-- **Binary format testing** - NerdSEQ-compatible .map files for hardware testing
-- **Automated generators** - Scripts to create and validate test files
-
-See `/tests/TEST_FILES_README.md` for detailed testing instructions.
-
-## 🚀 Quick Start
-
-1. **Editor Development:** `cd editor && npm install && npm run dev`
-2. **Run All Tests:** `node run-tests.js` (validates and regenerates all test files)
-3. **Manual Testing:** `cd tests && node validate-test-files.js`
-
-## 🎯 Test Files Ready
-
-The `/tests` directory contains production-ready test files:
-
-- **JSON format** for editor testing and development
-- **Binary .map format** for NerdSEQ hardware compatibility testing
-- **HTML reports** for visual documentation and verification
-- **Complete coverage** of all 25 critical bugs fixed and all features implemented
+- 70 configurable mapping rows: source → destination routing
+- 15 source types: CV, Trigger, Track, Automator, Envelope, MIDI, MIDI CC, NRPN, I²C, Variable, Calc, Skip, Global, External, Control
+- 17 destination types: CV, Trigger, Track, Automator, Envelope, MIDI CC, I²C, Audio, SetVar, RandomRange, Global, CV16, Table, MIDI, Dual, Skip, Visu
+- Import / export binary `.MAP` files and JSON
+- A/B slot caching with browser persistence (IndexedDB)
+- Live MIDI learn mode
+- Static logic analyser (unused variables, read-before-write, destination conflicts)
+- Undo / redo with full command history
 
 ## Getting Started
 
-To run the editor locally:
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Local development
 
 ```bash
+git clone <repo>
 cd editor
 npm install
 npm run dev
 ```
 
-The development server will start and display a local URL (typically http://localhost:5173) where you can access the editor in your browser.
+Opens at http://localhost:5173
 
-## Available Commands
+### Available commands (run from `editor/`)
 
-- `npm run dev` - Start the development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview the production build
-- `npm run type-check` - Run TypeScript type checking
+| Command | Description |
+|---|---|
+| `npm run dev` | Start Vite dev server |
+| `npm run build` | Production build (type-check + bundle) |
+| `npm run preview` | Preview production build |
+| `npm run type-check` | TypeScript strict-mode check |
+
+## Project Structure
+
+- **`/editor`** - Main mapping editor application (Vue.js)
+- **`/tests`** - Test files and validation scripts
+- **`/docs`** - Documentation and file format specifications
+- **`/examples`** - Example mapping files
+- **`/viewers`** - Standalone mapping file viewers
+
+## Testing
+
+Test files are in the `/tests` directory and cover all 15 source and 17 destination types, edge cases, and binary format compatibility.
+
+```bash
+node run-tests.js                        # Validates and regenerates all test files
+cd tests && node validate-test-files.js  # Manual validation
+```
+
+See `/tests/TEST_FILES_README.md` for details.
+
+## File Format
+
+Mappings are stored as 1502-byte binary `.MAP` files (70-byte header, 70 rows × 20 bytes each, 32 bytes for 16 variables). All values are little-endian; `0xFFFF` represents empty fields.
+
+Full specification: `/docs/mapping_file_definition.txt`

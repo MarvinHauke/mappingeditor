@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import BasePanel from './BasePanel.vue';
 import RowRefBadge from './RowRefBadge.vue';
 import ClearButton from './ClearButton.vue';
@@ -54,7 +54,9 @@ function isExpanded(entry: LogEntry): boolean {
 // Dynamic sizing: stop automatic growth after 3 messages
 const MESSAGE_THRESHOLD = 3;
 const shouldLockHeight = computed(() => {
-  if (activeView.value === 'history') return true;
+  if (activeView.value === 'history') {
+    return (props.undoHistory.length + props.redoHistory.length) > MESSAGE_THRESHOLD;
+  }
   return filteredEntries.value.length > MESSAGE_THRESHOLD;
 });
 
@@ -253,22 +255,46 @@ const panelTitle = computed(() => {
   return `Logs (${entryCount.value})`;
 });
 
-// Reversed undo history: most recent at top
-const undoHistoryReversed = computed(() => [...props.undoHistory].reverse());
+// Per-slot cutoff and show-hidden state so each slot tracks its own cleared position.
+const hiddenBeforeCounts = reactive<Record<'A' | 'B', number>>({ A: 0, B: 0 });
+const showHiddenFlags = reactive<Record<'A' | 'B', boolean>>({ A: false, B: false });
 
-// History hidden state (visual only — does not destroy undo/redo stacks)
-const historyHidden = ref(false);
-
-// Reset hidden state when switching slots
-watch(() => props.activeSlot, () => {
-  historyHidden.value = false;
+const hiddenBeforeCount = computed({
+  get: () => hiddenBeforeCounts[props.activeSlot],
+  set: (v: number) => { hiddenBeforeCounts[props.activeSlot] = v; },
 });
 
-// Auto-unhide when new actions arrive
-watch(() => props.undoHistory.length, (newLen, oldLen) => {
-  if (newLen > oldLen) {
-    historyHidden.value = false;
+const showHidden = computed({
+  get: () => showHiddenFlags[props.activeSlot],
+  set: (v: boolean) => { showHiddenFlags[props.activeSlot] = v; },
+});
+
+// Clamp so hiddenBeforeCount never exceeds actual stack length (e.g. after aggressive undo)
+watch(() => props.undoHistory.length, (newLen) => {
+  if (newLen < hiddenBeforeCounts[props.activeSlot]) {
+    hiddenBeforeCounts[props.activeSlot] = newLen;
   }
+});
+
+// Entries to display in the history list, each tagged with its original stack number
+// and whether it belongs to the hidden (pre-clear) region.
+const displayedUndoHistoryReversed = computed(() => {
+  const all = [...props.undoHistory].reverse();
+  const N = props.undoHistory.length;
+  const K = hiddenBeforeCount.value;
+  const visibleCount = N - K;
+  if (!showHidden.value) {
+    return all.slice(0, visibleCount).map((item, idx) => ({
+      item,
+      wasHidden: false,
+      stackNum: N - K - idx,
+    }));
+  }
+  return all.map((item, idx) => ({
+    item,
+    wasHidden: idx >= visibleCount,
+    stackNum: N - idx,
+  }));
 });
 </script>
 
@@ -308,7 +334,7 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
           @click="activeView = 'history'"
         >
           History
-          <span v-if="undoHistory.length > 0" class="history-count">{{ undoHistory.length }}</span>
+          <span v-if="undoHistory.length - hiddenBeforeCount > 0" class="history-count">{{ undoHistory.length - hiddenBeforeCount }}</span>
         </button>
       </div>
 
@@ -475,65 +501,73 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
             ↷ Redo
           </button>
           <span class="slot-label" style="margin-left: auto;">Slot {{ activeSlot === 'A' ? '1' : '2' }}</span>
-          <ClearButton @click="historyHidden = true" title="Hide history entries (undo/redo still works)" :disabled="historyHidden || (undoHistory.length === 0 && redoHistory.length === 0)" />
+          <div style="display: flex; gap: 1px;">
+            <button
+              v-if="hiddenBeforeCount > 0"
+              class="filter-btn source-btn history-show-hidden-btn"
+              :class="{ active: showHidden }"
+              @click="showHidden = !showHidden"
+              title="Show hidden history entries"
+            >H</button>
+            <ClearButton @click="hiddenBeforeCount = undoHistory.length; showHidden = false" title="Hide history entries (undo/redo still works)" :disabled="hiddenBeforeCount >= undoHistory.length && redoHistory.length === 0" />
+          </div>
         </div>
 
         <!-- History stack -->
         <div class="entries-list panel-scrollable history-list" :style="entriesListStyle">
-          <div v-if="historyHidden" class="empty-state">
-            History hidden
+          <!-- Empty states -->
+          <div v-if="hiddenBeforeCount === 0 && undoHistory.length === 0 && redoHistory.length === 0" class="empty-state">
+            No history for this slot
+          </div>
+          <div v-else-if="displayedUndoHistoryReversed.length === 0 && redoHistory.length === 0" class="empty-state">
+            History cleared
           </div>
 
-          <template v-else>
-            <!-- Undo stack: most recent at top -->
-            <div v-if="undoHistoryReversed.length === 0 && redoHistory.length === 0" class="empty-state">
-              No history for this slot
-            </div>
+          <!-- Undo stack: most recent at top -->
+          <div
+            v-for="entry in displayedUndoHistoryReversed"
+            :key="'u-' + entry.stackNum"
+            class="history-entry"
+            :class="{ 'was-hidden': entry.wasHidden }"
+          >
+            <span class="history-index">{{ entry.stackNum }}</span>
+            <span class="history-time">{{ formatTimestamp(entry.item.timestamp) }}</span>
+            <span class="history-desc">{{ entry.item.description }}</span>
+            <span v-if="entry.item.affectedRows.length > 0" class="history-rows-container">
+              <RowRefBadge
+                v-for="rowIdx in entry.item.affectedRows"
+                :key="rowIdx"
+                :row-index="rowIdx"
+                :display-as-hex="displayRowIndexAsHex"
+                @click="handleRowClick($event)"
+              />
+            </span>
+          </div>
 
-            <div
-              v-for="(item, idx) in undoHistoryReversed"
-              :key="'u-' + idx"
-              class="history-entry"
-            >
-              <span class="history-index">{{ undoHistory.length - idx }}</span>
-              <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
-              <span class="history-desc">{{ item.description }}</span>
-              <span v-if="item.affectedRows.length > 0" class="history-rows-container">
-                <RowRefBadge
-                  v-for="rowIdx in item.affectedRows"
-                  :key="rowIdx"
-                  :row-index="rowIdx"
-                  :display-as-hex="displayRowIndexAsHex"
-                  @click="handleRowClick($event)"
-                />
-              </span>
-            </div>
+          <!-- Redo stack divider -->
+          <div v-if="redoHistory.length > 0" class="redo-divider">
+            <span>&#8595; redo available ({{ redoHistory.length }})</span>
+          </div>
 
-            <!-- Redo stack divider -->
-            <div v-if="redoHistory.length > 0" class="redo-divider">
-              <span>&#8595; redo available ({{ redoHistory.length }})</span>
-            </div>
-
-            <!-- Redo stack: next redo at top -->
-            <div
-              v-for="(item, idx) in redoHistory"
-              :key="'r-' + idx"
-              class="history-entry redo-entry"
-            >
-              <span class="history-index">{{ idx + 1 }}</span>
-              <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
-              <span class="history-desc">{{ item.description }}</span>
-              <span v-if="item.affectedRows.length > 0" class="history-rows-container">
-                <RowRefBadge
-                  v-for="rowIdx in item.affectedRows"
-                  :key="rowIdx"
-                  :row-index="rowIdx"
-                  :display-as-hex="displayRowIndexAsHex"
-                  @click="handleRowClick($event)"
-                />
-              </span>
-            </div>
-          </template>
+          <!-- Redo stack: next redo at top -->
+          <div
+            v-for="(item, idx) in redoHistory"
+            :key="'r-' + idx"
+            class="history-entry redo-entry"
+          >
+            <span class="history-index">{{ idx + 1 }}</span>
+            <span class="history-time">{{ formatTimestamp(item.timestamp) }}</span>
+            <span class="history-desc">{{ item.description }}</span>
+            <span v-if="item.affectedRows.length > 0" class="history-rows-container">
+              <RowRefBadge
+                v-for="rowIdx in item.affectedRows"
+                :key="rowIdx"
+                :row-index="rowIdx"
+                :display-as-hex="displayRowIndexAsHex"
+                @click="handleRowClick($event)"
+              />
+            </span>
+          </div>
         </div>
       </template>
     </div>
@@ -629,8 +663,6 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
 }
 
 .history-list {
-  flex: 1 1 auto;
-  overflow-y: auto;
 }
 
 .history-entry {
@@ -648,6 +680,25 @@ watch(() => props.undoHistory.length, (newLen, oldLen) => {
   opacity: 0.5;
   border-left-color: rgba(52, 204, 153, 0.15);
   font-style: italic;
+}
+
+.history-entry.was-hidden {
+  opacity: 0.35;
+  border-left-style: dashed;
+}
+
+.history-show-hidden-btn {
+  font-weight: bold;
+  min-width: 16px;
+  justify-content: center;
+  opacity: 0.6;
+  color: rgba(52, 204, 153, 0.8) !important;
+  border-color: rgba(52, 204, 153, 0.35) !important;
+}
+
+.history-show-hidden-btn:hover,
+.history-show-hidden-btn.active {
+  opacity: 1;
 }
 
 .history-index {
